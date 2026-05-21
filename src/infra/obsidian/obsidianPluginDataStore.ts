@@ -7,7 +7,7 @@ export class ObsidianPluginDataStore {
 	}
 
 	async read(): Promise<SimilarityPluginData> {
-		const raw = await this.plugin.loadData() ?? {};
+		const raw = (await this.plugin.loadData() as Partial<SimilarityPluginData> | null) ?? {};
 		return normalizePluginData(raw);
 	}
 

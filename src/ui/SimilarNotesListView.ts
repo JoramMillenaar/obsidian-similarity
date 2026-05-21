@@ -90,19 +90,19 @@ export class SimilarNotesListView extends ItemView {
 
 	async render() {
 		this.containerEl.empty();
-		const content = this.containerEl.createEl("div", {cls: "tag-container"});
+		const content = this.containerEl.createDiv({cls: "tag-container"});
 		await this.renderContent(content);
 	}
 
 	private renderLoading(container: HTMLElement) {
-		return container.createEl("div", {
+		return container.createDiv({
 			cls: "tree-item-self",
 			text: "Loading similar notes...",
 		});
 	}
 
 	private renderMessage(container: HTMLElement, text: string, extraCls?: string) {
-		container.createEl("div", {
+		container.createDiv({
 			cls: extraCls ? `empty-message ${extraCls}` : "empty-message",
 			text,
 		});
@@ -118,17 +118,17 @@ export class SimilarNotesListView extends ItemView {
 
 		const bannerEl = existing instanceof HTMLElement
 			? existing
-			: container.insertBefore(document.createElement("div"), container.firstChild);
+			: container.insertBefore(createDiv(), container.firstChild);
 
 		bannerEl.className = `similarity-index-banner similarity-index-banner-${banner.kind}`;
 		bannerEl.empty();
-		bannerEl.createEl("div", {
+		bannerEl.createDiv({
 			cls: "similarity-index-banner-message",
 			text: banner.message,
 		});
 
 		if (banner.total > 0) {
-			const progressRow = bannerEl.createEl("div", {cls: "similarity-index-banner-progress"});
+			const progressRow = bannerEl.createDiv({cls: "similarity-index-banner-progress"});
 			progressRow.createEl("progress", {
 				cls: "similarity-index-banner-bar",
 				attr: {
@@ -136,7 +136,7 @@ export class SimilarNotesListView extends ItemView {
 					value: String(Math.min(banner.processed, banner.total)),
 				},
 			});
-			progressRow.createEl("span", {
+			progressRow.createSpan({
 				cls: "similarity-index-banner-label",
 				text: banner.progressLabel ?? "",
 			});
@@ -144,7 +144,7 @@ export class SimilarNotesListView extends ItemView {
 	}
 
 	private renderRetryAction(container: HTMLElement) {
-		const actions = container.createEl("div", {cls: "related-notes-actions"});
+		const actions = container.createDiv({cls: "related-notes-actions"});
 		const retryButton = actions.createEl("button", {
 			cls: "mod-cta related-notes-button",
 			text: "Retry indexing",
@@ -157,7 +157,7 @@ export class SimilarNotesListView extends ItemView {
 
 	private async renderContent(targetContainer: HTMLElement, options: { showLoading?: boolean } = {}) {
 		const showLoading = options.showLoading ?? true;
-		const workingContainer = showLoading ? targetContainer : document.createElement("div");
+		const workingContainer = showLoading ? targetContainer : createDiv();
 		if (showLoading) {
 			targetContainer.empty();
 		}
@@ -253,33 +253,33 @@ export class SimilarNotesListView extends ItemView {
 	}
 
 	private renderRelatedList(container: HTMLElement, related: SimilarNote[]) {
-		const list = container.createEl("div");
+		const list = container.createDiv();
 
 		related.forEach((note) => {
 			const path = note.id;
 
-			const listItem = list.createEl("div", {cls: "tree-item"});
-			const itemSelf = listItem.createEl("div", {
+			const listItem = list.createDiv({cls: "tree-item"});
+			const itemSelf = listItem.createDiv({
 				cls: "tree-item-self tag-pane-tag is-clickable",
 			});
 			itemSelf.addEventListener("click", () => this.openNote(path));
 
-			const itemInner = itemSelf.createEl("div", {cls: "tree-item-inner"});
+			const itemInner = itemSelf.createDiv({cls: "tree-item-inner"});
 
 			const title = path.split("/").pop()?.replace(/\.md$/i, "") ?? path;
 			const parentPath = path.includes("/") ? path.split("/").slice(0, -1).join("/") : "";
-			const itemInnerText = itemInner.createEl("div", {cls: "tree-item-inner-text"});
+			const itemInnerText = itemInner.createDiv({cls: "tree-item-inner-text"});
 
-			const textWrapper = itemInnerText.createEl("div", {cls: "related-text"});
+			const textWrapper = itemInnerText.createDiv({cls: "related-text"});
 
-			textWrapper.createEl("span", {cls: "related-title", text: title});
+			textWrapper.createSpan({cls: "related-title", text: title});
 
 			if (parentPath) {
 				textWrapper.createEl("small", {cls: "related-parent", text: parentPath});
 			}
 
-			const flairOuter = itemSelf.createEl("div", {cls: "tree-item-flair-outer"});
-			flairOuter.createEl("span", {
+			const flairOuter = itemSelf.createDiv({cls: "tree-item-flair-outer"});
+			flairOuter.createSpan({
 				cls: "tag-pane-tag-count tree-item-flair",
 				text: `${Math.round(note.score * 100)}%`,
 			});

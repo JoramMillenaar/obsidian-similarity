@@ -10,13 +10,13 @@ export class IframeMessenger {
     async initialize(): Promise<void> {
         if (this.iframe) return;
 
-        const existingIframe = document.getElementById(this.iframeId) as HTMLIFrameElement | null;
+        const existingIframe = activeDocument.getElementById(this.iframeId) as HTMLIFrameElement | null;
         if (existingIframe) {
             this.iframe = existingIframe;
             return;
         }
 
-        this.iframe = document.body.createEl('iframe', {
+        this.iframe = activeDocument.body.createEl('iframe', {
             attr: {
                 id: this.iframeId,
                 style: "display: none;",
@@ -34,7 +34,7 @@ export class IframeMessenger {
         if (event.origin !== window.location.origin) return;
         if (event.source !== this.iframe?.contentWindow) return;
 
-        const { requestId, data, error }: { requestId: number; data: number[]; error?: string } = event.data;
+        const { requestId, data, error } = event.data as { requestId: number; data: number[]; error?: string };
         const pending = this.pendingRequests.get(requestId);
 
         if (!pending) return;
@@ -86,7 +86,7 @@ export class IframeMessenger {
                 return;
             } catch {
 				if (attempt) console.warn(`Iframe ping attempt ${attempt + 1} failed. Retrying...`);
-                await new Promise((resolve) => setTimeout(resolve, 1000)); // Wait 1 second before retrying
+                await new Promise((resolve) => activeWindow.setTimeout(resolve, 1000));
             }
         }
 
@@ -118,7 +118,7 @@ export class IframeMessenger {
     }
 
     unload(): void {
-        document.getElementById(this.iframeId)?.remove();
+        activeDocument.getElementById(this.iframeId)?.remove();
         window.removeEventListener('message', this.onMessageReceived);
     }
 }

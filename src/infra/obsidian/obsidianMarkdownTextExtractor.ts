@@ -6,7 +6,7 @@ export class ObsidianMarkdownTextExtractor implements MarkdownTextExtractor {
 	}
 
 	async extract(markdown: string): Promise<string> {
-		const el = document.createElement("div");
+		const el = createDiv();
 		const component = new Component();
 
 		try {

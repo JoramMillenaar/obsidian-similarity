@@ -6,9 +6,7 @@ export class EmbeddingProvider implements EmbeddingPort {
 	private iframeMessenger: IframeMessenger;
 
 	constructor() {
-		// @ts-ignore
-		const IframeContent = __IFRAME_CONTENTS_PLACEHOLDER__;
-		this.iframeMessenger = new IframeMessenger('related-text-iframe', IframeContent);
+		this.iframeMessenger = new IframeMessenger('related-text-iframe', __IFRAME_CONTENTS_PLACEHOLDER__);
 	}
 
 	async load(): Promise<void> {

@@ -181,7 +181,7 @@ export class SearchModal extends SuggestModal<RelatedNote> {
 		if (fileName.endsWith(".md")) fileName = fileName.slice(0, -3);
 		const scorePercent = (value.score * 100).toFixed(0);
 
-		el.createEl("div", {text: fileName});
+		el.createDiv({text: fileName});
 		el.createEl("small", {text: `${scorePercent}%`, cls: "suggestion-note"});
 	}
 
@@ -263,13 +263,13 @@ export class SearchModal extends SuggestModal<RelatedNote> {
 			return;
 		}
 
-		this.bannerEl.createEl("div", {
+		this.bannerEl.createDiv({
 			cls: "similarity-index-banner-message",
 			text: banner.message,
 		});
 
 		if (banner.total > 0) {
-			const progressRow = this.bannerEl.createEl("div", {cls: "similarity-index-banner-progress"});
+			const progressRow = this.bannerEl.createDiv({cls: "similarity-index-banner-progress"});
 			progressRow.createEl("progress", {
 				cls: "similarity-index-banner-bar",
 				attr: {
@@ -277,7 +277,7 @@ export class SearchModal extends SuggestModal<RelatedNote> {
 					value: String(Math.min(banner.processed, banner.total)),
 				},
 			});
-			progressRow.createEl("span", {
+			progressRow.createSpan({
 				cls: "similarity-index-banner-label",
 				text: banner.progressLabel ?? "",
 			});
@@ -330,7 +330,7 @@ export class SearchModal extends SuggestModal<RelatedNote> {
 }
 
 function createBannerElement() {
-	const element = document.createElement("div");
+	const element = createDiv();
 	element.className = "similarity-index-banner similarity-index-banner-hidden is-hidden";
 	return element;
 }
