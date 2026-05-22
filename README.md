@@ -42,20 +42,6 @@ Similarity lets structure emerge naturally.
 
 ---
 
-## Install (Early Access via BRAT)
-
-Obsidian plugin review is currently slow. Until this is officially listed, you can install via BRAT:
-
-1. Install the BRAT plugin
-2. Add this repo:
-
-https://github.com/JoramMillenaar/obsidian-similarity
-
-
-![setup-demo](https://github.com/user-attachments/assets/8c85a7b8-3247-4f50-a380-6e34a9570ad1)
-
----
-
 ## Privacy
 
 This plugin is built around one principle: your notes stay yours.
