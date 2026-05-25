@@ -30,6 +30,14 @@ export default class RelatedNotes extends Plugin {
 					isIgnoredPath: this.appContainer.isIgnoredPath,
 				})
 		);
+		this.registerHoverLinkSource(VIEW_TYPE_SIMILARITY, {
+			display: "Similarity",
+			defaultMod: true,
+		});
+		this.registerHoverLinkSource("similarity-search", {
+			display: "Similarity search",
+			defaultMod: true,
+		});
 
 		this.addCommand({
 			id: "sync-vault",
