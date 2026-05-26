@@ -34,10 +34,6 @@ export default class RelatedNotes extends Plugin {
 			display: "Similarity",
 			defaultMod: true,
 		});
-		this.registerHoverLinkSource("similarity-search", {
-			display: "Similarity search",
-			defaultMod: true,
-		});
 
 		this.addCommand({
 			id: "sync-vault",

@@ -176,19 +176,6 @@ export class SearchModal extends SuggestModal<RelatedNote> {
 		new Notice("Could not insert link: no active editor.");
 	}
 
-	private triggerHoverPreview(event: MouseEvent, targetEl: HTMLElement, path: string) {
-		const activeFile = this.app.workspace.getActiveFile();
-
-		this.app.workspace.trigger("hover-link", {
-			event,
-			source: "similarity-search",
-			hoverParent: this.resultContainerEl,
-			targetEl,
-			linktext: path,
-			sourcePath: activeFile?.path ?? path,
-		});
-	}
-
 	renderSuggestion(value: RelatedNote, el: HTMLElement): void {
 		let fileName = value.id;
 		if (fileName.endsWith(".md")) fileName = fileName.slice(0, -3);
@@ -196,10 +183,6 @@ export class SearchModal extends SuggestModal<RelatedNote> {
 
 		const titleEl = el.createDiv({text: fileName});
 		titleEl.addClass("internal-link");
-
-		el.addEventListener("mouseover", (event: MouseEvent) => {
-			this.triggerHoverPreview(event, el, value.id);
-		});
 
 		el.createEl("small", {text: `${scorePercent}%`, cls: "suggestion-note"});
 	}
