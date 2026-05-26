@@ -74,6 +74,19 @@ export class SimilarNotesListView extends ItemView {
 			});
 	};
 
+	private triggerHoverPreview(event: MouseEvent, targetEl: HTMLElement, path: string) {
+		const activeFile = this.app.workspace.getActiveFile();
+
+		this.app.workspace.trigger("hover-link", {
+			event,
+			source: VIEW_TYPE_SIMILARITY,
+			hoverParent: this.containerEl,
+			targetEl,
+			linktext: path,
+			sourcePath: activeFile?.path ?? path,
+		});
+	}
+
 	async onOpen() {
 		this.unsubscribeIndexingState = this.deps.subscribeIndexingState((snapshot) => {
 			const previous = this.indexingState;
@@ -263,6 +276,9 @@ export class SimilarNotesListView extends ItemView {
 				cls: "tree-item-self tag-pane-tag is-clickable",
 			});
 			itemSelf.addEventListener("click", () => this.openNote(path));
+			itemSelf.addEventListener("mouseover", (event: MouseEvent) => {
+				this.triggerHoverPreview(event, itemSelf, path);
+			});
 
 			const itemInner = itemSelf.createDiv({cls: "tree-item-inner"});
 
