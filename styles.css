@@ -102,3 +102,83 @@
 .similarity-setting-section-heading.is-open .setting-item-name::before {
 	transform: rotate(90deg);
 }
+
+/* Semantic graph view */
+.similarity-graph-view {
+	position: relative;
+	width: 100%;
+	height: 100%;
+	overflow: hidden;
+	padding: 0;
+}
+
+.similarity-graph-canvas {
+	display: block;
+	width: 100%;
+	height: 100%;
+	cursor: grab;
+}
+
+.similarity-graph-controls-toggle {
+	position: absolute;
+	top: 8px;
+	right: 8px;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 28px;
+	height: 28px;
+	border-radius: 6px;
+	background: var(--background-secondary);
+	border: 1px solid var(--background-modifier-border);
+	color: var(--text-muted);
+	cursor: pointer;
+	z-index: 2;
+}
+
+.similarity-graph-controls-toggle:hover {
+	color: var(--text-normal);
+	background: var(--background-modifier-hover);
+}
+
+.similarity-graph-controls {
+	position: absolute;
+	top: 44px;
+	right: 8px;
+	width: var(--graph-controls-width, 240px);
+	max-height: calc(100% - 56px);
+	overflow-y: auto;
+	padding: 8px 12px;
+	border-radius: 8px;
+	background: var(--background-secondary);
+	border: 1px solid var(--background-modifier-border);
+	box-shadow: var(--shadow-s);
+	z-index: 2;
+}
+
+.similarity-graph-controls .setting-item {
+	padding: 6px 0;
+	border: none;
+}
+
+.similarity-graph-overlay {
+	position: absolute;
+	inset: 0;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	gap: 12px;
+	text-align: center;
+	padding: 24px;
+	pointer-events: none;
+}
+
+.similarity-graph-overlay button {
+	pointer-events: auto;
+}
+
+.similarity-graph-overlay-message {
+	color: var(--text-muted);
+	max-width: 320px;
+}
