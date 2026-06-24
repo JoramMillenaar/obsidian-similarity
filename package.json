@@ -1,6 +1,6 @@
 {
 	"name": "similarity",
-	"version": "2.2.15",
+	"version": "2.2.16",
 	"description": "Intelligently suggests related notes—fully local and private, revealing connections in your knowledge vault.",
 	"main": "main.js",
 	"scripts": {
