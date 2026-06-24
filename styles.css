@@ -89,7 +89,6 @@
 
 .similarity-setting-section-heading {
 	cursor: pointer;
-	border-bottom: 1px solid var(--background-modifier-border);
 }
 
 .similarity-setting-section-heading .setting-item-name::before {
@@ -102,55 +101,4 @@
 
 .similarity-setting-section-heading.is-open .setting-item-name::before {
 	transform: rotate(90deg);
-}
-
-.similarity-graph-view {
-	position: relative;
-	width: 100%;
-	height: 100%;
-	overflow: hidden;
-	padding: 0;
-}
-
-.similarity-graph-canvas {
-	display: block;
-	width: 100%;
-	height: 100%;
-	cursor: grab;
-}
-
-.similarity-graph-view .graph-controls.is-close .graph-control-section,
-.similarity-graph-view .graph-controls.is-close .graph-controls-button.mod-close,
-.similarity-graph-view .graph-controls.is-close .graph-controls-button.mod-reset {
-	display: none;
-}
-
-.similarity-graph-view .graph-controls:not(.is-close) .graph-controls-button.mod-open {
-	display: none;
-}
-
-.similarity-graph-view .graph-control-section.is-collapsed > .tree-item-children {
-	display: none;
-}
-
-.similarity-graph-overlay {
-	position: absolute;
-	inset: 0;
-	display: flex;
-	flex-direction: column;
-	align-items: center;
-	justify-content: center;
-	gap: 12px;
-	text-align: center;
-	padding: 24px;
-	pointer-events: none;
-}
-
-.similarity-graph-overlay button {
-	pointer-events: auto;
-}
-
-.similarity-graph-overlay-message {
-	color: var(--text-muted);
-	max-width: 320px;
 }

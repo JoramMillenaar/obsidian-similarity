@@ -8,7 +8,6 @@ import { EmbeddingProvider } from "./infra/embedder/embeddingProvider";
 import { JsonIndexedNoteRepository } from "./infra/index/jsonIndexedNoteRepository";
 import { IndexNoteUseCase, makeIndexNote } from "./app/indexNote";
 import { GetSimilarNotesUseCase, makeGetSimilarNotes } from "./app/getSimilarNotes";
-import { BuildSimilarityGraphUseCase, makeBuildSimilarityGraph } from "./app/buildSimilarityGraph";
 import { InsertWikilinkAtCursorUseCase, makeInsertWikilinkAtCursor } from "./app/insertWikilinkAtCursor";
 import { makeSyncIndexToVault, SyncIndexToVaultUseCase } from "./app/syncIndexToVault";
 import { makeEmbedChunks, makeEmbedText } from "./app/embedText";
@@ -58,7 +57,6 @@ export class AppContainer {
 	readonly indexNote: IndexNoteUseCase;
 	readonly prepareNoteForEmbedding: PrepareNoteForEmbeddingUseCase;
 	readonly getSimilarNotes: GetSimilarNotesUseCase;
-	readonly buildSimilarityGraph: BuildSimilarityGraphUseCase;
 	readonly insertWikilinkAtCursor: InsertWikilinkAtCursorUseCase;
 	readonly syncIndexToVault: SyncIndexToVaultUseCase;
 	readonly startOrRefreshIndexSync: StartOrRefreshIndexSyncUseCase;
@@ -110,10 +108,6 @@ export class AppContainer {
 			embedText,
 			embedChunks,
 			prepareNoteForEmbedding: this.prepareNoteForEmbedding,
-		});
-
-		this.buildSimilarityGraph = makeBuildSimilarityGraph({
-			indexRepo: this.indexRepo,
 		});
 
 		this.insertWikilinkAtCursor = makeInsertWikilinkAtCursor({
