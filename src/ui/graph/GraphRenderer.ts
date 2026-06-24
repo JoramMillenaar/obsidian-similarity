@@ -8,14 +8,10 @@ export interface GraphThemeColors {
 }
 
 export interface GraphRenderModel {
-	/** Live positions, owned by the simulation. */
 	nodes: readonly SimulationNode[];
-	/** Stable id -> node lookup for edge endpoints (positions mutate in place). */
 	nodeById: Map<string, SimulationNode>;
 	edges: readonly { source: string; target: string }[];
-	/** Edge degree per node id, used for sizing. */
 	degreeById: Map<string, number>;
-	/** Display label per node id. */
 	labelById: Map<string, string>;
 }
 
@@ -23,7 +19,6 @@ export interface RenderOptions {
 	nodeSize: number;
 	linkThickness: number;
 	textFadeThreshold: number;
-	/** When set, this node and its neighbours stay bright; everything else dims. */
 	focusNodeId?: string;
 	focusNeighbours?: Set<string>;
 }
@@ -38,12 +33,6 @@ const BASE_NODE_RADIUS = 4;
 const MIN_SCALE = 0.05;
 const MAX_SCALE = 8;
 
-/**
- * Canvas-2D renderer for the similarity graph. Owns the drawing surface and the
- * pan/zoom transform, and provides world/screen coordinate conversion and
- * hit-testing. It holds no graph state of its own — the view passes a fresh
- * {@link GraphRenderModel} each frame.
- */
 export class GraphRenderer {
 	private readonly ctx: CanvasRenderingContext2D;
 	private width = 0;
@@ -69,10 +58,6 @@ export class GraphRenderer {
 		this.colors = colors;
 	}
 
-	getTransform(): Transform {
-		return this.transform;
-	}
-
 	setTransform(transform: Transform): void {
 		this.transform = {
 			...transform,
@@ -90,13 +75,11 @@ export class GraphRenderer {
 		this.canvas.style.height = `${cssHeight}px`;
 	}
 
-	/** Pans by a screen-pixel delta. */
 	panBy(dx: number, dy: number): void {
 		this.transform.offsetX += dx;
 		this.transform.offsetY += dy;
 	}
 
-	/** Zooms by a factor, keeping the given screen point anchored. */
 	zoomBy(factor: number, screenX: number, screenY: number): void {
 		const before = this.screenToWorld(screenX, screenY);
 		this.transform.scale = clamp(this.transform.scale * factor, MIN_SCALE, MAX_SCALE);
@@ -121,7 +104,6 @@ export class GraphRenderer {
 		};
 	}
 
-	/** Returns the id of the node under a screen point, if any. */
 	hitTest(model: GraphRenderModel, screenX: number, screenY: number, nodeSize: number): string | null {
 		let best: string | null = null;
 		let bestDist = Infinity;
@@ -140,7 +122,6 @@ export class GraphRenderer {
 		return best;
 	}
 
-	/** Centers the view on the graph's bounding box at a comfortable zoom. */
 	fitToContent(model: GraphRenderModel): void {
 		if (model.nodes.length === 0) return;
 		let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;

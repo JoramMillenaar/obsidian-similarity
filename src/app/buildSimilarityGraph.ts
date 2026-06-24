@@ -3,23 +3,12 @@ import { IndexRepository } from "../ports";
 import { cosineSimilarity } from "../domain/embedding";
 
 export type BuildSimilarityGraphUseCase = (args: {
-	/** Number of most-similar neighbours to connect to each node (N). */
 	linksPerNode: number;
-	/** Minimum cosine similarity required for an edge. */
 	minScore?: number;
 }) => Promise<SimilarityGraph>;
 
 type ScoredNeighbour = { id: string; score: number };
 
-/**
- * Assembles the semantic similarity graph for the whole index.
- *
- * This is orchestration only: it reads the index through {@link IndexRepository}
- * and reuses the existing domain similarity math ({@link cosineSimilarity}). No
- * new scoring rules live here. Directional top-N relationships are collapsed into
- * undirected, de-duplicated edges whose weight is the strongest of the two
- * directions, and node degree is the number of distinct neighbours.
- */
 export function makeBuildSimilarityGraph(deps: {
 	indexRepo: IndexRepository;
 }): BuildSimilarityGraphUseCase {
@@ -37,9 +26,6 @@ export function makeBuildSimilarityGraph(deps: {
 			};
 		}
 
-		// Undirected edge key -> edge with the best score seen in either direction.
-		// Note ids are vault paths (which may contain spaces); use newline as a
-		// separator since paths cannot contain one.
 		const edges = new Map<string, { source: string; target: string; score: number }>();
 
 		for (let i = 0; i < indexed.length; i++) {

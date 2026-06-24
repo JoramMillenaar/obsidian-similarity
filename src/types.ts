@@ -103,25 +103,15 @@ export type PrepareNoteResult =
 	};
 
 export interface GraphSettings {
-	/** Number of most-similar notes connected to each node (N). */
 	linksPerNode: number;
-	/** Minimum cosine similarity required for an edge to be drawn. */
 	minScore: number;
-	/** Pull of every node toward the graph center. */
 	centerForce: number;
-	/** Strength with which nodes push each other apart. */
 	repelForce: number;
-	/** Tightness of the spring along each edge. */
 	linkForce: number;
-	/** Natural rest length of each edge. */
 	linkDistance: number;
-	/** Radius multiplier for nodes. */
 	nodeSize: number;
-	/** Line-width multiplier for edges. */
 	linkThickness: number;
-	/** Zoom level below which node labels fade out. */
 	textFadeThreshold: number;
-	/** Whether to show nodes that have no edges. */
 	showOrphans: boolean;
 }
 

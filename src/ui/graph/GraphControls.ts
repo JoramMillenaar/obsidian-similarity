@@ -1,12 +1,11 @@
 import { setIcon, Setting } from "obsidian";
 import { GraphSettings } from "../../types";
 
-/** How a settings change should be applied, cheapest first. */
 export type GraphSettingsChangeKind =
-	| "rebuild"  // edge set changed (N / minScore) — recompute via the use case
-	| "filter"   // visible node/edge set changed (orphans) — re-derive locally
-	| "forces"   // simulation forces changed — reheat
-	| "render";  // purely visual — redraw
+	| "rebuild"
+	| "filter"
+	| "forces"
+	| "render";
 
 export type GraphControlsDeps = {
 	getSettings: () => GraphSettings;
