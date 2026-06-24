@@ -1,7 +1,7 @@
 import { ItemView, Menu, Notice, setIcon, TFile, WorkspaceLeaf } from "obsidian";
 import { GraphSettings, IndexingQueueSnapshot, SimilarityGraph } from "../types";
 import { DEFAULT_GRAPH_SETTINGS } from "../constants";
-import { ForceSimulation, SimulationNode } from "../domain/forceSimulation";
+import { ForceSimulation, SimulationNode } from "./graph/ForceSimulation";
 import { BuildSimilarityGraphUseCase } from "../app/buildSimilarityGraph";
 import { StartOrRefreshIndexSyncUseCase, SubscribeIndexingStateUseCase } from "../app/indexingCoordinator";
 import { IndexRepository, SettingsRepository } from "../ports";
@@ -296,7 +296,7 @@ export class SemanticGraphView extends ItemView {
 		this.frame = requestAnimationFrame(() => {
 			this.frame = null;
 			if (!this.renderer) return;
-			const alpha = this.simulation.tick();
+			this.simulation.tick();
 			this.renderer.draw(this.renderModel(), {
 				nodeSize: this.settings.nodeSize,
 				linkThickness: this.settings.linkThickness,
@@ -304,7 +304,7 @@ export class SemanticGraphView extends ItemView {
 				focusNodeId: this.focusNodeId,
 				focusNeighbours: this.focusNodeId ? this.adjacency.get(this.focusNodeId) : undefined,
 			});
-			if (alpha > 0 || this.draggingNodeId || this.isPanning) {
+			if (!this.simulation.isSettled() || this.draggingNodeId || this.isPanning) {
 				this.scheduleFrame();
 			}
 		});
@@ -353,7 +353,10 @@ export class SemanticGraphView extends ItemView {
 		if (hit) {
 			this.draggingNodeId = hit;
 			const node = this.nodeById.get(hit);
-			if (node) node.fixed = true;
+			if (node) {
+				this.simulation.beginInteraction();
+				this.simulation.pin(hit, node.x, node.y);
+			}
 		} else {
 			this.isPanning = true;
 		}
@@ -368,13 +371,8 @@ export class SemanticGraphView extends ItemView {
 
 		if (this.draggingNodeId) {
 			if (Math.abs(dx) + Math.abs(dy) > CLICK_MOVE_THRESHOLD) this.pointerMoved = true;
-			const node = this.nodeById.get(this.draggingNodeId);
-			if (node) {
-				const world = this.renderer.screenToWorld(pos.x, pos.y);
-				node.x = world.x;
-				node.y = world.y;
-				this.simulation.reheat(0.5);
-			}
+			const world = this.renderer.screenToWorld(pos.x, pos.y);
+			this.simulation.pin(this.draggingNodeId, world.x, world.y);
 			this.lastPointer = pos;
 			this.scheduleFrame();
 			return;
@@ -401,11 +399,10 @@ export class SemanticGraphView extends ItemView {
 	private onPointerUp(e: PointerEvent): void {
 		this.canvasEl?.releasePointerCapture(e.pointerId);
 		if (this.draggingNodeId) {
-			const node = this.nodeById.get(this.draggingNodeId);
-			if (node) node.fixed = false;
+			this.simulation.unpin(this.draggingNodeId);
+			this.simulation.endInteraction();
 			if (!this.pointerMoved) this.openNote(this.draggingNodeId);
 			this.draggingNodeId = undefined;
-			this.simulation.reheat(0.3);
 			this.scheduleFrame();
 		}
 		this.isPanning = false;

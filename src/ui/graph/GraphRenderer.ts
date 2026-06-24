@@ -1,4 +1,4 @@
-import { SimulationNode } from "../../domain/forceSimulation";
+import { SimulationNode } from "./ForceSimulation";
 
 export interface GraphThemeColors {
 	node: string;

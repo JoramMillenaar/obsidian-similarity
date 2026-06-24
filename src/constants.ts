@@ -3,10 +3,13 @@ import { GraphSettings, SimilaritySettings } from "./types";
 export const DEFAULT_GRAPH_SETTINGS: GraphSettings = {
 	linksPerNode: 3,
 	minScore: 0.25,
-	centerForce: 0.3,
-	repelForce: 0.5,
-	linkForce: 0.4,
-	linkDistance: 80,
+	// Force values are multipliers around d3's defaults; 1 reproduces the
+	// canonical d3 force-directed graph example (charge -30, link distance 30,
+	// forceX/forceY strength 0.1).
+	centerForce: 1,
+	repelForce: 1,
+	linkForce: 1,
+	linkDistance: 30,
 	nodeSize: 1,
 	linkThickness: 1,
 	textFadeThreshold: 0.5,

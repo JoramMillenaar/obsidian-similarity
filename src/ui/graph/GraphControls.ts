@@ -51,14 +51,14 @@ export class GraphControls {
 			settings.textFadeThreshold, 0, 2, 0.1, (v) => this.deps.onChange({textFadeThreshold: v}, "render"));
 
 		this.heading(container, "Forces");
-		this.slider(container, "Center force", "How strongly nodes are pulled toward the center.",
-			settings.centerForce, 0, 1, 0.05, (v) => this.deps.onChange({centerForce: v}, "forces"));
-		this.slider(container, "Repel force", "How strongly nodes push each other apart.",
-			settings.repelForce, 0, 1, 0.05, (v) => this.deps.onChange({repelForce: v}, "forces"));
-		this.slider(container, "Link force", "How tightly connections pull notes together.",
-			settings.linkForce, 0, 1, 0.05, (v) => this.deps.onChange({linkForce: v}, "forces"));
+		this.slider(container, "Center force", "How strongly nodes are pulled toward the center (1 = d3 default).",
+			settings.centerForce, 0, 2, 0.05, (v) => this.deps.onChange({centerForce: v}, "forces"));
+		this.slider(container, "Repel force", "How strongly nodes push each other apart (1 = d3 default).",
+			settings.repelForce, 0, 3, 0.1, (v) => this.deps.onChange({repelForce: v}, "forces"));
+		this.slider(container, "Link force", "How tightly connections pull notes together (1 = d3 default).",
+			settings.linkForce, 0, 2, 0.05, (v) => this.deps.onChange({linkForce: v}, "forces"));
 		this.slider(container, "Link distance", "Resting length of each connection.",
-			settings.linkDistance, 20, 300, 10, (v) => this.deps.onChange({linkDistance: v}, "forces"));
+			settings.linkDistance, 10, 150, 5, (v) => this.deps.onChange({linkDistance: v}, "forces"));
 
 		new Setting(container)
 			.addButton((button) => button
