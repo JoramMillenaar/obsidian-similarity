@@ -24,6 +24,22 @@ export type RelatedNote = {
 	score: number;
 };
 
+export type SimilarityGraphNode = {
+	id: string;
+	degree: number;
+};
+
+export type SimilarityGraphEdge = {
+	source: string;
+	target: string;
+	score: number;
+};
+
+export type SimilarityGraph = {
+	nodes: SimilarityGraphNode[];
+	edges: SimilarityGraphEdge[];
+};
+
 export interface IframeMessage {
 	requestId: number;
 	payload: string;
@@ -86,6 +102,19 @@ export type PrepareNoteResult =
 		warnings: IndexingWarning[];
 	};
 
+export interface GraphSettings {
+	linksPerNode: number;
+	minScore: number;
+	centerForce: number;
+	repelForce: number;
+	linkForce: number;
+	linkDistance: number;
+	nodeSize: number;
+	linkThickness: number;
+	textFadeThreshold: number;
+	showOrphans: boolean;
+}
+
 export interface SimilaritySettings {
 	ignoredPaths: string[];
 	initialIndexCompleted: boolean;
@@ -94,6 +123,7 @@ export interface SimilaritySettings {
 	maxExtractedChars: number;
 	maxChunks: number;
 	titleWeight: number;
+	graph: GraphSettings;
 }
 
 export interface SimilarityPluginData {

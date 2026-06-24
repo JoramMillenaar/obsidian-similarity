@@ -3,7 +3,9 @@ import { SearchModal } from "./ui/SearchModal";
 import { initializePlugin } from "./app/initializePlugin";
 import { AppContainer } from "./appContainer";
 import { SimilarNotesListView, VIEW_TYPE_SIMILARITY } from "./ui/SimilarNotesListView";
+import { SemanticGraphView, VIEW_TYPE_SEMANTIC_GRAPH } from "./ui/SemanticGraphView";
 import { activateRightLeafView } from "./app/activateRightLeafView";
+import { activateGraphView } from "./app/activateGraphView";
 import { SettingView } from "./ui/SettingsView";
 import { isMarkdownPath } from "./domain/markdownPath";
 
@@ -33,6 +35,26 @@ export default class RelatedNotes extends Plugin {
 		this.registerHoverLinkSource(VIEW_TYPE_SIMILARITY, {
 			display: "Similarity",
 			defaultMod: true,
+		});
+
+		this.registerView(
+			VIEW_TYPE_SEMANTIC_GRAPH,
+			(leaf) =>
+				new SemanticGraphView(leaf, {
+					buildSimilarityGraph: this.appContainer.buildSimilarityGraph,
+					indexRepo: this.appContainer.indexRepo,
+					settingsRepo: this.appContainer.settingsRepo,
+					startOrRefreshIndexSync: this.appContainer.startOrRefreshIndexSync,
+					subscribeIndexingState: this.appContainer.subscribeIndexingState,
+				})
+		);
+		this.registerHoverLinkSource(VIEW_TYPE_SEMANTIC_GRAPH, {
+			display: "Semantic graph",
+			defaultMod: true,
+		});
+
+		this.addRibbonIcon("git-fork", "Open semantic graph", () => {
+			void activateGraphView(this);
 		});
 
 		this.addCommand({
@@ -101,6 +123,14 @@ export default class RelatedNotes extends Plugin {
 			name: "Open similar notes",
 			callback: async () => {
 				await activateRightLeafView(this, {reveal: true, focus: true});
+			},
+		});
+
+		this.addCommand({
+			id: "open-semantic-graph",
+			name: "Open semantic graph",
+			callback: async () => {
+				await activateGraphView(this);
 			},
 		});
 
