@@ -1,4 +1,4 @@
-import { ItemView, Menu, Notice, setIcon, TFile, WorkspaceLeaf } from "obsidian";
+import { ItemView, Menu, Notice, TFile, WorkspaceLeaf } from "obsidian";
 import { GraphSettings, IndexingQueueSnapshot, SimilarityGraph } from "../types";
 import { DEFAULT_GRAPH_SETTINGS } from "../constants";
 import { ForceSimulation, SimulationNode } from "./graph/ForceSimulation";
@@ -33,7 +33,6 @@ export class SemanticGraphView extends ItemView {
 	private readonly controls: GraphControls;
 
 	private canvasEl?: HTMLCanvasElement;
-	private controlsPanelEl?: HTMLElement;
 	private overlayEl?: HTMLElement;
 
 	// Derived render data, rebuilt whenever the visible graph changes.
@@ -115,15 +114,7 @@ export class SemanticGraphView extends ItemView {
 		this.renderer = new GraphRenderer(canvas);
 		this.refreshThemeColors();
 
-		const cog = root.createDiv({cls: "similarity-graph-controls-toggle"});
-		setIcon(cog, "settings");
-		cog.setAttr("aria-label", "Graph settings");
-		this.registerDomEvent(cog, "click", () => this.toggleControls());
-
-		const panel = root.createDiv({cls: "similarity-graph-controls"});
-		panel.style.display = "none";
-		this.controls.render(panel);
-		this.controlsPanelEl = panel;
+		this.controls.mount(root);
 
 		this.overlayEl = root.createDiv({cls: "similarity-graph-overlay"});
 		this.overlayEl.style.display = "none";
@@ -133,17 +124,6 @@ export class SemanticGraphView extends ItemView {
 		this.resizeObserver = new ResizeObserver(() => this.handleResize());
 		this.resizeObserver.observe(root);
 		this.handleResize();
-	}
-
-	private toggleControls(): void {
-		if (!this.controlsPanelEl) return;
-		const visible = this.controlsPanelEl.style.display !== "none";
-		if (visible) {
-			this.controlsPanelEl.style.display = "none";
-		} else {
-			this.controls.render(this.controlsPanelEl);
-			this.controlsPanelEl.style.display = "block";
-		}
 	}
 
 	private handleResize(): void {
@@ -249,7 +229,7 @@ export class SemanticGraphView extends ItemView {
 		this.settings = {...DEFAULT_GRAPH_SETTINGS};
 		this.persistSettingsDebounced();
 		this.simulation.setParameters(this.forceParams());
-		if (this.controlsPanelEl) this.controls.render(this.controlsPanelEl);
+		this.controls.refresh();
 		void this.reloadGraph();
 	}
 

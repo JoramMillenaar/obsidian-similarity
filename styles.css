@@ -89,6 +89,7 @@
 
 .similarity-setting-section-heading {
 	cursor: pointer;
+	border-bottom: 1px solid var(--background-modifier-border);
 }
 
 .similarity-setting-section-heading .setting-item-name::before {
@@ -119,46 +120,18 @@
 	cursor: grab;
 }
 
-.similarity-graph-controls-toggle {
-	position: absolute;
-	top: 8px;
-	right: 8px;
-	display: flex;
-	align-items: center;
-	justify-content: center;
-	width: 28px;
-	height: 28px;
-	border-radius: 6px;
-	background: var(--background-secondary);
-	border: 1px solid var(--background-modifier-border);
-	color: var(--text-muted);
-	cursor: pointer;
-	z-index: 2;
+.similarity-graph-view .graph-controls.is-close .graph-control-section,
+.similarity-graph-view .graph-controls.is-close .graph-controls-button.mod-close,
+.similarity-graph-view .graph-controls.is-close .graph-controls-button.mod-reset {
+	display: none;
 }
 
-.similarity-graph-controls-toggle:hover {
-	color: var(--text-normal);
-	background: var(--background-modifier-hover);
+.similarity-graph-view .graph-controls:not(.is-close) .graph-controls-button.mod-open {
+	display: none;
 }
 
-.similarity-graph-controls {
-	position: absolute;
-	top: 44px;
-	right: 8px;
-	width: var(--graph-controls-width, 240px);
-	max-height: calc(100% - 56px);
-	overflow-y: auto;
-	padding: 8px 12px;
-	border-radius: 8px;
-	background: var(--background-secondary);
-	border: 1px solid var(--background-modifier-border);
-	box-shadow: var(--shadow-s);
-	z-index: 2;
-}
-
-.similarity-graph-controls .setting-item {
-	padding: 6px 0;
-	border: none;
+.similarity-graph-view .graph-control-section.is-collapsed > .tree-item-children {
+	display: none;
 }
 
 .similarity-graph-overlay {
