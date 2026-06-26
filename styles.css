@@ -102,3 +102,60 @@
 .similarity-setting-section-heading.is-open .setting-item-name::before {
 	transform: rotate(90deg);
 }
+
+/* Semantic graph view */
+.similarity-graph-view {
+	position: relative;
+	width: 100%;
+	height: 100%;
+	overflow: hidden;
+	padding: 0;
+}
+
+.similarity-graph-canvas {
+	display: block;
+	width: 100%;
+	height: 100%;
+	cursor: grab;
+}
+
+/* The settings panel reuses Obsidian's native `.graph-controls` structure, so
+   Obsidian's own stylesheet themes and positions it. These rules only drive the
+   behavior Obsidian implements in JS: showing the cog vs. the close/reset
+   buttons, and collapsing sections (Obsidian removes the children; we keep them
+   in the DOM and hide them instead). */
+.similarity-graph-view .graph-controls.is-close .graph-control-section,
+.similarity-graph-view .graph-controls.is-close .graph-controls-button.mod-close,
+.similarity-graph-view .graph-controls.is-close .graph-controls-button.mod-reset {
+	display: none;
+}
+
+.similarity-graph-view .graph-controls:not(.is-close) .graph-controls-button.mod-open {
+	display: none;
+}
+
+.similarity-graph-view .graph-control-section.is-collapsed > .tree-item-children {
+	display: none;
+}
+
+.similarity-graph-overlay {
+	position: absolute;
+	inset: 0;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	gap: 12px;
+	text-align: center;
+	padding: 24px;
+	pointer-events: none;
+}
+
+.similarity-graph-overlay button {
+	pointer-events: auto;
+}
+
+.similarity-graph-overlay-message {
+	color: var(--text-muted);
+	max-width: 320px;
+}

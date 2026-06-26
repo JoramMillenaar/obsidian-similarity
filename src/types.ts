@@ -24,6 +24,23 @@ export type RelatedNote = {
 	score: number;
 };
 
+export type SimilarityGraphNode = {
+	id: string;
+	degree: number;
+};
+
+export type SimilarityGraphEdge = {
+	source: string;
+	target: string;
+	/** Cosine similarity of the two notes, in [0, 1]. */
+	score: number;
+};
+
+export type SimilarityGraph = {
+	nodes: SimilarityGraphNode[];
+	edges: SimilarityGraphEdge[];
+};
+
 export interface IframeMessage {
 	requestId: number;
 	payload: string;
@@ -86,6 +103,29 @@ export type PrepareNoteResult =
 		warnings: IndexingWarning[];
 	};
 
+export interface GraphSettings {
+	/** Number of most-similar notes connected to each node (N). */
+	linksPerNode: number;
+	/** Minimum cosine similarity required for an edge to be drawn. */
+	minScore: number;
+	/** Pull of every node toward the graph center. */
+	centerForce: number;
+	/** Strength with which nodes push each other apart. */
+	repelForce: number;
+	/** Tightness of the spring along each edge. */
+	linkForce: number;
+	/** Natural rest length of each edge. */
+	linkDistance: number;
+	/** Radius multiplier for nodes. */
+	nodeSize: number;
+	/** Line-width multiplier for edges. */
+	linkThickness: number;
+	/** Zoom level below which node labels fade out. */
+	textFadeThreshold: number;
+	/** Whether to show nodes that have no edges. */
+	showOrphans: boolean;
+}
+
 export interface SimilaritySettings {
 	ignoredPaths: string[];
 	initialIndexCompleted: boolean;
@@ -94,6 +134,7 @@ export interface SimilaritySettings {
 	maxExtractedChars: number;
 	maxChunks: number;
 	titleWeight: number;
+	graph: GraphSettings;
 }
 
 export interface SimilarityPluginData {

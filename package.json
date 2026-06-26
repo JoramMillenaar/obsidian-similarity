@@ -13,6 +13,7 @@
 	"license": "MIT",
 	"devDependencies": {
 		"@types/cross-spawn": "^6.0.6",
+		"@types/d3-force": "^3.0.10",
 		"@types/node": "^16.11.6",
 		"@typescript-eslint/eslint-plugin": "5.29.0",
 		"@typescript-eslint/parser": "5.29.0",
@@ -24,6 +25,7 @@
 	"dependencies": {
 		"@types/p-limit": "^2.1.0",
 		"@types/turndown": "^5.0.5",
+		"d3-force": "^3.0.0",
 		"p-limit": "^6.1.0",
 		"remove-markdown": "^0.5.5",
 		"uuid": "^11.1.1"
