@@ -324,10 +324,10 @@ function buildHarness(opts: BenchmarkOptions): Harness {
 				timings.store += now() - s;
 			}
 		},
-		upsertMany: baseRepo.upsertMany.bind(baseRepo),
-		listAll: baseRepo.listAll.bind(baseRepo),
-		isEmpty: baseRepo.isEmpty.bind(baseRepo),
-		rename: baseRepo.rename.bind(baseRepo),
+		upsertMany: (notes) => baseRepo.upsertMany(notes),
+		listAll: () => baseRepo.listAll(),
+		isEmpty: () => baseRepo.isEmpty(),
+		rename: (oldId, newId) => baseRepo.rename(oldId, newId),
 	};
 
 	const instrumentedEmbedder: EmbeddingPort = {
@@ -341,8 +341,8 @@ function buildHarness(opts: BenchmarkOptions): Harness {
 				counters.embedChars += text.length;
 			}
 		},
-		load: opts.embedder.load.bind(opts.embedder),
-		unload: opts.embedder.unload.bind(opts.embedder),
+		load: () => opts.embedder.load(),
+		unload: () => opts.embedder.unload(),
 	};
 
 	const basePrepare = makePrepareNoteForEmbedding({
@@ -434,9 +434,8 @@ function kb(bytes: number): string {
 }
 
 function heapUsedMB(): number | null {
-	const proc = (globalThis as { process?: { memoryUsage?: () => { heapUsed: number } } }).process;
-	if (proc?.memoryUsage) {
-		return proc.memoryUsage().heapUsed / 1024 / 1024;
+	if (typeof process !== "undefined" && typeof process.memoryUsage === "function") {
+		return process.memoryUsage().heapUsed / 1024 / 1024;
 	}
 	return null;
 }
