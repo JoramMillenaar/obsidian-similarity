@@ -46,6 +46,7 @@ const context = await esbuild.context({
 	minify: prod,
 	define: {
 		__IFRAME_CONTENTS_PLACEHOLDER__: iframeCodeString, // Inline the bundled Iframe code
+		__DEV__: JSON.stringify(!prod), // Dev-only features; folds to `false` in production so they're tree-shaken out
 	},
 });
 

@@ -6,6 +6,7 @@ import { SimilarNotesListView, VIEW_TYPE_SIMILARITY } from "./ui/SimilarNotesLis
 import { activateRightLeafView } from "./app/activateRightLeafView";
 import { SettingView } from "./ui/SettingsView";
 import { isMarkdownPath } from "./domain/markdownPath";
+import { registerDevCommands } from "./dev/registerDevCommands";
 
 export default class RelatedNotes extends Plugin {
 	private appContainer!: AppContainer;
@@ -107,6 +108,10 @@ export default class RelatedNotes extends Plugin {
 		this.app.workspace.onLayoutReady(() => {
 			void initializePlugin(this, this.appContainer);
 		});
+
+		if (__DEV__) {
+			registerDevCommands(this, this.appContainer);
+		}
 	}
 
 	onunload(): void {
