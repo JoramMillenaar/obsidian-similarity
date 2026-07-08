@@ -11,6 +11,7 @@ export function normalizeSettings(
 	const maxExtractedChars = value?.maxExtractedChars;
 	const maxChunks = value?.maxChunks;
 	const titleWeight = value?.titleWeight;
+	const indexBackend = value?.indexBackend;
 
 	return {
 		ignoredPaths: Array.isArray(ignored)
@@ -34,6 +35,9 @@ export function normalizeSettings(
 		titleWeight: typeof titleWeight === "number" && titleWeight >= 0
 			? titleWeight
 			: DEFAULT_SETTINGS.titleWeight,
+		indexBackend: indexBackend === "binary" || indexBackend === "json"
+			? indexBackend
+			: DEFAULT_SETTINGS.indexBackend,
 	};
 }
 

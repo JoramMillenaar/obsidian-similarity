@@ -8,4 +8,5 @@ export const DEFAULT_SETTINGS: SimilaritySettings = {
 	maxExtractedChars: 4800,
 	maxChunks: 32,
 	titleWeight: 3,
+	indexBackend: "json",
 };

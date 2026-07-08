@@ -10,6 +10,7 @@ export async function initializePlugin(
 	app.status.update("Starting…");
 
 	try {
+		await app.syncIndexBackend();
 		await app.embedder.load();
 
 		const [isEmpty, initialIndexCompleted] = await Promise.all([

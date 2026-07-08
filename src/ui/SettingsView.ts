@@ -1,7 +1,7 @@
 import { App, Notice, PluginSettingTab, Setting } from "obsidian";
 import RelatedNotes from "../main";
 import { parseIgnoredPaths } from "../domain/ignoreRules";
-import { SimilaritySettings } from "../types";
+import { IndexBackend, SimilaritySettings } from "../types";
 import { SettingsRepository } from "../ports";
 import { UpdateSettingsUseCase } from "../app/updateSettings";
 
@@ -31,6 +31,7 @@ export class SettingView extends PluginSettingTab {
 		const settings = await this.deps.settingsRepo.get();
 		let draftIgnored = settings.ignoredPaths;
 		let advancedOpen = settings.advancedOpen;
+		let draftIndexBackend: IndexBackend = settings.indexBackend;
 		const draftIndexing = {
 			maxRawMarkdownChars: settings.maxRawMarkdownChars,
 			maxExtractedChars: settings.maxExtractedChars,
@@ -61,6 +62,19 @@ export class SettingView extends PluginSettingTab {
 		advancedHeading.settingEl.setAttr("role", "button");
 
 		const advancedBody = advancedSection.createDiv("similarity-setting-section-body");
+
+		new Setting(advancedBody)
+			.setName("Index storage")
+			.setDesc("JSON keeps the index in the plugin data file. Binary keeps a compact binary index file in the plugin folder, using less memory in large vaults. Switching migrates your existing index automatically—no re-indexing needed.")
+			.addDropdown((dropdown) => {
+				dropdown
+					.addOption("json", "JSON (plugin data)")
+					.addOption("binary", "Binary (compact file)")
+					.setValue(draftIndexBackend)
+					.onChange((value) => {
+						draftIndexBackend = value === "binary" ? "binary" : "json";
+					});
+			});
 		const renderAdvancedSection = () => {
 			advancedBody.style.display = advancedOpen ? "block" : "none";
 			advancedHeading.settingEl.toggleClass("is-open", advancedOpen);
@@ -137,9 +151,12 @@ export class SettingView extends PluginSettingTab {
 
 						const result = await this.deps.updateSettings({
 							ignoredPaths: draftIgnored,
+							indexBackend: draftIndexBackend,
 							...draftIndexing,
 						});
-						if (result.reindexQueued) {
+						if (result.backendMigrated) {
+							new Notice("Settings saved. Index migrated to the new storage backend.");
+						} else if (result.reindexQueued) {
 							new Notice("Settings saved. Index rebuild queued in the background.");
 						} else {
 							new Notice("Settings saved.");

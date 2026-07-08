@@ -86,6 +86,8 @@ export type PrepareNoteResult =
 		warnings: IndexingWarning[];
 	};
 
+export type IndexBackend = "json" | "binary";
+
 export interface SimilaritySettings {
 	ignoredPaths: string[];
 	initialIndexCompleted: boolean;
@@ -94,6 +96,7 @@ export interface SimilaritySettings {
 	maxExtractedChars: number;
 	maxChunks: number;
 	titleWeight: number;
+	indexBackend: IndexBackend;
 }
 
 export interface SimilarityPluginData {

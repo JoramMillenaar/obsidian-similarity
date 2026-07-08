@@ -1,9 +1,11 @@
-import { Plugin } from "obsidian";
+import { normalizePath, Plugin } from "obsidian";
 import { KeyedDebouncer } from "./domain/debouncer";
 import { ObsidianStatusBar } from "./infra/obsidian/obsidianStatusBar";
 import { ObsidianMarkdownTextExtractor } from "./infra/obsidian/obsidianMarkdownTextExtractor";
 import { ObsidianNoteSource } from "./infra/obsidian/obsidianNoteSource";
 import { ObsidianPluginDataIndexStorage } from "./infra/obsidian/obsidianStorage";
+import { BinaryVaultIndexStorage } from "./infra/index/binaryVaultIndexStorage";
+import { SwitchableIndexStorage } from "./infra/index/switchableIndexStorage";
 import { EmbeddingProvider } from "./infra/embedder/embeddingProvider";
 import { JsonIndexedNoteRepository } from "./infra/index/jsonIndexedNoteRepository";
 import { IndexNoteUseCase, makeIndexNote } from "./app/indexNote";
@@ -24,6 +26,7 @@ import { ObsidianPluginDataStore } from "./infra/obsidian/obsidianPluginDataStor
 import { ObsidianSettingsRepository } from "./infra/obsidian/obsidianSettings";
 import { IsIgnoredPath, makeIsIgnoredPath } from "./app/isIgnoredPath";
 import { makeUpdateSettings, UpdateSettingsUseCase } from "./app/updateSettings";
+import { makeMigrateIndexBackend, MigrateIndexBackendUseCase } from "./app/migrateIndexBackend";
 import {
 	IsInitialIndexCompletedUseCase,
 	makeIsInitialIndexCompleted,
@@ -50,6 +53,7 @@ export class AppContainer {
 	readonly noteSource: NoteSource;
 	readonly markdownTextExtractor: MarkdownTextExtractor;
 	readonly indexStorage: IndexStorage;
+	readonly migrateIndexBackend: MigrateIndexBackendUseCase;
 	readonly embedder: EmbeddingPort;
 	readonly indexRepo: IndexRepository;
 	readonly settingsRepo: SettingsRepository;
@@ -72,13 +76,28 @@ export class AppContainer {
 	readonly upsertDebouncer: KeyedDebouncer<string>;
 
 	private readonly unloadIndexingCoordinator: () => void;
+	private readonly switchableIndexStorage: SwitchableIndexStorage;
 
 	constructor(plugin: Plugin) {
 		this.status = new ObsidianStatusBar(plugin);
 		this.noteSource = new ObsidianNoteSource(plugin);
 		this.markdownTextExtractor = new ObsidianMarkdownTextExtractor(plugin);
 		const storage = new ObsidianPluginDataStore(plugin);
-		this.indexStorage = new ObsidianPluginDataIndexStorage(storage);
+		const jsonIndexStorage = new ObsidianPluginDataIndexStorage(storage);
+		const pluginDir = plugin.manifest.dir
+			?? `${plugin.app.vault.configDir}/plugins/${plugin.manifest.id}`;
+		const binaryIndexStorage = new BinaryVaultIndexStorage(
+			plugin.app.vault.adapter,
+			normalizePath(`${pluginDir}/index.bin`),
+		);
+		// Defaults to "json"; kept in sync with the persisted setting via
+		// syncIndexBackend() during plugin initialization.
+		this.switchableIndexStorage = new SwitchableIndexStorage(
+			{json: jsonIndexStorage, binary: binaryIndexStorage},
+			"json",
+		);
+		this.indexStorage = this.switchableIndexStorage;
+		this.migrateIndexBackend = makeMigrateIndexBackend({storage: this.switchableIndexStorage});
 		this.embedder = new EmbeddingProvider();
 		const embedText = makeEmbedText({embedder: this.embedder});
 		const embedChunks = makeEmbedChunks({embedder: this.embedder});
@@ -140,9 +159,20 @@ export class AppContainer {
 			settingsRepo: this.settingsRepo,
 			indexStorage: this.indexStorage,
 			startOrRefreshIndexSync: this.startOrRefreshIndexSync,
+			migrateIndexBackend: this.migrateIndexBackend,
+			getActiveBackend: () => this.switchableIndexStorage.getActive(),
 		});
 		this.isInitialIndexCompleted = makeIsInitialIndexCompleted({settingsRepo: this.settingsRepo});
 		this.markInitialIndexCompleted = makeMarkInitialIndexCompleted({settingsRepo: this.settingsRepo});
+	}
+
+	/**
+	 * Aligns the active index storage backend with the persisted setting.
+	 * Must run before any index access so reads/writes hit the right store.
+	 */
+	async syncIndexBackend(): Promise<void> {
+		const settings = await this.settingsRepo.get();
+		this.switchableIndexStorage.setActive(settings.indexBackend);
 	}
 
 	shutdown(): void {
