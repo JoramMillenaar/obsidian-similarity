@@ -6,11 +6,17 @@
  * and the *real* markdown extractor, but wires them to in-memory note source and
  * index storage so it never touches the user's vault or persisted plugin data.
  *
- * It reports, per the three questions we care about:
+ * It reports, per the questions we care about:
  *   1. Index-note cost & time   — full insert path (prepare + embed + store).
  *   2. Note-update cost & time   — changed-content path, plus the cheap unchanged
  *                                  (dedup hit) path.
  *   3. Memory footprint & complexity — how cost scales with vault size N.
+ *   4. Retrieve cost, time & memory — getSimilarNotes over the whole index: the
+ *                                  hot path (query note already indexed → listAll +
+ *                                  cosine over N) swept across N, plus the cold
+ *                                  path (text query that must embed first). Each
+ *                                  retrieve records its per-phase split and the
+ *                                  transient heap growth to materialize the index.
  *
  * NOTE on storage fidelity: the in-memory storage reproduces exactly what
  * {@link JsonIndexedNoteRepository} + the plugin data store do on every write —
@@ -33,9 +39,20 @@ import {
 } from "../ports";
 import { JsonIndexedNoteRepository } from "../infra/index/jsonIndexedNoteRepository";
 import { makeIndexNote } from "../app/indexNote";
-import { makeEmbedChunks } from "../app/embedText";
+import { makeEmbedChunks, makeEmbedText } from "../app/embedText";
+import { makeGetSimilarNotes, GetSimilarNotesUseCase } from "../app/getSimilarNotes";
 import { makePrepareNoteForEmbedding } from "../app/prepareNoteForEmbedding";
 import { DEFAULT_SETTINGS } from "../constants";
+import {
+	heapUsedMB,
+	kb,
+	makeSeedIndex,
+	ms,
+	mulberry32,
+	now,
+	randomUnitEmbedding,
+	summarize,
+} from "./benchmarkShared";
 
 // ---------------------------------------------------------------------------
 // Options
@@ -58,6 +75,8 @@ export interface BenchmarkOptions {
 	sweepSizes?: number[];
 	/** Note size (approx. chars) used during the complexity sweep. Default 1200. */
 	sweepNoteChars?: number;
+	/** Vault sizes swept for the retrieve (getSimilarNotes) benchmark. Defaults to sweepSizes. */
+	retrieveSweepSizes?: number[];
 }
 
 const DEFAULT_NOTE_SIZES = [
@@ -72,16 +91,13 @@ const DEFAULT_SWEEP_SIZES = [0, 100, 500, 1000, 2000, 5000];
 // Timing primitives
 // ---------------------------------------------------------------------------
 
-const now: () => number =
-	typeof performance !== "undefined" && typeof performance.now === "function"
-		? () => performance.now()
-		: () => Date.now();
-
 interface PhaseTimings {
 	prepare: number;
 	lookup: number;
 	embed: number;
 	store: number;
+	/** Time spent in repo.listAll() — the whole-index deserialize on the retrieve path. */
+	listAll: number;
 }
 
 interface OpCounters {
@@ -100,28 +116,21 @@ interface Sample {
 	bytesWritten: number;
 }
 
-interface Stats {
-	mean: number;
-	median: number;
-	p95: number;
-	min: number;
-	max: number;
-}
-
-function summarize(values: number[]): Stats {
-	if (values.length === 0) {
-		return { mean: 0, median: 0, p95: 0, min: 0, max: 0 };
-	}
-	const sorted = [...values].sort((a, b) => a - b);
-	const sum = sorted.reduce((acc, v) => acc + v, 0);
-	const at = (q: number) => sorted[Math.min(sorted.length - 1, Math.floor(q * (sorted.length - 1)))];
-	return {
-		mean: sum / sorted.length,
-		median: at(0.5),
-		p95: at(0.95),
-		min: sorted[0],
-		max: sorted[sorted.length - 1],
-	};
+/** One measured `getSimilarNotes` call. */
+interface RetrieveSample {
+	totalMs: number;
+	/** findById to fetch the query note's stored embedding (hot path only). */
+	lookupMs: number;
+	/** listAll — deserialize the whole index into memory. */
+	listAllMs: number;
+	/** embed the query text (cold path only; 0 on the hot path). */
+	embedMs: number;
+	/** cosine scoring + filter + sort + slice over N candidates. */
+	scoreMs: number;
+	/** Heap growth observed across the call (best-effort; see heapUsedMB). */
+	heapDeltaMB: number | null;
+	/** Number of results returned (sanity check that scoring actually ran). */
+	results: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -205,20 +214,8 @@ class StaticSettingsRepository implements SettingsRepository {
 }
 
 // ---------------------------------------------------------------------------
-// Synthetic data
+// Synthetic data (markdown bodies; embedding/index helpers live in benchmarkShared)
 // ---------------------------------------------------------------------------
-
-/** Deterministic PRNG so runs are reproducible across before/after comparisons. */
-function mulberry32(seed: number): () => number {
-	let a = seed >>> 0;
-	return () => {
-		a |= 0;
-		a = (a + 0x6d2b79f5) | 0;
-		let t = Math.imul(a ^ (a >>> 15), 1 | a);
-		t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-		return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-	};
-}
 
 const LOREM =
 	("lorem ipsum dolor sit amet consectetur adipiscing elit sed do eiusmod tempor " +
@@ -249,38 +246,13 @@ function makeNote(id: string, chars: number, rng: () => number): RawNote {
 	};
 }
 
-function randomUnitEmbedding(dim: number, rng: () => number): number[] {
-	const v = new Array<number>(dim);
-	let sumSq = 0;
-	for (let i = 0; i < dim; i++) {
-		const x = rng() * 2 - 1;
-		v[i] = x;
-		sumSq += x * x;
-	}
-	const inv = sumSq > 0 ? 1 / Math.sqrt(sumSq) : 0;
-	for (let i = 0; i < dim; i++) v[i] *= inv;
-	return v;
-}
-
-function makeSeedIndex(count: number, dim: number, rng: () => number): IndexedNote[] {
-	const notes: IndexedNote[] = [];
-	for (let i = 0; i < count; i++) {
-		notes.push({
-			id: `seed-${i}.md`,
-			embedding: randomUnitEmbedding(dim, rng),
-			contentHash: Math.floor(rng() * 0xffffffff).toString(16).padStart(8, "0"),
-			updatedAt: new Date(0).toISOString(),
-		});
-	}
-	return notes;
-}
-
 // ---------------------------------------------------------------------------
 // Instrumented use-case wiring
 // ---------------------------------------------------------------------------
 
 interface Harness {
 	indexNote: (noteId: string) => Promise<unknown>;
+	getSimilarNotes: GetSimilarNotesUseCase;
 	noteSource: InMemoryNoteSource;
 	storage: InMemoryIndexStorage;
 	repo: IndexRepository;
@@ -290,7 +262,7 @@ interface Harness {
 }
 
 function buildHarness(opts: BenchmarkOptions): Harness {
-	const timings: PhaseTimings = { prepare: 0, lookup: 0, embed: 0, store: 0 };
+	const timings: PhaseTimings = { prepare: 0, lookup: 0, embed: 0, store: 0, listAll: 0 };
 	const counters: OpCounters = { embedCalls: 0, embedChars: 0 };
 
 	const storage = new InMemoryIndexStorage();
@@ -325,7 +297,14 @@ function buildHarness(opts: BenchmarkOptions): Harness {
 			}
 		},
 		upsertMany: (notes) => baseRepo.upsertMany(notes),
-		listAll: () => baseRepo.listAll(),
+		listAll: async () => {
+			const s = now();
+			try {
+				return await baseRepo.listAll();
+			} finally {
+				timings.listAll += now() - s;
+			}
+		},
 		isEmpty: () => baseRepo.isEmpty(),
 		rename: (oldId, newId) => baseRepo.rename(oldId, newId),
 	};
@@ -366,15 +345,23 @@ function buildHarness(opts: BenchmarkOptions): Harness {
 		isIgnoredPath: async () => false,
 	});
 
+	const getSimilarNotes = makeGetSimilarNotes({
+		indexRepo: repo,
+		embedText: makeEmbedText({ embedder: instrumentedEmbedder }),
+		embedChunks: makeEmbedChunks({ embedder: instrumentedEmbedder }),
+		prepareNoteForEmbedding,
+	});
+
 	return {
 		indexNote,
+		getSimilarNotes,
 		noteSource,
 		storage,
 		repo,
 		timings,
 		counters,
 		reset() {
-			timings.prepare = timings.lookup = timings.embed = timings.store = 0;
+			timings.prepare = timings.lookup = timings.embed = timings.store = timings.listAll = 0;
 			counters.embedCalls = 0;
 			counters.embedChars = 0;
 			storage.resetCounters();
@@ -421,24 +408,60 @@ async function collect(
 	return samples;
 }
 
+/**
+ * Run one measured `getSimilarNotes` call and capture the retrieve-phase
+ * breakdown plus heap growth across the call.
+ *
+ * `query` selects the retrieve path:
+ *   - `{ noteId }` present in the index → hot path (reuses the stored embedding,
+ *     so lookup + listAll + score only; no embedding cost).
+ *   - `{ text }`                        → cold path (embeds the query text first).
+ */
+async function runRetrieveOnce(
+	h: Harness,
+	query: { noteId?: string; text?: string },
+): Promise<RetrieveSample> {
+	h.reset();
+	const heapBefore = heapUsedMB();
+	const start = now();
+	const results = await h.getSimilarNotes({ ...query, limit: 10 });
+	const totalMs = now() - start;
+	const heapAfter = heapUsedMB();
+
+	const { lookup, listAll, embed } = h.timings;
+	return {
+		totalMs,
+		lookupMs: lookup,
+		listAllMs: listAll,
+		embedMs: embed,
+		scoreMs: Math.max(0, totalMs - lookup - listAll - embed),
+		heapDeltaMB: heapBefore === null || heapAfter === null ? null : heapAfter - heapBefore,
+		results: results.length,
+	};
+}
+
+async function collectRetrieve(
+	h: Harness,
+	query: { noteId?: string; text?: string },
+	beforeEach: () => void,
+	iterations: number,
+	warmup: number,
+): Promise<RetrieveSample[]> {
+	for (let i = 0; i < warmup; i++) {
+		beforeEach();
+		await runRetrieveOnce(h, query);
+	}
+	const samples: RetrieveSample[] = [];
+	for (let i = 0; i < iterations; i++) {
+		beforeEach();
+		samples.push(await runRetrieveOnce(h, query));
+	}
+	return samples;
+}
+
 // ---------------------------------------------------------------------------
 // Reporting
 // ---------------------------------------------------------------------------
-
-function ms(n: number): string {
-	return `${n.toFixed(2)}ms`;
-}
-
-function kb(bytes: number): string {
-	return `${(bytes / 1024).toFixed(1)}KB`;
-}
-
-function heapUsedMB(): number | null {
-	if (typeof process !== "undefined" && typeof process.memoryUsage === "function") {
-		return process.memoryUsage().heapUsed / 1024 / 1024;
-	}
-	return null;
-}
 
 function logSamples(log: (m: string) => void, label: string, samples: Sample[]): void {
 	const total = summarize(samples.map((s) => s.totalMs));
@@ -459,6 +482,25 @@ function logSamples(log: (m: string) => void, label: string, samples: Sample[]):
 	);
 }
 
+function logRetrieveSamples(log: (m: string) => void, label: string, samples: RetrieveSample[]): void {
+	const total = summarize(samples.map((s) => s.totalMs));
+	const lookup = summarize(samples.map((s) => s.lookupMs));
+	const listAll = summarize(samples.map((s) => s.listAllMs));
+	const embed = summarize(samples.map((s) => s.embedMs));
+	const score = summarize(samples.map((s) => s.scoreMs));
+	const heapDeltas = samples.map((s) => s.heapDeltaMB).filter((v): v is number => v !== null);
+	const heap = heapDeltas.length ? summarize(heapDeltas) : null;
+	const results = samples[0]?.results ?? 0;
+
+	log(
+		`  ${label.padEnd(28)} ` +
+			`total ${ms(total.median)} (p95 ${ms(total.p95)})  |  ` +
+			`lookup ${ms(lookup.median)}  listAll ${ms(listAll.median)}  ` +
+			`embed ${ms(embed.median)}  score ${ms(score.median)}  |  ` +
+			`heapΔ ${heap === null ? "n/a" : `${heap.median.toFixed(2)}MB`}  results ${results}`,
+	);
+}
+
 // ---------------------------------------------------------------------------
 // Entry point
 // ---------------------------------------------------------------------------
@@ -471,6 +513,7 @@ export async function runIndexingBenchmark(opts: BenchmarkOptions): Promise<void
 	const noteSizes = opts.noteSizes ?? DEFAULT_NOTE_SIZES;
 	const sweepSizes = opts.sweepSizes ?? DEFAULT_SWEEP_SIZES;
 	const sweepNoteChars = opts.sweepNoteChars ?? 1200;
+	const retrieveSweepSizes = opts.retrieveSweepSizes ?? sweepSizes;
 
 	const rng = mulberry32(0x5eed);
 
@@ -599,6 +642,60 @@ export async function runIndexingBenchmark(opts: BenchmarkOptions): Promise<void
 	log("   • indexBytes = serialized index size; floatBytes = raw embedding payload.");
 	log("   • heapMB is best-effort (no forced GC); read the trend, not absolutes.");
 	log("   • disk-write latency of saveData() is excluded — add a roughly-constant cost.");
+
+	// --- Scenario 3: retrieve cost & memory vs vault size N ----------------
+	log("");
+	log("▸ Retrieve cost & memory vs vault size N (getSimilarNotes, hot path)");
+	log("  hot path = query note already indexed → listAll + cosine over N, no embed");
+	log("  time and heapΔ should both grow ~linearly with N (whole index materialized).");
+	log("");
+
+	const retrieveQueryId = "bench-retrieve.md";
+	for (const n of retrieveSweepSizes) {
+		// Seed N random notes plus the query note, so findById(queryId) hits the
+		// stored-embedding fast path and scoring runs over the full N+1 index.
+		const seed = makeSeedIndex(n, dim, mulberry32(0x3000 + n));
+		const seedWithQuery = [
+			...seed,
+			{
+				id: retrieveQueryId,
+				embedding: randomUnitEmbedding(dim, rng),
+				contentHash: "cafef00d",
+				updatedAt: new Date(0).toISOString(),
+			},
+		];
+		const samples = await collectRetrieve(
+			h,
+			{ noteId: retrieveQueryId },
+			() => h.storage.seed(seedWithQuery),
+			iterations,
+			warmup,
+		);
+		logRetrieveSamples(log, `N=${n}`, samples);
+	}
+
+	// Cold path (text query → embed first) at the fixed vault size, to capture
+	// the embed-inclusive retrieve latency a from-scratch query pays.
+	log("");
+	log(`▸ Retrieve cold path (text query, embeds first) at N=${fixedIndexSize}`);
+	{
+		const seed = makeSeedIndex(fixedIndexSize, dim, mulberry32(0x4000));
+		const queryText = makeMarkdownBody(sweepNoteChars, mulberry32(0x4001));
+		const samples = await collectRetrieve(
+			h,
+			{ text: queryText },
+			() => h.storage.seed(seed),
+			iterations,
+			warmup,
+		);
+		logRetrieveSamples(log, "text query", samples);
+	}
+
+	log("");
+	log("  Notes:");
+	log("   • hot-path retrieve embeds nothing — cost is listAll (deserialize) + cosine scoring.");
+	log("   • cold-path retrieve adds the query embed cost on top of the same listAll + score.");
+	log("   • heapΔ is the transient allocation to materialize the whole index (best-effort).");
 	log("");
 	log("✓ Benchmark complete.");
 }
