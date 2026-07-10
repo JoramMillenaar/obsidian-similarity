@@ -36,6 +36,7 @@ import { makeIndexNote } from "../app/indexNote";
 import { makeEmbedChunks } from "../app/embedText";
 import { makePrepareNoteForEmbedding } from "../app/prepareNoteForEmbedding";
 import { DEFAULT_SETTINGS } from "../constants";
+import { heapUsedMB, kb, makeSeedIndex, mulberry32, now, randomUnitEmbedding, ms, summarize } from "./benchmarkShared";
 
 // ---------------------------------------------------------------------------
 // Options
@@ -72,11 +73,6 @@ const DEFAULT_SWEEP_SIZES = [0, 100, 500, 1000, 2000, 5000];
 // Timing primitives
 // ---------------------------------------------------------------------------
 
-const now: () => number =
-	typeof performance !== "undefined" && typeof performance.now === "function"
-		? () => performance.now()
-		: () => Date.now();
-
 interface PhaseTimings {
 	prepare: number;
 	lookup: number;
@@ -98,30 +94,6 @@ interface Sample {
 	otherMs: number;
 	embedCalls: number;
 	bytesWritten: number;
-}
-
-interface Stats {
-	mean: number;
-	median: number;
-	p95: number;
-	min: number;
-	max: number;
-}
-
-function summarize(values: number[]): Stats {
-	if (values.length === 0) {
-		return { mean: 0, median: 0, p95: 0, min: 0, max: 0 };
-	}
-	const sorted = [...values].sort((a, b) => a - b);
-	const sum = sorted.reduce((acc, v) => acc + v, 0);
-	const at = (q: number) => sorted[Math.min(sorted.length - 1, Math.floor(q * (sorted.length - 1)))];
-	return {
-		mean: sum / sorted.length,
-		median: at(0.5),
-		p95: at(0.95),
-		min: sorted[0],
-		max: sorted[sorted.length - 1],
-	};
 }
 
 // ---------------------------------------------------------------------------
@@ -216,18 +188,6 @@ class StaticSettingsRepository implements SettingsRepository {
 // Synthetic data
 // ---------------------------------------------------------------------------
 
-/** Deterministic PRNG so runs are reproducible across before/after comparisons. */
-function mulberry32(seed: number): () => number {
-	let a = seed >>> 0;
-	return () => {
-		a |= 0;
-		a = (a + 0x6d2b79f5) | 0;
-		let t = Math.imul(a ^ (a >>> 15), 1 | a);
-		t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-		return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-	};
-}
-
 const LOREM =
 	("lorem ipsum dolor sit amet consectetur adipiscing elit sed do eiusmod tempor " +
 		"incididunt ut labore et dolore magna aliqua enim ad minim veniam quis nostrud " +
@@ -255,32 +215,6 @@ function makeNote(id: string, chars: number, rng: () => number): RawNote {
 		title: `Synthetic note ${id}`,
 		markdown: `# Synthetic note\n\n${makeMarkdownBody(chars, rng)}`,
 	};
-}
-
-function randomUnitEmbedding(dim: number, rng: () => number): number[] {
-	const v = new Array<number>(dim);
-	let sumSq = 0;
-	for (let i = 0; i < dim; i++) {
-		const x = rng() * 2 - 1;
-		v[i] = x;
-		sumSq += x * x;
-	}
-	const inv = sumSq > 0 ? 1 / Math.sqrt(sumSq) : 0;
-	for (let i = 0; i < dim; i++) v[i] *= inv;
-	return v;
-}
-
-function makeSeedIndex(count: number, dim: number, rng: () => number): IndexedNote[] {
-	const notes: IndexedNote[] = [];
-	for (let i = 0; i < count; i++) {
-		notes.push({
-			id: `seed-${i}.md`,
-			embedding: randomUnitEmbedding(dim, rng),
-			contentHash: Math.floor(rng() * 0xffffffff).toString(16).padStart(8, "0"),
-			updatedAt: new Date(0).toISOString(),
-		});
-	}
-	return notes;
 }
 
 // ---------------------------------------------------------------------------
@@ -432,21 +366,6 @@ async function collect(
 // ---------------------------------------------------------------------------
 // Reporting
 // ---------------------------------------------------------------------------
-
-function ms(n: number): string {
-	return `${n.toFixed(2)}ms`;
-}
-
-function kb(bytes: number): string {
-	return `${(bytes / 1024).toFixed(1)}KB`;
-}
-
-function heapUsedMB(): number | null {
-	if (typeof process !== "undefined" && typeof process.memoryUsage === "function") {
-		return process.memoryUsage().heapUsed / 1024 / 1024;
-	}
-	return null;
-}
 
 function logSamples(log: (m: string) => void, label: string, samples: Sample[]): void {
 	const total = summarize(samples.map((s) => s.totalMs));
