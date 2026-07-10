@@ -65,14 +65,15 @@ export class SettingView extends PluginSettingTab {
 
 		new Setting(advancedBody)
 			.setName("Index storage")
-			.setDesc("JSON keeps the index in the plugin data file. Binary keeps a compact binary index file in the plugin folder, using less memory in large vaults. Switching migrates your existing index automatically—no re-indexing needed.")
+			.setDesc("JSON keeps the index in the plugin data file. Binary keeps a compact binary index file in the plugin folder, using less memory in large vaults. Iodb keeps a crash-safe binary database file in the plugin folder. Switching migrates your existing index automatically—no re-indexing needed.")
 			.addDropdown((dropdown) => {
 				dropdown
 					.addOption("json", "JSON (plugin data)")
 					.addOption("binary", "Binary (compact file)")
+					.addOption("iodb", "Iodb (crash-safe database)")
 					.setValue(draftIndexBackend)
 					.onChange((value) => {
-						draftIndexBackend = value === "binary" ? "binary" : "json";
+						draftIndexBackend = value === "binary" || value === "iodb" ? value : "json";
 					});
 			});
 		const renderAdvancedSection = () => {

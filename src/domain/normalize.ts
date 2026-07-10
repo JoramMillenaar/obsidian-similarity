@@ -35,7 +35,7 @@ export function normalizeSettings(
 		titleWeight: typeof titleWeight === "number" && titleWeight >= 0
 			? titleWeight
 			: DEFAULT_SETTINGS.titleWeight,
-		indexBackend: indexBackend === "binary" || indexBackend === "json"
+		indexBackend: indexBackend === "binary" || indexBackend === "json" || indexBackend === "iodb"
 			? indexBackend
 			: DEFAULT_SETTINGS.indexBackend,
 	};

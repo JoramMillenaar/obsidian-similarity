@@ -86,7 +86,7 @@ export type PrepareNoteResult =
 		warnings: IndexingWarning[];
 	};
 
-export type IndexBackend = "json" | "binary";
+export type IndexBackend = "json" | "binary" | "iodb";
 
 export interface SimilaritySettings {
 	ignoredPaths: string[];

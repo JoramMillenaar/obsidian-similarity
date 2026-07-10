@@ -32,7 +32,7 @@ export function registerDevCommands(plugin: Plugin, container: AppContainer): vo
 
 	plugin.addCommand({
 		id: "dev-benchmark-storage",
-		name: "DEV: Compare index storage backends (JSON vs binary)",
+		name: "DEV: Compare index storage backends (JSON vs binary vs iodb)",
 		callback: async () => {
 			new Notice("Comparing storage backends — see the developer console…");
 			console.log("[Similarity][dev] Starting storage backend comparison");

@@ -5,6 +5,7 @@ import { ObsidianMarkdownTextExtractor } from "./infra/obsidian/obsidianMarkdown
 import { ObsidianNoteSource } from "./infra/obsidian/obsidianNoteSource";
 import { ObsidianPluginDataIndexStorage } from "./infra/obsidian/obsidianStorage";
 import { BinaryVaultIndexStorage } from "./infra/index/binaryVaultIndexStorage";
+import { IoDbIndexStorage } from "./infra/index/iodbStorage";
 import { SwitchableIndexStorage } from "./infra/index/switchableIndexStorage";
 import { EmbeddingProvider } from "./infra/embedder/embeddingProvider";
 import { JsonIndexedNoteRepository } from "./infra/index/jsonIndexedNoteRepository";
@@ -90,10 +91,14 @@ export class AppContainer {
 			plugin.app.vault.adapter,
 			normalizePath(`${pluginDir}/index.bin`),
 		);
+		const iodbIndexStorage = new IoDbIndexStorage(
+			plugin.app.vault.adapter,
+			normalizePath(pluginDir),
+		);
 		// Defaults to "json"; kept in sync with the persisted setting via
 		// syncIndexBackend() during plugin initialization.
 		this.switchableIndexStorage = new SwitchableIndexStorage(
-			{json: jsonIndexStorage, binary: binaryIndexStorage},
+			{json: jsonIndexStorage, binary: binaryIndexStorage, iodb: iodbIndexStorage},
 			"json",
 		);
 		this.indexStorage = this.switchableIndexStorage;
