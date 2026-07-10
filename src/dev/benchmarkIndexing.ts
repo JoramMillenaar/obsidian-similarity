@@ -151,6 +151,14 @@ class InMemoryIndexStorage implements IndexStorage {
 		return this.serialized === "[]";
 	}
 
+	async needsRebuild(): Promise<boolean> {
+		return false;
+	}
+
+	async readLegacy(): Promise<IndexedNote[] | null> {
+		return null;
+	}
+
 	/** Replace the whole index without counting it as a measured write. */
 	seed(notes: IndexedNote[]): void {
 		this.serialized = JSON.stringify(notes);

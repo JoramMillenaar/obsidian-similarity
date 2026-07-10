@@ -1,4 +1,4 @@
-import { SimilarityPluginData, SimilaritySettings } from "../types";
+import { IndexV2, SCHEMA_VERSION, SimilarityPluginData, SimilaritySettings } from "../types";
 import { DEFAULT_SETTINGS } from "../constants";
 
 export function normalizeSettings(
@@ -40,11 +40,16 @@ export function normalizeSettings(
 export function normalizePluginData(
 	value: Partial<SimilarityPluginData>,
 ): SimilarityPluginData {
-	const index = Array.isArray(value?.index) ? value.index : [];
+	const index: IndexV2 | SimilarityPluginData["index"] = Array.isArray(value?.index) ? value.index : [];
 	const normalizedSettings = normalizeSettings(value?.settings);
 	const hasLegacyIndexWithoutFlag =
 		typeof value?.settings?.initialIndexCompleted !== "boolean"
 		&& index.length > 0;
+
+	const schemaVersion = typeof value?.schemaVersion === "number" ? value.schemaVersion : 1;
+	const embeddingDim = typeof value?.embeddingDim === "number" && value.embeddingDim >= 0
+		? value.embeddingDim
+		: 0;
 
 	return {
 		settings: hasLegacyIndexWithoutFlag
@@ -53,6 +58,8 @@ export function normalizePluginData(
 				initialIndexCompleted: true,
 			}
 			: normalizedSettings,
+		schemaVersion: Math.min(schemaVersion, SCHEMA_VERSION),
+		embeddingDim,
 		index,
 	};
 }

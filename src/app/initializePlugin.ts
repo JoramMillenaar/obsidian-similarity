@@ -11,16 +11,25 @@ export async function initializePlugin(
 
 	try {
 		await app.embedder.load();
+		await app.migrateStore();
 
-		const [isEmpty, initialIndexCompleted] = await Promise.all([
-			app.indexRepo.isEmpty(),
-			app.isInitialIndexCompleted(),
-		]);
-		if (!initialIndexCompleted || !isEmpty) {
-			app.status.update(initialIndexCompleted ? "Repairing index…" : "Indexing vault…");
-			void app.startOrRefreshIndexSync().catch((error) => {
-				console.error("[Similarity] Index repair failed", error);
+		if (await app.indexStorage.needsRebuild()) {
+			await app.indexStorage.rewrite([]);
+			app.status.update("Rebuilding index…");
+			void app.startOrRefreshIndexSync({forceReindexAll: true, awaitCompletion: false}).catch((error) => {
+				console.error("[Similarity] Index rebuild failed", error);
 			});
+		} else {
+			const [isEmpty, initialIndexCompleted] = await Promise.all([
+				app.indexRepo.isEmpty(),
+				app.isInitialIndexCompleted(),
+			]);
+			if (!initialIndexCompleted || !isEmpty) {
+				app.status.update(initialIndexCompleted ? "Repairing index…" : "Indexing vault…");
+				void app.startOrRefreshIndexSync().catch((error) => {
+					console.error("[Similarity] Index repair failed", error);
+				});
+			}
 		}
 
 		app.status.update("Ready", 1500);
