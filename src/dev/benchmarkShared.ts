@@ -112,10 +112,16 @@ export function makeSeedIndex(count: number, dim: number, rng: () => number): In
  * forced GC — read trends, not absolutes.
  */
 export function heapUsedMB(): number | null {
-	if (typeof process !== "undefined" && typeof process.memoryUsage === "function") {
-		return process.memoryUsage().heapUsed / 1024 / 1024;
+	const proc = (typeof process !== "undefined" ? process : undefined) as
+		| { memoryUsage?: () => { heapUsed: number } }
+		| undefined;
+	if (proc && typeof proc.memoryUsage === "function") {
+		return proc.memoryUsage().heapUsed / 1024 / 1024;
 	}
-	const mem = (globalThis as { performance?: { memory?: { usedJSHeapSize: number } } }).performance?.memory;
+	const perf = (typeof window !== "undefined" ? window : undefined) as
+		| { performance?: { memory?: { usedJSHeapSize: number } } }
+		| undefined;
+	const mem = perf?.performance?.memory;
 	if (mem && typeof mem.usedJSHeapSize === "number") {
 		return mem.usedJSHeapSize / 1024 / 1024;
 	}

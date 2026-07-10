@@ -1,7 +1,7 @@
 import { Embedding } from "../types";
 
 export function normalizeEmbedding(embedding: Embedding): Embedding {
-	const v = embedding as unknown as number[];
+	const v = embedding;
 
 	let sumSq = 0;
 	for (let i = 0; i < v.length; i++) {
@@ -9,14 +9,14 @@ export function normalizeEmbedding(embedding: Embedding): Embedding {
 		sumSq += x * x;
 	}
 
-	if (sumSq === 0) return v.slice() as unknown as Embedding;
+	if (sumSq === 0) return v.slice();
 
 	const invNorm = 1 / Math.sqrt(sumSq);
 	const out = new Array<number>(v.length);
 	for (let i = 0; i < v.length; i++) {
 		out[i] = v[i] * invNorm;
 	}
-	return out as unknown as Embedding;
+	return out;
 }
 
 export function averageEmbeddings(embeddings: Embedding[]): Embedding | null {
@@ -39,7 +39,7 @@ export function averageEmbeddings(embeddings: Embedding[]): Embedding | null {
 		meanEmbedding[i] /= embeddings.length;
 	}
 
-	return meanEmbedding as Embedding;
+	return meanEmbedding;
 }
 
 export function cosineSimilarity(a: number[], b: number[]): number {
