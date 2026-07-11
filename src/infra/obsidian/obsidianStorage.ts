@@ -56,7 +56,24 @@ export class ObsidianPluginDataIndexStorage implements IndexStorage {
 
 	async isEmpty(): Promise<boolean> {
 		const data = await this.store.read();
-		return data.index.length === 0;
+		if (data.index.length === 0) return true;
+
+		// Pre-migration entries carry inline embeddings, so they're usable as-is.
+		if (data.schemaVersion < SCHEMA_VERSION) return false;
+
+		// v2 entries are only usable if the binary sidecar can actually supply
+		// their vectors. If it's missing/corrupt/dim-mismatched, getAll() yields
+		// [], so report empty here too — otherwise the UI thinks the index is
+		// populated while every lookup silently returns nothing.
+		const buffer = await this.binaryStore.read();
+		if (!buffer) return true;
+
+		try {
+			const decoded = decodeEmbeddings(buffer);
+			return decoded.dim !== data.embeddingDim;
+		} catch {
+			return true;
+		}
 	}
 
 	async needsRebuild(): Promise<boolean> {
