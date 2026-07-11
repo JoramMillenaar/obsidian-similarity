@@ -4,9 +4,11 @@ import { ObsidianStatusBar } from "./infra/obsidian/obsidianStatusBar";
 import { ObsidianMarkdownTextExtractor } from "./infra/obsidian/obsidianMarkdownTextExtractor";
 import { ObsidianNoteSource } from "./infra/obsidian/obsidianNoteSource";
 import { ObsidianPluginDataIndexStorage } from "./infra/obsidian/obsidianStorage";
+import { BinaryEmbeddingFileStore } from "./infra/obsidian/binaryEmbeddingFileStore";
 import { EmbeddingProvider } from "./infra/embedder/embeddingProvider";
 import { JsonIndexedNoteRepository } from "./infra/index/jsonIndexedNoteRepository";
 import { IndexNoteUseCase, makeIndexNote } from "./app/indexNote";
+import { makeMigrateStore, MigrateStoreUseCase } from "./app/makeMigrateStore";
 import { GetSimilarNotesUseCase, makeGetSimilarNotes } from "./app/getSimilarNotes";
 import { InsertWikilinkAtCursorUseCase, makeInsertWikilinkAtCursor } from "./app/insertWikilinkAtCursor";
 import { makeSyncIndexToVault, SyncIndexToVaultUseCase } from "./app/syncIndexToVault";
@@ -53,6 +55,7 @@ export class AppContainer {
 	readonly embedder: EmbeddingPort;
 	readonly indexRepo: IndexRepository;
 	readonly settingsRepo: SettingsRepository;
+	readonly migrateStore: MigrateStoreUseCase;
 
 	readonly indexNote: IndexNoteUseCase;
 	readonly prepareNoteForEmbedding: PrepareNoteForEmbeddingUseCase;
@@ -78,7 +81,9 @@ export class AppContainer {
 		this.noteSource = new ObsidianNoteSource(plugin);
 		this.markdownTextExtractor = new ObsidianMarkdownTextExtractor(plugin);
 		const storage = new ObsidianPluginDataStore(plugin);
-		this.indexStorage = new ObsidianPluginDataIndexStorage(storage);
+		const binaryEmbeddingStore = new BinaryEmbeddingFileStore(plugin);
+		this.indexStorage = new ObsidianPluginDataIndexStorage(storage, binaryEmbeddingStore);
+		this.migrateStore = makeMigrateStore({indexStorage: this.indexStorage});
 		this.embedder = new EmbeddingProvider();
 		const embedText = makeEmbedText({embedder: this.embedder});
 		const embedChunks = makeEmbedChunks({embedder: this.embedder});
