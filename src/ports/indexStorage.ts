@@ -5,6 +5,9 @@ export interface IndexStorage {
 
 	rewrite(index: IndexedNote[]): Promise<void>;
 
+	/** Forces any throttled/pending rewrite to hit disk immediately. No-op if nothing is pending. */
+	flush(): Promise<void>;
+
 	isEmpty(): Promise<boolean>;
 
 	/** True if the persisted index references embeddings the binary sidecar can no longer supply (missing/corrupt/dim mismatch). */

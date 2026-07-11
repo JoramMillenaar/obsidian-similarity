@@ -15,6 +15,7 @@ export async function initializePlugin(
 
 		if (await app.indexStorage.needsRebuild()) {
 			await app.indexStorage.rewrite([]);
+			await app.indexStorage.flush();
 			app.status.update("Rebuilding index…");
 			void app.startOrRefreshIndexSync({forceReindexAll: true, awaitCompletion: false}).catch((error) => {
 				console.error("[Similarity] Index rebuild failed", error);
