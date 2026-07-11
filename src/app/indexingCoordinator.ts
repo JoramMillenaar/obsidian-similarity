@@ -207,6 +207,7 @@ export class IndexingCoordinator {
 
 				const noteId = this.runtime.takeNext();
 				if (!noteId) {
+					await this.deps.indexRepo.flush();
 					this.runtime.finishRun();
 					await this.maybePersistInitialIndexCompleted();
 					return;

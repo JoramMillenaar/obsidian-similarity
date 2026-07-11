@@ -15,5 +15,6 @@ export function makeMigrateStore(deps: {
 		if (!legacy || legacy.length === 0) return;
 
 		await deps.indexStorage.rewrite(legacy);
+		await deps.indexStorage.flush();
 	};
 }

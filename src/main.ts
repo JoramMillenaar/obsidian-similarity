@@ -115,7 +115,7 @@ export default class RelatedNotes extends Plugin {
 	}
 
 	onunload(): void {
-		this.appContainer.shutdown();
+		void this.appContainer.shutdown();
 	}
 
 	private refreshView(): void {

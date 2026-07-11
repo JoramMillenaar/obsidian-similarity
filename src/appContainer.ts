@@ -1,5 +1,6 @@
 import { Plugin } from "obsidian";
 import { KeyedDebouncer } from "./domain/debouncer";
+import { ThrottledIndexStorage } from "./domain/throttledIndexStorage";
 import { ObsidianStatusBar } from "./infra/obsidian/obsidianStatusBar";
 import { ObsidianMarkdownTextExtractor } from "./infra/obsidian/obsidianMarkdownTextExtractor";
 import { ObsidianNoteSource } from "./infra/obsidian/obsidianNoteSource";
@@ -43,6 +44,9 @@ import {
 	SubscribeIndexingStateUseCase,
 } from "./app/indexingCoordinator";
 
+/** Minimum spacing between full index disk writes (data.json + embeddings.bin). */
+const INDEX_WRITE_THROTTLE_MS = 1000;
+
 /**
  * Application container and composition root.
  * Owns concrete infrastructure adapters, wires use cases, and releases runtime resources.
@@ -82,7 +86,10 @@ export class AppContainer {
 		this.markdownTextExtractor = new ObsidianMarkdownTextExtractor(plugin);
 		const storage = new ObsidianPluginDataStore(plugin);
 		const binaryEmbeddingStore = new BinaryEmbeddingFileStore(plugin);
-		this.indexStorage = new ObsidianPluginDataIndexStorage(storage, binaryEmbeddingStore);
+		this.indexStorage = new ThrottledIndexStorage(
+			new ObsidianPluginDataIndexStorage(storage, binaryEmbeddingStore),
+			INDEX_WRITE_THROTTLE_MS,
+		);
 		this.migrateStore = makeMigrateStore({indexStorage: this.indexStorage});
 		this.embedder = new EmbeddingProvider();
 		const embedText = makeEmbedText({embedder: this.embedder});
@@ -150,9 +157,12 @@ export class AppContainer {
 		this.markInitialIndexCompleted = makeMarkInitialIndexCompleted({settingsRepo: this.settingsRepo});
 	}
 
-	shutdown(): void {
+	async shutdown(): Promise<void> {
 		this.unloadIndexingCoordinator();
 		this.upsertDebouncer.cancel();
+		await this.indexStorage.flush().catch((error) => {
+			console.error("[Similarity] Failed to flush index on shutdown:", error);
+		});
 		this.embedder.unload();
 		this.status.clear();
 	}

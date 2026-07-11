@@ -54,6 +54,10 @@ export class ObsidianPluginDataIndexStorage implements IndexStorage {
 		}));
 	}
 
+	async flush(): Promise<void> {
+		// rewrite() already writes synchronously — nothing to flush.
+	}
+
 	async isEmpty(): Promise<boolean> {
 		const data = await this.store.read();
 		if (data.index.length === 0) return true;

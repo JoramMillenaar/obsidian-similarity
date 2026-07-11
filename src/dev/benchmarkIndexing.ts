@@ -119,6 +119,9 @@ class InMemoryIndexStorage implements IndexStorage {
 		this.bytesWritten += this.serialized.length;
 	}
 
+	async flush(): Promise<void> {
+	}
+
 	async isEmpty(): Promise<boolean> {
 		return this.serialized === "[]";
 	}
@@ -270,6 +273,7 @@ function buildHarness(opts: BenchmarkOptions): Harness {
 		listAll: () => baseRepo.listAll(),
 		isEmpty: () => baseRepo.isEmpty(),
 		rename: (oldId, newId) => baseRepo.rename(oldId, newId),
+		flush: () => baseRepo.flush(),
 	};
 
 	const instrumentedEmbedder: EmbeddingPort = {

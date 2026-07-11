@@ -61,4 +61,8 @@ export class JsonIndexedNoteRepository implements IndexRepository {
 
 		await this.storage.rewrite([...filtered, renamed]);
 	}
+
+	async flush(): Promise<void> {
+		await this.storage.flush();
+	}
 }
