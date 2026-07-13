@@ -14,7 +14,8 @@ export type NoteIndexCandidate = {
 
 export type IndexedNote = {
 	id: string;
-	embedding: number[];
+	/** One L2-normalized vector per chunk. Length 1 when stored in averaged (opt-out) mode. */
+	embeddings: number[][];
 	contentHash: string,
 	updatedAt: string,
 };
@@ -24,9 +25,15 @@ export type RelatedNote = {
 	score: number;
 };
 
+export interface EmbedRequestPayload {
+	text: string;
+	overlapTokens: number;
+	maxChunks: number;
+}
+
 export interface IframeMessage {
 	requestId: number;
-	payload: string;
+	payload: "ping" | EmbedRequestPayload;
 }
 
 export interface SyncResults {
@@ -63,6 +70,13 @@ export type IndexingWarning =
 	| "prepared-text-truncated"
 	| "chunk-limit-reached";
 
+export interface EmbedOptions {
+	/** Token budget of trailing sentences to repeat at the start of each chunk. */
+	overlapTokens?: number;
+	/** Maximum number of chunks (and therefore vectors) produced per note. */
+	maxChunks?: number;
+}
+
 export type PrepareNoteRejectReason =
 	| "missing-note"
 	| "empty-content"
@@ -71,7 +85,6 @@ export type PrepareNoteRejectReason =
 export type PreparedNoteForEmbedding = {
 	noteId: string;
 	preparedText: string;
-	chunks: string[];
 	warnings: IndexingWarning[];
 };
 
@@ -93,17 +106,20 @@ export interface SimilaritySettings {
 	maxRawMarkdownChars: number;
 	maxExtractedChars: number;
 	maxChunks: number;
-	titleWeight: number;
+	/** Token budget of sentence-level overlap carried between adjacent chunks. */
+	overlap: number;
+	/** When true, every chunk vector is stored per note; when false, chunks are averaged into one. */
+	storeAllChunks: boolean;
+	/** Set once the user has acted on (or dismissed) the per-chunk migration banner. */
+	migrationBannerDismissed: boolean;
 }
 
 /** Bumped when the on-disk index shape changes. 1 = inline float64 JSON embeddings (legacy). 2 = embeddings in the binary sidecar. */
 export const SCHEMA_VERSION = 2;
 
 export type ChunkEntryV2 = {
+	/** Index of this chunk's vector in the binary sidecar. */
 	row: number;
-	start: number;
-	end: number;
-	hash: string;
 };
 
 export type IndexEntryV2 = {

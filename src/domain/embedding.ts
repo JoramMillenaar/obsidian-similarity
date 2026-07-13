@@ -42,6 +42,20 @@ export function averageEmbeddings(embeddings: Embedding[]): Embedding | null {
 	return meanEmbedding;
 }
 
+/**
+ * Best (highest) cosine similarity between a query vector and any of a note's
+ * chunk vectors. This is how a multi-chunk note is scored: its most similar
+ * passage wins, which keeps search to one result per note.
+ */
+export function maxCosineSimilarity(query: number[], vectors: number[][]): number {
+	let best = -Infinity;
+	for (const vector of vectors) {
+		const score = cosineSimilarity(query, vector);
+		if (score > best) best = score;
+	}
+	return best;
+}
+
 export function cosineSimilarity(a: number[], b: number[]): number {
 	if (a.length !== b.length) {
 		throw new Error(`cosineSimilarity: length mismatch (${a.length} vs ${b.length})`);

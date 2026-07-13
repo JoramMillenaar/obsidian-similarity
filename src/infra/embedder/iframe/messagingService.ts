@@ -1,9 +1,13 @@
-import { IframeMessage } from "../../../types";
+import { EmbedRequestPayload, IframeMessage } from "../../../types";
+
+/** One embed call now chunks + embeds a whole note in the iframe, so it can take
+ * appreciably longer than a single-vector request used to. */
+const EMBED_REQUEST_TIMEOUT_MS = 30000;
 
 export class IframeMessenger {
     private iframe: HTMLIFrameElement | null = null;
     private requestIdCounter = 0;
-    private pendingRequests = new Map<number, { resolve: (data: number[]) => void; reject: (error: Error) => void; timeoutId: number }>();
+    private pendingRequests = new Map<number, { resolve: (data: number[][]) => void; reject: (error: Error) => void; timeoutId: number }>();
 
     constructor(private iframeId: string, private workerScript: string) {}
 
@@ -34,7 +38,7 @@ export class IframeMessenger {
         if (event.origin !== window.location.origin) return;
         if (event.source !== this.iframe?.contentWindow) return;
 
-        const { requestId, data, error } = event.data as { requestId: number; data: number[]; error?: string };
+        const { requestId, data, error } = event.data as { requestId: number; data: number[][]; error?: string };
         const pending = this.pendingRequests.get(requestId);
 
         if (!pending) return;
@@ -50,7 +54,7 @@ export class IframeMessenger {
         pending.resolve(data);
     };
 
-    async sendMessage(payload: string, retries = 3): Promise<number[] | null> {
+    async sendMessage(payload: EmbedRequestPayload, retries = 3): Promise<number[][] | null> {
         if (!this.iframe || !this.iframe.contentWindow) {
             throw new Error("Could not find the Iframe. Is it loaded'?");
         }
@@ -60,13 +64,13 @@ export class IframeMessenger {
             const message: IframeMessage = { requestId, payload };
 
             try {
-                return await new Promise<number[]>((resolve, reject) => {
+                return await new Promise<number[][]>((resolve, reject) => {
                     const timeoutId = window.setTimeout(() => {
                         if (this.pendingRequests.has(requestId)) {
                             this.pendingRequests.delete(requestId);
                             reject(new Error(`Request with ID '${requestId}' timed out`));
                         }
-                    }, 10000);
+                    }, EMBED_REQUEST_TIMEOUT_MS);
 
                     this.pendingRequests.set(requestId, { resolve, reject, timeoutId });
                     this.iframe?.contentWindow?.postMessage(message, window.origin);

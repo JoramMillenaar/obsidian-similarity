@@ -71,6 +71,23 @@
 	background: color-mix(in srgb, var(--background-secondary) 86%, var(--text-error) 14%);
 }
 
+.similarity-migration-banner {
+	margin-bottom: 12px;
+	padding: 10px 12px;
+	border: 1px solid var(--interactive-accent);
+	border-radius: 10px;
+	background: color-mix(in srgb, var(--background-secondary) 88%, var(--interactive-accent) 12%);
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+}
+
+.similarity-migration-banner-message {
+	color: var(--text-muted);
+	font-size: var(--font-ui-small);
+	line-height: 1.4;
+}
+
 .suggestion-note {
 	color: var(--text-muted);
 	font-size: var(--font-smallest);

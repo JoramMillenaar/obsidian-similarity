@@ -1,7 +1,7 @@
 import { PrepareNoteResult, RelatedNote } from "../types";
 import { IndexRepository } from "../ports";
-import { cosineSimilarity, normalizeEmbedding } from "../domain/embedding";
-import { EmbedChunksUseCase, EmbedTextUseCase } from "./embedText";
+import { averageEmbeddings, maxCosineSimilarity, normalizeEmbedding } from "../domain/embedding";
+import { EmbedTextChunksUseCase } from "./embedText";
 import { PrepareNoteForEmbeddingUseCase } from "./prepareNoteForEmbedding";
 
 
@@ -12,10 +12,16 @@ export type GetSimilarNotesUseCase = (args: {
 	minScore?: number;
 }) => Promise<RelatedNote[]>;
 
+/** Collapses a note's chunk vectors into a single normalized query vector. */
+function toQueryVector(chunkVectors: number[][]): number[] | null {
+	const averaged = averageEmbeddings(chunkVectors);
+	if (!averaged) return null;
+	return normalizeEmbedding(averaged);
+}
+
 export function makeGetSimilarNotes(deps: {
 	indexRepo: IndexRepository;
-	embedText: EmbedTextUseCase;
-	embedChunks: EmbedChunksUseCase;
+	embedTextChunks: EmbedTextChunksUseCase;
 	prepareNoteForEmbedding: PrepareNoteForEmbeddingUseCase;
 }): GetSimilarNotesUseCase {
 	return async function getSimilarNotes(args): Promise<RelatedNote[]> {
@@ -26,15 +32,14 @@ export function makeGetSimilarNotes(deps: {
 			minScore = 0.25,
 		} = args;
 
-		// Prefer using an existing embedding if we have a noteId in the index.
-		let queryEmbedding: number[] | undefined;
+		// Prefer reusing the query note's stored chunk vectors if it's indexed.
+		let queryEmbedding: number[] | null = null;
 
 		if (noteId) {
 			const existing = await deps.indexRepo.findById(noteId);
-			if (existing) queryEmbedding = existing.embedding;
+			if (existing) queryEmbedding = toQueryVector(existing.embeddings);
 		}
 
-		// If not found, we need text to compute the query embedding.
 		if (!queryEmbedding) {
 			if (noteId) {
 				let prepared: PrepareNoteResult;
@@ -47,21 +52,21 @@ export function makeGetSimilarNotes(deps: {
 					return [];
 				}
 
-				let embedding: number[] | null;
+				let chunkVectors: number[][] | null;
 				try {
-					embedding = await deps.embedChunks(prepared.value.chunks);
+					chunkVectors = await deps.embedTextChunks(prepared.value.preparedText);
 				} catch {
 					return [];
 				}
-				if (!embedding) return [];
-				queryEmbedding = normalizeEmbedding(embedding);
+				if (!chunkVectors) return [];
+				queryEmbedding = toQueryVector(chunkVectors);
 			} else {
 				if (!text) {
 					throw new Error("getRelatedNotes: need either noteId present in index, or text to embed.");
 				}
-				const embedding = await deps.embedText(text);
-				if (!embedding) throw new Error("getRelatedNotes: could not embed text");
-				queryEmbedding = normalizeEmbedding(embedding);
+				const chunkVectors = await deps.embedTextChunks(text);
+				if (!chunkVectors) throw new Error("getRelatedNotes: could not embed text");
+				queryEmbedding = toQueryVector(chunkVectors);
 			}
 		}
 
@@ -76,7 +81,7 @@ export function makeGetSimilarNotes(deps: {
 			.filter(n => (noteId ? n.id !== noteId : true))
 			.map(n => ({
 				id: n.id,
-				score: cosineSimilarity(finalEmbedding, n.embedding),
+				score: maxCosineSimilarity(finalEmbedding, n.embeddings),
 			}))
 			.filter(r => Number.isFinite(r.score) && r.score >= minScore)
 			.sort((a, b) => b.score - a.score)

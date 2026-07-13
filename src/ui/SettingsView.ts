@@ -31,11 +31,12 @@ export class SettingView extends PluginSettingTab {
 		const settings = await this.deps.settingsRepo.get();
 		let draftIgnored = settings.ignoredPaths;
 		let advancedOpen = settings.advancedOpen;
+		let draftStoreAllChunks = settings.storeAllChunks;
 		const draftIndexing = {
 			maxRawMarkdownChars: settings.maxRawMarkdownChars,
 			maxExtractedChars: settings.maxExtractedChars,
 			maxChunks: settings.maxChunks,
-			titleWeight: settings.titleWeight,
+			overlap: settings.overlap,
 		};
 
 		new Setting(containerEl)
@@ -50,6 +51,19 @@ export class SettingView extends PluginSettingTab {
 					});
 				text.inputEl.rows = 8;
 				text.inputEl.cols = 40;
+			});
+
+		new Setting(containerEl)
+			.setName("Store all chunks per note")
+			.setDesc(
+				"On: each note keeps a vector per passage, so a long note can match on its most relevant section (better accuracy). Off: passages are averaged into one vector per note. Turning this on reindexes your whole vault (a few minutes); turning it off is instant.",
+			)
+			.addToggle((toggle) => {
+				toggle
+					.setValue(draftStoreAllChunks)
+					.onChange((value) => {
+						draftStoreAllChunks = value;
+					});
 			});
 
 		const advancedSection = containerEl.createDiv("similarity-setting-section");
@@ -113,11 +127,11 @@ export class SettingView extends PluginSettingTab {
 		);
 		this.addNumericSetting(
 			advancedBody,
-			"Title weight",
-			"How many times the note title is prepended before chunking.",
-			settings.titleWeight,
+			"Overlap (tokens)",
+			"Token budget of trailing sentences repeated between adjacent chunks.",
+			settings.overlap,
 			(value) => {
-				draftIndexing.titleWeight = value;
+				draftIndexing.overlap = value;
 			},
 		);
 		renderAdvancedSection();
@@ -135,9 +149,13 @@ export class SettingView extends PluginSettingTab {
 							return;
 						}
 
+						const storeAllChunksChanged = draftStoreAllChunks !== settings.storeAllChunks;
 						const result = await this.deps.updateSettings({
 							ignoredPaths: draftIgnored,
 							...draftIndexing,
+							storeAllChunks: draftStoreAllChunks,
+							// Any explicit choice here retires the opt-in banner.
+							...(storeAllChunksChanged ? {migrationBannerDismissed: true} : {}),
 						});
 						if (result.reindexQueued) {
 							new Notice("Settings saved. Index rebuild queued in the background.");
@@ -178,7 +196,7 @@ export class SettingView extends PluginSettingTab {
 
 function validateIndexingSettings(settings: Pick<
 	SimilaritySettings,
-	"maxRawMarkdownChars" | "maxExtractedChars" | "maxChunks" | "titleWeight"
+	"maxRawMarkdownChars" | "maxExtractedChars" | "maxChunks" | "overlap"
 >): string | null {
 	if (settings.maxRawMarkdownChars <= 0) {
 		return "Max raw markdown characters must be greater than 0.";
@@ -189,8 +207,8 @@ function validateIndexingSettings(settings: Pick<
 	if (settings.maxChunks <= 0) {
 		return "Max chunks must be greater than 0.";
 	}
-	if (settings.titleWeight < 0) {
-		return "Title weight cannot be negative.";
+	if (settings.overlap < 0) {
+		return "Overlap cannot be negative.";
 	}
 
 	return null;

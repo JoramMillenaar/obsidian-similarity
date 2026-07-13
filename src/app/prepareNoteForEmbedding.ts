@@ -31,7 +31,6 @@ export function makePrepareNoteForEmbedding(deps: {
 
 		return prepareExtractedNoteForEmbedding({
 			noteId: note.id,
-			title: note.title,
 			extractedText,
 			settings,
 			warnings,

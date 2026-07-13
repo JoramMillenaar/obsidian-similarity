@@ -285,7 +285,7 @@ export async function runStorageBenchmark(opts: StorageBenchmarkOptions): Promis
 		log("     + slim-JSON stringify/parse (binary) — the exact functions the real code path uses.");
 		log("   • bytes/diskBytes = persisted payload (binary packs float32; legacy JSON writes float64 text,");
 		log("     so its bytes should run close to 2x the binary payload for the embedding data alone).");
-		log("   • deserialize returns IndexedNote[] with `embedding: number[]` either way (Array.from over");
+		log("   • deserialize returns IndexedNote[] with `embeddings: number[][]` either way (Array.from over");
 		log("     the decoded Float32Array in the binary case), so parsed heap footprint is comparable —");
 		log("     the storage win here is disk/serialized size and write/read I/O cost, not resident memory.");
 		log("   • heap deltas are best-effort (no forced GC); read the trend, not absolutes.");

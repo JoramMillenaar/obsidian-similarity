@@ -91,7 +91,7 @@ export function makeSeedIndex(count: number, dim: number, rng: () => number): In
 	for (let i = 0; i < count; i++) {
 		notes.push({
 			id: `seed-${i}.md`,
-			embedding: randomUnitEmbedding(dim, rng),
+			embeddings: [randomUnitEmbedding(dim, rng)],
 			contentHash: Math.floor(rng() * 0xffffffff).toString(16).padStart(8, "0"),
 			updatedAt: new Date(0).toISOString(),
 		});

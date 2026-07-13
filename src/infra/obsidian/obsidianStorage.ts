@@ -8,8 +8,9 @@ import { packIndexedNotesToV2, unpackV2ToIndexedNotes } from "../../domain/migra
 /**
  * Backs IndexStorage with a slim JSON index (schemaVersion 2: id/contentHash/
  * updatedAt/chunks, no floats) plus the embeddings binary sidecar. Callers
- * still deal only in IndexedNote[] with inline `embedding: number[]` — the
- * binary split is entirely an implementation detail behind this adapter.
+ * still deal only in IndexedNote[] with inline `embeddings: number[][]` (one
+ * vector per chunk) — the binary split is entirely an implementation detail
+ * behind this adapter.
  */
 export class ObsidianPluginDataIndexStorage implements IndexStorage {
 	constructor(

@@ -1,16 +1,17 @@
 import { hashText } from "../domain/text";
-import { normalizeEmbedding } from "../domain/embedding";
+import { averageEmbeddings, normalizeEmbedding } from "../domain/embedding";
 import { isMarkdownPath } from "../domain/markdownPath";
 import { PrepareNoteResult } from "../types";
-import { IndexRepository } from "../ports";
-import { EmbedChunksUseCase } from "./embedText";
+import { IndexRepository, SettingsRepository } from "../ports";
+import { EmbedTextChunksUseCase } from "./embedText";
 import { IsIgnoredPath } from "./isIgnoredPath";
 import { PrepareNoteForEmbeddingUseCase } from "./prepareNoteForEmbedding";
 
 export type IndexNoteDeps = {
 	prepareNoteForEmbedding: PrepareNoteForEmbeddingUseCase;
-	embedChunks: EmbedChunksUseCase;
+	embedTextChunks: EmbedTextChunksUseCase;
 	indexRepo: IndexRepository;
+	settingsRepo: SettingsRepository;
 	isIgnoredPath: IsIgnoredPath;
 };
 
@@ -48,21 +49,27 @@ export function makeIndexNote(deps: IndexNoteDeps): IndexNoteUseCase {
 			return "unchanged";
 		}
 
-		let rawEmbedding: number[] | null;
+		let chunkVectors: number[][] | null;
 		try {
-			rawEmbedding = await deps.embedChunks(prepared.value.chunks);
+			chunkVectors = await deps.embedTextChunks(prepared.value.preparedText);
 		} catch (error) {
 			await deps.indexRepo.remove(noteId);
 			throw error;
 		}
-		if (!rawEmbedding?.length) {
+		if (!chunkVectors?.length) {
 			await deps.indexRepo.remove(noteId);
 			return "removed";
 		}
 
+		const settings = await deps.settingsRepo.get();
+		const normalizedChunks = chunkVectors.map(normalizeEmbedding);
+		const embeddings = settings.storeAllChunks
+			? normalizedChunks
+			: [normalizeEmbedding(averageEmbeddings(normalizedChunks)!)];
+
 		const indexedNote = {
 			id: noteId,
-			embedding: normalizeEmbedding(rawEmbedding),
+			embeddings,
 			contentHash,
 			updatedAt: new Date().toISOString(),
 		};

@@ -29,6 +29,8 @@ export default class RelatedNotes extends Plugin {
 					startOrRefreshIndexSync: this.appContainer.startOrRefreshIndexSync,
 					subscribeIndexingState: this.appContainer.subscribeIndexingState,
 					isIgnoredPath: this.appContainer.isIgnoredPath,
+					settingsRepo: this.appContainer.settingsRepo,
+					updateSettings: this.appContainer.updateSettings,
 				})
 		);
 		this.registerHoverLinkSource(VIEW_TYPE_SIMILARITY, {

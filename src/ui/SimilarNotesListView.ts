@@ -1,9 +1,10 @@
 import { ItemView, Notice, TFile, WorkspaceLeaf } from "obsidian";
 import { GetSimilarNotesUseCase } from "../app/getSimilarNotes";
 import { StartOrRefreshIndexSyncUseCase, SubscribeIndexingStateUseCase, } from "../app/indexingCoordinator";
+import { UpdateSettingsUseCase } from "../app/updateSettings";
 import { isMarkdownPath } from "../domain/markdownPath";
 import { IndexingQueueSnapshot } from "../types";
-import { IndexRepository } from "../ports";
+import { IndexRepository, SettingsRepository } from "../ports";
 
 export function logError(message: unknown, ...optionalParams: unknown[]) {
 	console.error("[Similarity]:", message, ...optionalParams);
@@ -19,6 +20,8 @@ export type SimilarNotesListViewDeps = {
 	startOrRefreshIndexSync: StartOrRefreshIndexSyncUseCase;
 	subscribeIndexingState: SubscribeIndexingStateUseCase;
 	isIgnoredPath: (path: string) => Promise<boolean>;
+	settingsRepo: SettingsRepository;
+	updateSettings: UpdateSettingsUseCase;
 }
 
 export class SimilarNotesListView extends ItemView {
@@ -168,6 +171,63 @@ export class SimilarNotesListView extends ItemView {
 		});
 	}
 
+	private async renderMigrationBanner(container: HTMLElement) {
+		const settings = await this.deps.settingsRepo.get();
+		if (settings.storeAllChunks || settings.migrationBannerDismissed) {
+			return;
+		}
+
+		const bannerEl = container.createDiv({cls: "similarity-migration-banner"});
+		bannerEl.createDiv({
+			cls: "similarity-migration-banner-message",
+			text: "Enable full-chunk indexing for more accurate matches on long notes. This reindexes your vault and can take a few minutes. You can turn it off anytime — that's instant.",
+		});
+
+		const actions = bannerEl.createDiv({cls: "related-notes-actions"});
+		const enableButton = actions.createEl("button", {
+			cls: "mod-cta related-notes-button",
+			text: "Enable",
+		});
+		enableButton.addEventListener("click", () => {
+			void this.optInToFullChunks();
+		});
+
+		const dismissButton = actions.createEl("button", {
+			cls: "related-notes-button",
+			text: "Dismiss",
+		});
+		dismissButton.addEventListener("click", () => {
+			void this.dismissMigrationBanner();
+		});
+	}
+
+	private async optInToFullChunks() {
+		try {
+			const result = await this.deps.updateSettings({
+				storeAllChunks: true,
+				migrationBannerDismissed: true,
+			});
+			new Notice(
+				result.reindexQueued
+					? "Full-chunk indexing enabled. Reindexing your vault in the background…"
+					: "Full-chunk indexing enabled.",
+			);
+			await this.refresh({background: true});
+		} catch (error) {
+			logError("Error enabling full-chunk indexing:", error);
+			new Notice("Failed to enable full-chunk indexing. See console for details.");
+		}
+	}
+
+	private async dismissMigrationBanner() {
+		try {
+			await this.deps.updateSettings({migrationBannerDismissed: true});
+			await this.refresh({background: true});
+		} catch (error) {
+			logError("Error dismissing migration banner:", error);
+		}
+	}
+
 	private async renderContent(targetContainer: HTMLElement, options: { showLoading?: boolean } = {}) {
 		const showLoading = options.showLoading ?? true;
 		const workingContainer = showLoading ? targetContainer : createDiv();
@@ -194,6 +254,8 @@ export class SimilarNotesListView extends ItemView {
 				this.commitRenderedContent(targetContainer, workingContainer, showLoading);
 				return;
 			}
+
+			await this.renderMigrationBanner(workingContainer);
 
 			const indexEmpty = await this.deps.indexRepo.isEmpty();
 			const related = indexEmpty

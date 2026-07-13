@@ -3,10 +3,14 @@
 
 	env.allowLocalModels = false;
 
+	// all-MiniLM-L6-v2 accepts 256 tokens; reserve 2 for the [CLS]/[SEP] specials.
+	const MAX_CONTENT_TOKENS = 254;
+
 	class DocumentEmbeddingController {
 		#pipeline = null;
 		#device = 'wasm';
 		#queue = Promise.resolve();  // serialize all inference calls
+		#segmenter = new Intl.Segmenter('und', { granularity: 'sentence' });
 
 		constructor() {
 			this.ready = this.#initializeModel();
@@ -30,17 +34,99 @@
 			console.log(`[Similarity] Model ready on ${this.#device}`);
 		}
 
-		async generateDocumentEmbedding(text) {
+		#segmentSentences(text) {
+			const sentences = [];
+			for (const { segment } of this.#segmenter.segment(text)) {
+				const trimmed = segment.trim();
+				if (trimmed) sentences.push(trimmed);
+			}
+			return sentences;
+		}
+
+		#countTokens(text) {
+			const encoded = this.#pipeline.tokenizer(text, { add_special_tokens: false });
+			const dims = encoded.input_ids?.dims;
+			return dims && dims.length ? dims[dims.length - 1] : 0;
+		}
+
+		/**
+		 * Split text into token-bounded chunks aligned to sentence boundaries, with
+		 * `overlapTokens` worth of trailing sentences repeated at the start of each
+		 * following chunk. A sentence larger than the budget becomes its own chunk
+		 * (the model truncates it internally).
+		 */
+		#chunkText(text, overlapTokens, maxChunks) {
+			const sentences = this.#segmentSentences(text);
+			if (sentences.length === 0) return [];
+
+			const counts = sentences.map((sentence) => this.#countTokens(sentence));
+
+			const chunks = [];
+			let current = [];       // sentence indices in the current chunk
+			let currentTokens = 0;
+
+			const flush = () => {
+				if (current.length === 0) return;
+				chunks.push(current.map((i) => sentences[i]).join(' '));
+			};
+
+			for (let i = 0; i < sentences.length; i++) {
+				const tokens = counts[i];
+
+				// Oversized sentence: close whatever is open, then emit it alone.
+				if (tokens >= MAX_CONTENT_TOKENS) {
+					flush();
+					if (chunks.length >= maxChunks) return chunks.slice(0, maxChunks);
+					current = [];
+					currentTokens = 0;
+
+					chunks.push(sentences[i]);
+					if (chunks.length >= maxChunks) return chunks.slice(0, maxChunks);
+					continue;
+				}
+
+				// Adding this sentence would overflow the current chunk: close it and
+				// seed the next chunk with an overlap window of trailing sentences.
+				if (current.length > 0 && currentTokens + tokens > MAX_CONTENT_TOKENS) {
+					flush();
+					if (chunks.length >= maxChunks) return chunks.slice(0, maxChunks);
+
+					const seed = [];
+					let seedTokens = 0;
+					for (let j = current.length - 1; j >= 0; j--) {
+						const idx = current[j];
+						if (seedTokens + counts[idx] > overlapTokens) break;
+						seed.unshift(idx);
+						seedTokens += counts[idx];
+					}
+					current = seed;
+					currentTokens = seedTokens;
+				}
+
+				current.push(i);
+				currentTokens += tokens;
+			}
+
+			flush();
+			return chunks.slice(0, maxChunks);
+		}
+
+		async generateChunkEmbeddings(text, overlapTokens, maxChunks) {
 			await this.ready;
-			const input = text.trim();
-			if (!input) return null;
+			const input = (text ?? '').trim();
+			if (!input) return [];
 
 			// enqueue — each call waits for the previous to finish
 			return new Promise((resolve, reject) => {
 				this.#queue = this.#queue.then(async () => {
 					try {
-						const result = await this.#pipeline(input, {pooling: 'mean', normalize: true});
-						resolve(result.data);
+						const chunks = this.#chunkText(input, overlapTokens, maxChunks);
+						const vectors = [];
+						for (const chunk of chunks) {
+							const result = await this.#pipeline(chunk, {pooling: 'mean', normalize: true});
+							vectors.push(Array.from(result.data));
+						}
+						resolve(vectors);
 					} catch (err) {
 						reject(err);
 					}
@@ -68,11 +154,16 @@
 		}
 
 		try {
-			const features = await embedder.generateDocumentEmbedding(payload);
-      event.source.postMessage({ requestId, data: features ? Array.from(features) : [] }, window.origin);
+			const {text, overlapTokens, maxChunks} = payload;
+			const vectors = await embedder.generateChunkEmbeddings(
+				text,
+				overlapTokens ?? 32,
+				maxChunks ?? 32,
+			);
+			event.source.postMessage({ requestId, data: vectors }, window.origin);
 		} catch (error) {
 			const message = error instanceof Error ? error.message : String(error);
-      event.source.postMessage({ requestId, data: [], error: message }, window.origin);
+			event.source.postMessage({ requestId, data: [], error: message }, window.origin);
 		}
 	});
 </script>

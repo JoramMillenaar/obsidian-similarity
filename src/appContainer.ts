@@ -13,7 +13,8 @@ import { makeMigrateStore, MigrateStoreUseCase } from "./app/makeMigrateStore";
 import { GetSimilarNotesUseCase, makeGetSimilarNotes } from "./app/getSimilarNotes";
 import { InsertWikilinkAtCursorUseCase, makeInsertWikilinkAtCursor } from "./app/insertWikilinkAtCursor";
 import { makeSyncIndexToVault, SyncIndexToVaultUseCase } from "./app/syncIndexToVault";
-import { makeEmbedChunks, makeEmbedText } from "./app/embedText";
+import { makeEmbedTextChunks } from "./app/embedText";
+import { makeCollapseIndexToAverage } from "./app/collapseIndexToAverage";
 import {
 	EmbeddingPort,
 	IndexRepository,
@@ -92,10 +93,13 @@ export class AppContainer {
 		);
 		this.migrateStore = makeMigrateStore({indexStorage: this.indexStorage});
 		this.embedder = new EmbeddingProvider();
-		const embedText = makeEmbedText({embedder: this.embedder});
-		const embedChunks = makeEmbedChunks({embedder: this.embedder});
 		this.indexRepo = new JsonIndexedNoteRepository(this.indexStorage);
 		this.settingsRepo = new ObsidianSettingsRepository(storage);
+		const embedTextChunks = makeEmbedTextChunks({
+			embedder: this.embedder,
+			settingsRepo: this.settingsRepo,
+		});
+		const collapseIndexToAverage = makeCollapseIndexToAverage({indexRepo: this.indexRepo});
 		const activeEditor = new ObsidianActiveEditor(plugin);
 
 		this.isIgnoredPath = makeIsIgnoredPath({
@@ -110,15 +114,15 @@ export class AppContainer {
 
 		this.indexNote = makeIndexNote({
 			prepareNoteForEmbedding: this.prepareNoteForEmbedding,
-			embedChunks,
+			embedTextChunks,
 			indexRepo: this.indexRepo,
+			settingsRepo: this.settingsRepo,
 			isIgnoredPath: this.isIgnoredPath,
 		});
 
 		this.getSimilarNotes = makeGetSimilarNotes({
 			indexRepo: this.indexRepo,
-			embedText,
-			embedChunks,
+			embedTextChunks,
 			prepareNoteForEmbedding: this.prepareNoteForEmbedding,
 		});
 
@@ -152,6 +156,7 @@ export class AppContainer {
 			settingsRepo: this.settingsRepo,
 			indexStorage: this.indexStorage,
 			startOrRefreshIndexSync: this.startOrRefreshIndexSync,
+			collapseIndexToAverage,
 		});
 		this.isInitialIndexCompleted = makeIsInitialIndexCompleted({settingsRepo: this.settingsRepo});
 		this.markInitialIndexCompleted = makeMarkInitialIndexCompleted({settingsRepo: this.settingsRepo});

@@ -4,7 +4,6 @@ import {
 	PrepareNoteResult,
 	SimilaritySettings,
 } from "../types";
-import { chunkTextByFixedWindow } from "./textChunking";
 import { normalizeWhitespace } from "./text";
 
 const SEMANTIC_CONTENT_PATTERN = /[\p{L}\p{N}]/u;
@@ -29,7 +28,6 @@ export function hasSemanticContent(text: string): boolean {
 
 export function prepareExtractedNoteForEmbedding(args: {
 	noteId: string;
-	title: string;
 	extractedText: string;
 	settings: SimilaritySettings;
 	warnings?: IndexingWarning[];
@@ -45,48 +43,21 @@ export function prepareExtractedNoteForEmbedding(args: {
 		return reject("non-semantic-content", warnings);
 	}
 
-	const weightedText = applyTitleWeight(
-		normalizedText,
-		args.title,
-		args.settings.titleWeight,
-	);
 	const preparedText = truncateText(
-		weightedText,
+		normalizedText,
 		args.settings.maxExtractedChars,
 		"prepared-text-truncated",
 		warnings,
 	);
-	const chunks = chunkTextByFixedWindow(preparedText);
-
-	if (chunks.length === 0) {
-		return reject("empty-content", warnings);
-	}
-
-	const limitedChunks = chunks.slice(0, args.settings.maxChunks);
-	if (limitedChunks.length < chunks.length) {
-		warnings.push("chunk-limit-reached");
-	}
 
 	return {
 		status: "ready",
 		value: {
 			noteId: args.noteId,
 			preparedText,
-			chunks: limitedChunks,
 			warnings,
 		},
 	};
-}
-
-function applyTitleWeight(text: string, title: string, titleWeight: number): string {
-	const normalizedTitle = normalizeWhitespace(title);
-	if (!normalizedTitle || titleWeight <= 0) {
-		return text;
-	}
-
-	return normalizeWhitespace(
-		`${Array.from({length: titleWeight}, () => normalizedTitle).join("\n")}\n\n${text}`,
-	);
 }
 
 function reject(reason: PrepareNoteRejectReason, warnings: IndexingWarning[]): PrepareNoteResult {

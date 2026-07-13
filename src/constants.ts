@@ -7,5 +7,7 @@ export const DEFAULT_SETTINGS: SimilaritySettings = {
 	maxRawMarkdownChars: 20000,
 	maxExtractedChars: 4800,
 	maxChunks: 32,
-	titleWeight: 3,
+	overlap: 32,
+	storeAllChunks: true,
+	migrationBannerDismissed: false,
 };
