@@ -1,8 +1,9 @@
 import { Plugin } from "obsidian";
 import { SimilarityPluginData } from "../../types";
+import { PluginDataStore } from "../../ports";
 import { normalizePluginData } from "../../domain/normalize";
 
-export class ObsidianPluginDataStore {
+export class ObsidianPluginDataStore implements PluginDataStore {
 	constructor(private readonly plugin: Plugin) {
 	}
 
