@@ -1,7 +1,5 @@
 import { IndexedNote, IndexEntryV2, SCHEMA_VERSION } from "../../types";
-import { IndexStorage } from "../../ports";
-import { ObsidianPluginDataStore } from "./obsidianPluginDataStore";
-import { BinaryEmbeddingFileStore } from "./binaryEmbeddingFileStore";
+import { EmbeddingFileStore, IndexStorage, PluginDataStore } from "../../ports";
 import { decodeEmbeddings, encodeEmbeddings, isBinaryLayoutValid } from "../../domain/embeddingCodec";
 import { packIndexedNotesToV2, unpackV2ToIndexedNotes } from "../../domain/migrateEmbeddingStore";
 
@@ -13,8 +11,8 @@ import { packIndexedNotesToV2, unpackV2ToIndexedNotes } from "../../domain/migra
  */
 export class ObsidianPluginDataIndexStorage implements IndexStorage {
 	constructor(
-		private readonly store: ObsidianPluginDataStore,
-		private readonly binaryStore: BinaryEmbeddingFileStore,
+		private readonly store: PluginDataStore,
+		private readonly binaryStore: EmbeddingFileStore,
 	) {
 	}
 

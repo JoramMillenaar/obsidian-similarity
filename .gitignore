@@ -21,6 +21,8 @@ main.js
 
 # obsidian
 data.json
+# ...but keep committed migration test fixtures (frozen golden vaults)
+!test/fixtures/**/data.json
 
 # Exclude macOS Finder (System Explorer) View States
 .DS_Store
