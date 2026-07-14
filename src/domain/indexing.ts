@@ -4,7 +4,6 @@ import {
 	PrepareNoteResult,
 	SimilaritySettings,
 } from "../types";
-import { chunkTextByFixedWindow } from "./textChunking";
 import { normalizeWhitespace } from "./text";
 
 const SEMANTIC_CONTENT_PATTERN = /[\p{L}\p{N}]/u;
@@ -56,15 +55,9 @@ export function prepareExtractedNoteForEmbedding(args: {
 		"prepared-text-truncated",
 		warnings,
 	);
-	const chunks = chunkTextByFixedWindow(preparedText);
 
-	if (chunks.length === 0) {
+	if (!preparedText) {
 		return reject("empty-content", warnings);
-	}
-
-	const limitedChunks = chunks.slice(0, args.settings.maxChunks);
-	if (limitedChunks.length < chunks.length) {
-		warnings.push("chunk-limit-reached");
 	}
 
 	return {
@@ -72,7 +65,6 @@ export function prepareExtractedNoteForEmbedding(args: {
 		value: {
 			noteId: args.noteId,
 			preparedText,
-			chunks: limitedChunks,
 			warnings,
 		},
 	};

@@ -33,7 +33,7 @@ import {
 } from "../ports";
 import { JsonIndexedNoteRepository } from "../infra/index/jsonIndexedNoteRepository";
 import { makeIndexNote } from "../app/indexNote";
-import { makeEmbedChunks } from "../app/embedText";
+import { makeEmbedText } from "../app/embedText";
 import { makePrepareNoteForEmbedding } from "../app/prepareNoteForEmbedding";
 import { DEFAULT_SETTINGS } from "../constants";
 import { heapUsedMB, kb, makeSeedIndex, mulberry32, now, randomUnitEmbedding, ms, summarize } from "./benchmarkShared";
@@ -277,10 +277,10 @@ function buildHarness(opts: BenchmarkOptions): Harness {
 	};
 
 	const instrumentedEmbedder: EmbeddingPort = {
-		embed: async (text) => {
+		embed: async (text, options) => {
 			const s = now();
 			try {
-				return await opts.embedder.embed(text);
+				return await opts.embedder.embed(text, options);
 			} finally {
 				timings.embed += now() - s;
 				counters.embedCalls++;
@@ -307,7 +307,7 @@ function buildHarness(opts: BenchmarkOptions): Harness {
 
 	const indexNote = makeIndexNote({
 		prepareNoteForEmbedding,
-		embedChunks: makeEmbedChunks({ embedder: instrumentedEmbedder }),
+		embedText: makeEmbedText({ embedder: instrumentedEmbedder, settingsRepo }),
 		indexRepo: repo,
 		isIgnoredPath: async () => false,
 	});
@@ -413,8 +413,8 @@ export async function runIndexingBenchmark(opts: BenchmarkOptions): Promise<void
 	await opts.embedder.load();
 
 	// Probe the real embedding dimensionality so synthetic seeds match.
-	const probe = await opts.embedder.embed("benchmark probe text");
-	const dim = probe?.length ?? 384;
+	const probe = await opts.embedder.embed("benchmark probe text", {maxOverlapPercent: 0});
+	const dim = probe?.[0]?.length ?? 384;
 	log(`  embedding dimensionality: ${dim}`);
 
 	const h = buildHarness(opts);

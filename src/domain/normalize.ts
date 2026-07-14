@@ -1,5 +1,5 @@
 import { IndexV2, SCHEMA_VERSION, SimilarityPluginData, SimilaritySettings } from "../types";
-import { DEFAULT_SETTINGS } from "../constants";
+import { DEFAULT_SETTINGS, MAX_OVERLAP_PERCENT } from "../constants";
 
 export function normalizeSettings(
 	value: Partial<SimilaritySettings> | undefined,
@@ -9,7 +9,7 @@ export function normalizeSettings(
 	const advancedOpen = value?.advancedOpen;
 	const maxRawMarkdownChars = value?.maxRawMarkdownChars;
 	const maxExtractedChars = value?.maxExtractedChars;
-	const maxChunks = value?.maxChunks;
+	const maxOverlapPercent = value?.maxOverlapPercent;
 	const titleWeight = value?.titleWeight;
 
 	return {
@@ -28,9 +28,9 @@ export function normalizeSettings(
 		maxExtractedChars: typeof maxExtractedChars === "number" && maxExtractedChars > 0
 			? maxExtractedChars
 			: DEFAULT_SETTINGS.maxExtractedChars,
-		maxChunks: typeof maxChunks === "number" && maxChunks > 0
-			? maxChunks
-			: DEFAULT_SETTINGS.maxChunks,
+		maxOverlapPercent: typeof maxOverlapPercent === "number" && maxOverlapPercent >= 0
+			? Math.min(maxOverlapPercent, MAX_OVERLAP_PERCENT)
+			: DEFAULT_SETTINGS.maxOverlapPercent,
 		titleWeight: typeof titleWeight === "number" && titleWeight >= 0
 			? titleWeight
 			: DEFAULT_SETTINGS.titleWeight,

@@ -1,7 +1,7 @@
 import { PrepareNoteResult, RelatedNote } from "../types";
 import { IndexRepository } from "../ports";
 import { cosineSimilarity, normalizeEmbedding } from "../domain/embedding";
-import { EmbedChunksUseCase, EmbedTextUseCase } from "./embedText";
+import { EmbedTextUseCase } from "./embedText";
 import { PrepareNoteForEmbeddingUseCase } from "./prepareNoteForEmbedding";
 
 
@@ -15,7 +15,6 @@ export type GetSimilarNotesUseCase = (args: {
 export function makeGetSimilarNotes(deps: {
 	indexRepo: IndexRepository;
 	embedText: EmbedTextUseCase;
-	embedChunks: EmbedChunksUseCase;
 	prepareNoteForEmbedding: PrepareNoteForEmbeddingUseCase;
 }): GetSimilarNotesUseCase {
 	return async function getSimilarNotes(args): Promise<RelatedNote[]> {
@@ -49,7 +48,7 @@ export function makeGetSimilarNotes(deps: {
 
 				let embedding: number[] | null;
 				try {
-					embedding = await deps.embedChunks(prepared.value.chunks);
+					embedding = await deps.embedText(prepared.value.preparedText);
 				} catch {
 					return [];
 				}

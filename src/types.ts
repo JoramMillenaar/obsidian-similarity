@@ -27,6 +27,7 @@ export type RelatedNote = {
 export interface IframeMessage {
 	requestId: number;
 	payload: string;
+	maxOverlapPercent?: number;
 }
 
 export interface SyncResults {
@@ -60,8 +61,7 @@ export type IndexingQueueSnapshot = {
 
 export type IndexingWarning =
 	| "raw-markdown-truncated"
-	| "prepared-text-truncated"
-	| "chunk-limit-reached";
+	| "prepared-text-truncated";
 
 export type PrepareNoteRejectReason =
 	| "missing-note"
@@ -71,7 +71,6 @@ export type PrepareNoteRejectReason =
 export type PreparedNoteForEmbedding = {
 	noteId: string;
 	preparedText: string;
-	chunks: string[];
 	warnings: IndexingWarning[];
 };
 
@@ -92,7 +91,8 @@ export interface SimilaritySettings {
 	advancedOpen: boolean;
 	maxRawMarkdownChars: number;
 	maxExtractedChars: number;
-	maxChunks: number;
+	/** Clamped 0–50: max share of a chunk's token budget reused as sentence overlap with the previous chunk. */
+	maxOverlapPercent: number;
 	titleWeight: number;
 }
 

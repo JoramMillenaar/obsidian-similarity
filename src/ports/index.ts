@@ -1,5 +1,5 @@
 export type { ActiveEditor } from "./activeEditor";
-export type { EmbeddingPort } from "./embeddingPort";
+export type { EmbeddingPort, EmbedOptions } from "./embeddingPort";
 export type { IndexRepository } from "./indexRepository";
 export type { IndexStorage } from "./indexStorage";
 export type { MarkdownTextExtractor } from "./markdownTextExtractor";

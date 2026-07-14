@@ -1,6 +1,7 @@
 import { App, Notice, PluginSettingTab, Setting } from "obsidian";
 import RelatedNotes from "../main";
 import { parseIgnoredPaths } from "../domain/ignoreRules";
+import { MAX_OVERLAP_PERCENT } from "../constants";
 import { SimilaritySettings } from "../types";
 import { SettingsRepository } from "../ports";
 import { UpdateSettingsUseCase } from "../app/updateSettings";
@@ -34,7 +35,7 @@ export class SettingView extends PluginSettingTab {
 		const draftIndexing = {
 			maxRawMarkdownChars: settings.maxRawMarkdownChars,
 			maxExtractedChars: settings.maxExtractedChars,
-			maxChunks: settings.maxChunks,
+			maxOverlapPercent: settings.maxOverlapPercent,
 			titleWeight: settings.titleWeight,
 		};
 
@@ -104,11 +105,11 @@ export class SettingView extends PluginSettingTab {
 		);
 		this.addNumericSetting(
 			advancedBody,
-			"Max chunks",
-			"Maximum embedding chunks kept per note after chunking.",
-			settings.maxChunks,
+			"Max sentence overlap (%)",
+			`Share of a chunk's token budget reused as sentence overlap with the previous chunk (0–${MAX_OVERLAP_PERCENT}).`,
+			settings.maxOverlapPercent,
 			(value) => {
-				draftIndexing.maxChunks = value;
+				draftIndexing.maxOverlapPercent = value;
 			},
 		);
 		this.addNumericSetting(
@@ -178,7 +179,7 @@ export class SettingView extends PluginSettingTab {
 
 function validateIndexingSettings(settings: Pick<
 	SimilaritySettings,
-	"maxRawMarkdownChars" | "maxExtractedChars" | "maxChunks" | "titleWeight"
+	"maxRawMarkdownChars" | "maxExtractedChars" | "maxOverlapPercent" | "titleWeight"
 >): string | null {
 	if (settings.maxRawMarkdownChars <= 0) {
 		return "Max raw markdown characters must be greater than 0.";
@@ -186,8 +187,8 @@ function validateIndexingSettings(settings: Pick<
 	if (settings.maxExtractedChars <= 0) {
 		return "Max extracted characters must be greater than 0.";
 	}
-	if (settings.maxChunks <= 0) {
-		return "Max chunks must be greater than 0.";
+	if (settings.maxOverlapPercent < 0 || settings.maxOverlapPercent > MAX_OVERLAP_PERCENT) {
+		return `Max sentence overlap must be between 0 and ${MAX_OVERLAP_PERCENT}.`;
 	}
 	if (settings.titleWeight < 0) {
 		return "Title weight cannot be negative.";

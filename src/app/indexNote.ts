@@ -3,13 +3,13 @@ import { normalizeEmbedding } from "../domain/embedding";
 import { isMarkdownPath } from "../domain/markdownPath";
 import { PrepareNoteResult } from "../types";
 import { IndexRepository } from "../ports";
-import { EmbedChunksUseCase } from "./embedText";
+import { EmbedTextUseCase } from "./embedText";
 import { IsIgnoredPath } from "./isIgnoredPath";
 import { PrepareNoteForEmbeddingUseCase } from "./prepareNoteForEmbedding";
 
 export type IndexNoteDeps = {
 	prepareNoteForEmbedding: PrepareNoteForEmbeddingUseCase;
-	embedChunks: EmbedChunksUseCase;
+	embedText: EmbedTextUseCase;
 	indexRepo: IndexRepository;
 	isIgnoredPath: IsIgnoredPath;
 };
@@ -50,7 +50,7 @@ export function makeIndexNote(deps: IndexNoteDeps): IndexNoteUseCase {
 
 		let rawEmbedding: number[] | null;
 		try {
-			rawEmbedding = await deps.embedChunks(prepared.value.chunks);
+			rawEmbedding = await deps.embedText(prepared.value.preparedText);
 		} catch (error) {
 			await deps.indexRepo.remove(noteId);
 			throw error;

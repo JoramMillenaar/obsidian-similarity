@@ -13,7 +13,7 @@ import { makeMigrateStore, MigrateStoreUseCase } from "./app/makeMigrateStore";
 import { GetSimilarNotesUseCase, makeGetSimilarNotes } from "./app/getSimilarNotes";
 import { InsertWikilinkAtCursorUseCase, makeInsertWikilinkAtCursor } from "./app/insertWikilinkAtCursor";
 import { makeSyncIndexToVault, SyncIndexToVaultUseCase } from "./app/syncIndexToVault";
-import { makeEmbedChunks, makeEmbedText } from "./app/embedText";
+import { makeEmbedText } from "./app/embedText";
 import {
 	EmbeddingPort,
 	IndexRepository,
@@ -92,10 +92,9 @@ export class AppContainer {
 		);
 		this.migrateStore = makeMigrateStore({indexStorage: this.indexStorage});
 		this.embedder = new EmbeddingProvider();
-		const embedText = makeEmbedText({embedder: this.embedder});
-		const embedChunks = makeEmbedChunks({embedder: this.embedder});
 		this.indexRepo = new JsonIndexedNoteRepository(this.indexStorage);
 		this.settingsRepo = new ObsidianSettingsRepository(storage);
+		const embedText = makeEmbedText({embedder: this.embedder, settingsRepo: this.settingsRepo});
 		const activeEditor = new ObsidianActiveEditor(plugin);
 
 		this.isIgnoredPath = makeIsIgnoredPath({
@@ -110,7 +109,7 @@ export class AppContainer {
 
 		this.indexNote = makeIndexNote({
 			prepareNoteForEmbedding: this.prepareNoteForEmbedding,
-			embedChunks,
+			embedText,
 			indexRepo: this.indexRepo,
 			isIgnoredPath: this.isIgnoredPath,
 		});
@@ -118,7 +117,6 @@ export class AppContainer {
 		this.getSimilarNotes = makeGetSimilarNotes({
 			indexRepo: this.indexRepo,
 			embedText,
-			embedChunks,
 			prepareNoteForEmbedding: this.prepareNoteForEmbedding,
 		});
 
