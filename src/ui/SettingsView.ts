@@ -38,7 +38,6 @@ export class SettingView extends PluginSettingTab {
 			maxOverlapPercent: settings.maxOverlapPercent,
 			titleWeight: settings.titleWeight,
 			centroidSearchSteps: settings.centroidSearchSteps,
-			centroidMinChars: settings.centroidMinChars,
 		};
 
 		new Setting(containerEl)
@@ -126,19 +125,10 @@ export class SettingView extends PluginSettingTab {
 		this.addNumericSetting(
 			advancedBody,
 			"Description search steps",
-			`How many times a note's text is halved to home in on its most representative passage (0–${MAX_CENTROID_SEARCH_STEPS}). Each step costs two embeddings per note.`,
+			`How many times a note's text is halved to home in on its most representative passage (0–${MAX_CENTROID_SEARCH_STEPS}). More steps mean shorter, more focused descriptions, at two embeddings per step per note.`,
 			settings.centroidSearchSteps,
 			(value) => {
 				draftIndexing.centroidSearchSteps = value;
-			},
-		);
-		this.addNumericSetting(
-			advancedBody,
-			"Minimum description length",
-			"Descriptions keep taking whole sentences until they reach this many characters.",
-			settings.centroidMinChars,
-			(value) => {
-				draftIndexing.centroidMinChars = value;
 			},
 		);
 		renderAdvancedSection();
@@ -200,7 +190,7 @@ export class SettingView extends PluginSettingTab {
 function validateIndexingSettings(settings: Pick<
 	SimilaritySettings,
 	"maxRawMarkdownChars" | "maxExtractedChars" | "maxOverlapPercent" | "titleWeight"
-	| "centroidSearchSteps" | "centroidMinChars"
+	| "centroidSearchSteps"
 >): string | null {
 	if (settings.maxRawMarkdownChars <= 0) {
 		return "Max raw markdown characters must be greater than 0.";
@@ -216,9 +206,6 @@ function validateIndexingSettings(settings: Pick<
 	}
 	if (settings.centroidSearchSteps < 0 || settings.centroidSearchSteps > MAX_CENTROID_SEARCH_STEPS) {
 		return `Description search steps must be between 0 and ${MAX_CENTROID_SEARCH_STEPS}.`;
-	}
-	if (settings.centroidMinChars <= 0) {
-		return "Minimum description length must be greater than 0.";
 	}
 
 	return null;

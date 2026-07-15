@@ -12,7 +12,6 @@ export function normalizeSettings(
 	const maxOverlapPercent = value?.maxOverlapPercent;
 	const titleWeight = value?.titleWeight;
 	const centroidSearchSteps = value?.centroidSearchSteps;
-	const centroidMinChars = value?.centroidMinChars;
 
 	return {
 		ignoredPaths: Array.isArray(ignored)
@@ -39,9 +38,6 @@ export function normalizeSettings(
 		centroidSearchSteps: typeof centroidSearchSteps === "number" && centroidSearchSteps >= 0
 			? Math.min(centroidSearchSteps, MAX_CENTROID_SEARCH_STEPS)
 			: DEFAULT_SETTINGS.centroidSearchSteps,
-		centroidMinChars: typeof centroidMinChars === "number" && centroidMinChars > 0
-			? centroidMinChars
-			: DEFAULT_SETTINGS.centroidMinChars,
 	};
 }
 

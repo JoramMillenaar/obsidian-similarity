@@ -12,7 +12,8 @@ export type EmbedOneText = (text: string) => Promise<number[] | null>;
  * search then homes in on it: start from the chunk nearest that mean, split it
  * at its sentence midpoint, keep whichever half is nearer, and repeat. Each
  * step halves the text, so the surviving section converges on the part of the
- * note that carries its central idea rather than merely its opening.
+ * note that carries its central idea rather than merely its opening — and, at
+ * the default depth, shrinks to a sentence or two, which is the description.
  *
  * Splits only ever fall on sentence boundaries, so the result is quotable as
  * written and never cuts a sentence in half.
@@ -22,8 +23,6 @@ export async function findCentroidText(args: {
 	chunks: NoteChunk[];
 	/** Binary-search steps. Each one halves the section and costs two embeddings. */
 	steps: number;
-	/** Keep taking leading sentences until the result is at least this long. */
-	minChars: number;
 	embedOne: EmbedOneText;
 }): Promise<string | null> {
 	const target = averageMeaning(args.chunks);
@@ -45,7 +44,7 @@ export async function findCentroidText(args: {
 		section = next;
 	}
 
-	return takeLeadingSentences(section, args.minChars);
+	return section.length > 0 ? section.join(" ") : null;
 }
 
 /** The mean of every chunk, renormalized so it can be compared by cosine like any other unit vector. */
@@ -90,22 +89,4 @@ async function narrowToNearerHalf(
 	return cosineSimilarity(leftEmbedding, target) >= cosineSimilarity(rightEmbedding, target)
 		? left
 		: right;
-}
-
-/**
- * Takes leading sentences until the text is long enough to read as a
- * description — one sentence when it carries its weight, more when the winner
- * is something like "Yes."
- */
-function takeLeadingSentences(sentences: string[], minChars: number): string | null {
-	const picked: string[] = [];
-	let length = 0;
-
-	for (const sentence of sentences) {
-		picked.push(sentence);
-		length += sentence.length;
-		if (length >= minChars) break;
-	}
-
-	return picked.length > 0 ? picked.join(" ") : null;
 }

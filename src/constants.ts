@@ -14,5 +14,4 @@ export const DEFAULT_SETTINGS: SimilaritySettings = {
 	maxOverlapPercent: 15,
 	titleWeight: 3,
 	centroidSearchSteps: 4,
-	centroidMinChars: 80,
 };

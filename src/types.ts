@@ -113,10 +113,8 @@ export interface SimilaritySettings {
 	/** Clamped 0–50: max share of a chunk's token budget reused as sentence overlap with the previous chunk. */
 	maxOverlapPercent: number;
 	titleWeight: number;
-	/** Binary-search steps used to home in on a note's centroid passage. Each step costs two embeddings. */
+	/** Binary-search steps used to home in on a note's centroid passage. Each step halves it and costs two embeddings. */
 	centroidSearchSteps: number;
-	/** Minimum length of a centroid description before it stops taking further sentences. */
-	centroidMinChars: number;
 }
 
 /** Bumped when the on-disk index shape changes. 1 = inline float64 JSON embeddings (legacy). 2 = embeddings in the binary sidecar. */

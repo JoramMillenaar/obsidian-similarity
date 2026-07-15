@@ -296,7 +296,12 @@ export class SimilarNotesListView extends ItemView {
 			}
 
 			if (note.centroid) {
-				textWrapper.createEl("small", {cls: "related-description", text: note.centroid});
+				// Truncated to one line in CSS; the title carries the whole section for hover.
+				textWrapper.createEl("small", {
+					cls: "related-description",
+					text: note.centroid,
+					attr: {title: note.centroid},
+				});
 			}
 
 			const flairOuter = itemSelf.createDiv({cls: "tree-item-flair-outer"});

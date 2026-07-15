@@ -39,7 +39,6 @@ export function makeSummarizeNote(deps: {
 			preparedText: prepared.value.preparedText,
 			chunks: existing.chunks,
 			steps: settings.centroidSearchSteps,
-			minChars: settings.centroidMinChars,
 			embedOne: (text) => embedOne(text, deps.embedText),
 		});
 		if (!centroid) return "skipped";

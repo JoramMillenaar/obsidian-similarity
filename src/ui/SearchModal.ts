@@ -186,7 +186,12 @@ export class SearchModal extends SuggestModal<RelatedNote> {
 		titleEl.addClass("internal-link");
 
 		if (value.centroid) {
-			el.createEl("small", {text: value.centroid, cls: "suggestion-description"});
+			// Truncated to one line in CSS; the title carries the whole section for hover.
+			el.createEl("small", {
+				text: value.centroid,
+				cls: "suggestion-description",
+				attr: {title: value.centroid},
+			});
 		}
 
 		el.createEl("small", {text: `${scorePercent}%`, cls: "suggestion-note"});

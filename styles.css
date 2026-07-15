@@ -87,19 +87,27 @@
 	font-size: 0.85em;
 }
 
-/* Centroid descriptions are whole sentences, so clamp rather than let one
-   long passage stretch the row. */
+/* The description is a whole distilled section, so keep it to a single line and
+   let the title attribute reveal the rest on hover. Deliberately faint: it's
+   supporting context for the title, not competing with it. */
 .related-description,
 .suggestion-description {
-	display: -webkit-box;
-	-webkit-line-clamp: 2;
-	-webkit-box-orient: vertical;
+	display: block;
+	max-width: 100%;
 	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
 	margin-top: 0.15em;
-	color: var(--text-muted);
+	color: var(--text-faint);
 	font-size: var(--font-smallest);
 	line-height: 1.35;
-	white-space: normal;
+}
+
+/* Without this the row grows to fit the description instead of ellipsing it:
+   a flex item's default min-width is its content. */
+.related-text {
+	min-width: 0;
+	overflow: hidden;
 }
 
 .similarity-setting-section-heading {
