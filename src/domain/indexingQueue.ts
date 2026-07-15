@@ -140,6 +140,18 @@ export function getIndexingBannerState(
 		};
 	}
 
+	// Summarizing only ever runs once the note queue has drained, so it can't
+	// mask indexing progress by taking precedence here.
+	if (snapshot.phase === "summarizing") {
+		return {
+			kind: "summarizing",
+			message: "Generating note descriptions. Related notes are already available.",
+			progressLabel,
+			processed,
+			total,
+		};
+	}
+
 	if (snapshot.isRunning || snapshot.pending > 0) {
 		return {
 			kind: snapshot.hasCompletedInitialIndex ? "updating" : "initial",

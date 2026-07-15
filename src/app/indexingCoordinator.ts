@@ -7,6 +7,7 @@ import {
 } from "../types";
 import { IndexRepository, NoteSource, SettingsRepository } from "../ports";
 import { IndexNoteOutcome, IndexNoteUseCase } from "./indexNote";
+import { SummarizeNoteUseCase } from "./summarizeNote";
 import { IndexingRuntime } from "./indexingRuntime";
 import {
 	BuildIndexSyncPlanUseCase,
@@ -36,6 +37,7 @@ type IndexingCoordinatorDeps = {
 	indexRepo: IndexRepository;
 	settingsRepo: SettingsRepository;
 	indexNote: IndexNoteUseCase;
+	summarizeNote: SummarizeNoteUseCase;
 };
 
 export class IndexingCoordinator {
@@ -208,6 +210,13 @@ export class IndexingCoordinator {
 				const noteId = this.runtime.takeNext();
 				if (!noteId) {
 					await this.deps.indexRepo.flush();
+
+					// Every note is embedded, so their average meanings are final and
+					// descriptions can be derived. This can take a while, so it yields
+					// the moment new indexing work shows up.
+					await this.runSummarizingPass();
+					if (this.runtime.hasPendingWork()) continue;
+
 					this.runtime.finishRun();
 					await this.maybePersistInitialIndexCompleted();
 					return;
@@ -240,6 +249,43 @@ export class IndexingCoordinator {
 			const message = error instanceof Error ? error.message : String(error);
 			this.runtime.markFatalError(message);
 			console.error("[Similarity] Indexing coordinator stopped:", error);
+		}
+	}
+
+	/**
+	 * Backfills centroid descriptions for notes that lack one. Indexing clears a
+	 * note's centroid whenever it rewrites it, so "missing" doubles as the queue:
+	 * the pass is incremental, resumes after a crash, and catches up with edits
+	 * without any bookkeeping of its own.
+	 */
+	private async runSummarizingPass(): Promise<void> {
+		const pending = (await this.deps.indexRepo.listAll())
+			.filter((note) => note.centroid === undefined);
+		if (pending.length === 0) {
+			return;
+		}
+
+		this.runtime.beginSummarizing(pending.length);
+		try {
+			for (const note of pending) {
+				// Indexing is what users are waiting on — let it interrupt us. The
+				// leftovers get picked up on the next drain.
+				if (this.isUnloaded || this.runtime.hasPendingWork()) {
+					return;
+				}
+
+				try {
+					await this.deps.summarizeNote(note.id);
+				} catch (error) {
+					console.error(`[Similarity] Failed to summarize note ${note.id}:`, error);
+				}
+
+				this.runtime.recordSummarized();
+			}
+
+			await this.deps.indexRepo.flush();
+		} finally {
+			this.runtime.finishSummarizing();
 		}
 	}
 

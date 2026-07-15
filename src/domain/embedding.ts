@@ -20,6 +20,35 @@ export function normalizeEmbedding(embedding: Embedding): Embedding {
 }
 
 /**
+ * The mean of several vectors — a document's "average meaning" when given all
+ * of its chunks. Not used for ranking: pooling a note into one vector is what
+ * maxPairwiseSimilarity deliberately avoids. It's the target the centroid
+ * search steers toward.
+ */
+export function averageEmbeddings(embeddings: Embedding[]): Embedding | null {
+	if (embeddings.length === 0) return null;
+
+	const embeddingSize = embeddings[0].length;
+	const meanEmbedding = new Array<number>(embeddingSize).fill(0);
+
+	for (const embedding of embeddings) {
+		if (embedding.length !== embeddingSize) {
+			throw new Error(`averageEmbeddings: length mismatch (${embedding.length} vs ${embeddingSize})`);
+		}
+
+		for (let i = 0; i < embeddingSize; i++) {
+			meanEmbedding[i] += embedding[i];
+		}
+	}
+
+	for (let i = 0; i < embeddingSize; i++) {
+		meanEmbedding[i] /= embeddings.length;
+	}
+
+	return meanEmbedding;
+}
+
+/**
  * Similarity between two chunked documents: the best score over every pair of
  * chunks. Two notes are related if ANY passage of one matches any passage of
  * the other — averaging the chunks instead would dilute a strong local match

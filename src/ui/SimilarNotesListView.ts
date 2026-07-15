@@ -2,7 +2,7 @@ import { ItemView, Notice, TFile, WorkspaceLeaf } from "obsidian";
 import { GetSimilarNotesUseCase } from "../app/getSimilarNotes";
 import { StartOrRefreshIndexSyncUseCase, SubscribeIndexingStateUseCase, } from "../app/indexingCoordinator";
 import { isMarkdownPath } from "../domain/markdownPath";
-import { IndexingQueueSnapshot } from "../types";
+import { IndexingQueueSnapshot, RelatedNote } from "../types";
 import { IndexRepository } from "../ports";
 
 export function logError(message: unknown, ...optionalParams: unknown[]) {
@@ -11,7 +11,7 @@ export function logError(message: unknown, ...optionalParams: unknown[]) {
 
 export const VIEW_TYPE_SIMILARITY = "similarity";
 
-type SimilarNote = { id: string; score: number };
+type SimilarNote = RelatedNote;
 
 export type SimilarNotesListViewDeps = {
 	indexRepo: IndexRepository;
@@ -27,6 +27,7 @@ export class SimilarNotesListView extends ItemView {
 	private lastAutoRefreshAt = 0;
 	private indexingState: IndexingQueueSnapshot = {
 		isRunning: false,
+		phase: "indexing",
 		hasCompletedInitialIndex: false,
 		pending: 0,
 		processed: 0,
@@ -292,6 +293,10 @@ export class SimilarNotesListView extends ItemView {
 
 			if (parentPath) {
 				textWrapper.createEl("small", {cls: "related-parent", text: parentPath});
+			}
+
+			if (note.centroid) {
+				textWrapper.createEl("small", {cls: "related-description", text: note.centroid});
 			}
 
 			const flairOuter = itemSelf.createDiv({cls: "tree-item-flair-outer"});

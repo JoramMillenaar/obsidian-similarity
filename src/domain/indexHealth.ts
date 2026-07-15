@@ -95,9 +95,11 @@ function validateEntry(
 ): IndexEntryV2 | null {
 	if (!isRecord(candidate)) return null;
 
-	const {id, contentHash, updatedAt, chunks} = candidate;
+	const {id, contentHash, updatedAt, chunks, centroid} = candidate;
 	if (!isNonEmptyString(id) || seenIds.has(id)) return null;
 	if (!isNonEmptyString(contentHash) || !isNonEmptyString(updatedAt)) return null;
+	// Absent is the normal pre-summarizing state; present-but-empty is corruption.
+	if (centroid !== undefined && !isNonEmptyString(centroid)) return null;
 	// A v1 entry carries its vector inline and has no chunks at all; a v2 entry
 	// with no chunks points at nothing and can never match a query.
 	if (!Array.isArray(chunks) || chunks.length === 0) return null;
@@ -113,7 +115,13 @@ function validateEntry(
 		validated.push(validChunk);
 	}
 
-	return {id, contentHash, updatedAt, chunks: validated};
+	return {
+		id,
+		contentHash,
+		updatedAt,
+		chunks: validated,
+		...(centroid === undefined ? {} : {centroid}),
+	};
 }
 
 function validateChunk(

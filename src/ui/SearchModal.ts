@@ -23,6 +23,7 @@ export class SearchModal extends SuggestModal<RelatedNote> {
 	private isAutoRefreshing = false;
 	private indexingState: IndexingQueueSnapshot = {
 		isRunning: false,
+		phase: "indexing",
 		hasCompletedInitialIndex: false,
 		pending: 0,
 		processed: 0,
@@ -183,6 +184,10 @@ export class SearchModal extends SuggestModal<RelatedNote> {
 
 		const titleEl = el.createDiv({text: fileName});
 		titleEl.addClass("internal-link");
+
+		if (value.centroid) {
+			el.createEl("small", {text: value.centroid, cls: "suggestion-description"});
+		}
 
 		el.createEl("small", {text: `${scorePercent}%`, cls: "suggestion-note"});
 	}

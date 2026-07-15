@@ -42,6 +42,7 @@ export function packIndexedNotesToV2(notes: IndexedNote[]): PackedIndex {
 			contentHash: note.contentHash,
 			updatedAt: note.updatedAt,
 			chunks,
+			...(note.centroid === undefined ? {} : {centroid: note.centroid}),
 		};
 		return entry;
 	});
@@ -79,6 +80,7 @@ export function unpackV2ToIndexedNotes(
 			chunks,
 			contentHash: entry.contentHash,
 			updatedAt: entry.updatedAt,
+			...(entry.centroid === undefined ? {} : {centroid: entry.centroid}),
 		});
 	}
 

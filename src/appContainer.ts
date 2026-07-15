@@ -13,6 +13,7 @@ import { GetSimilarNotesUseCase, makeGetSimilarNotes } from "./app/getSimilarNot
 import { InsertWikilinkAtCursorUseCase, makeInsertWikilinkAtCursor } from "./app/insertWikilinkAtCursor";
 import { makeSyncIndexToVault, SyncIndexToVaultUseCase } from "./app/syncIndexToVault";
 import { makeEmbedText } from "./app/embedText";
+import { makeSummarizeNote } from "./app/summarizeNote";
 import {
 	EmbeddingPort,
 	IndexRepository,
@@ -122,11 +123,19 @@ export class AppContainer {
 			noteSource: this.noteSource,
 		});
 
+		const summarizeNote = makeSummarizeNote({
+			indexRepo: this.indexRepo,
+			prepareNoteForEmbedding: this.prepareNoteForEmbedding,
+			embedText,
+			settingsRepo: this.settingsRepo,
+		});
+
 		const indexingCoordinator = makeIndexingCoordinator({
 			noteSource: this.noteSource,
 			indexRepo: this.indexRepo,
 			settingsRepo: this.settingsRepo,
 			indexNote: this.indexNote,
+			summarizeNote,
 		});
 
 		this.syncIndexToVault = makeSyncIndexToVault({

@@ -71,6 +71,7 @@ export function makeGetSimilarNotes(deps: {
 			.map(n => ({
 				id: n.id,
 				score: maxPairwiseSimilarity(finalChunks, n.chunks.map((chunk) => chunk.embedding)),
+				centroid: n.centroid,
 			}))
 			.filter(r => Number.isFinite(r.score) && r.score >= minScore)
 			.sort((a, b) => b.score - a.score)

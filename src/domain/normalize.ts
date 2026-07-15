@@ -1,5 +1,5 @@
 import { IndexV2, SCHEMA_VERSION, SimilarityPluginData, SimilaritySettings } from "../types";
-import { DEFAULT_SETTINGS, MAX_OVERLAP_PERCENT } from "../constants";
+import { DEFAULT_SETTINGS, MAX_CENTROID_SEARCH_STEPS, MAX_OVERLAP_PERCENT } from "../constants";
 
 export function normalizeSettings(
 	value: Partial<SimilaritySettings> | undefined,
@@ -11,6 +11,8 @@ export function normalizeSettings(
 	const maxExtractedChars = value?.maxExtractedChars;
 	const maxOverlapPercent = value?.maxOverlapPercent;
 	const titleWeight = value?.titleWeight;
+	const centroidSearchSteps = value?.centroidSearchSteps;
+	const centroidMinChars = value?.centroidMinChars;
 
 	return {
 		ignoredPaths: Array.isArray(ignored)
@@ -34,6 +36,12 @@ export function normalizeSettings(
 		titleWeight: typeof titleWeight === "number" && titleWeight >= 0
 			? titleWeight
 			: DEFAULT_SETTINGS.titleWeight,
+		centroidSearchSteps: typeof centroidSearchSteps === "number" && centroidSearchSteps >= 0
+			? Math.min(centroidSearchSteps, MAX_CENTROID_SEARCH_STEPS)
+			: DEFAULT_SETTINGS.centroidSearchSteps,
+		centroidMinChars: typeof centroidMinChars === "number" && centroidMinChars > 0
+			? centroidMinChars
+			: DEFAULT_SETTINGS.centroidMinChars,
 	};
 }
 

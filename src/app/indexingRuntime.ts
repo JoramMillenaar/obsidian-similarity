@@ -24,6 +24,7 @@ export class IndexingRuntime {
 	private fatalError: string | undefined;
 	private lifetimeIndexed = 0;
 	private lifetimeDeleted = 0;
+	private summarizing: { processed: number; total: number } | null = null;
 	private readonly listeners = new Set<(snapshot: IndexingQueueSnapshot) => void>();
 	private readonly noteWaiters = new Map<string, Array<() => void>>();
 	private drainWaiters: Array<() => void> = [];
@@ -37,16 +38,32 @@ export class IndexingRuntime {
 	}
 
 	getSnapshot(): IndexingQueueSnapshot {
-		const base = {
-			isRunning: this.isRunning,
-			hasCompletedInitialIndex: this.hasCompletedInitialIndex,
-			currentNoteId: this.currentNoteId,
-			pending: countQueuedNotes(this.queue),
-			processed: this.processedInRun,
-			total: this.processedInRun + countQueuedNotes(this.queue) + (this.currentNoteId ? 1 : 0),
-			failed: this.failedInRun,
-			fatalError: this.fatalError,
-		};
+		// While summarizing, progress reports that pass's own counts — the note
+		// queue is drained by definition, so its counters would read as idle.
+		const summarizing = this.summarizing;
+		const base = summarizing
+			? {
+				isRunning: true,
+				phase: "summarizing" as const,
+				hasCompletedInitialIndex: this.hasCompletedInitialIndex,
+				currentNoteId: undefined,
+				pending: Math.max(0, summarizing.total - summarizing.processed),
+				processed: summarizing.processed,
+				total: summarizing.total,
+				failed: this.failedInRun,
+				fatalError: this.fatalError,
+			}
+			: {
+				isRunning: this.isRunning,
+				phase: "indexing" as const,
+				hasCompletedInitialIndex: this.hasCompletedInitialIndex,
+				currentNoteId: this.currentNoteId,
+				pending: countQueuedNotes(this.queue),
+				processed: this.processedInRun,
+				total: this.processedInRun + countQueuedNotes(this.queue) + (this.currentNoteId ? 1 : 0),
+				failed: this.failedInRun,
+				fatalError: this.fatalError,
+			};
 
 		return {
 			...base,
@@ -149,9 +166,31 @@ export class IndexingRuntime {
 		this.failedInRun++;
 	}
 
+	beginSummarizing(total: number) {
+		if (total <= 0) return;
+
+		this.summarizing = {processed: 0, total};
+		this.emit();
+	}
+
+	recordSummarized() {
+		if (!this.summarizing) return;
+
+		this.summarizing.processed++;
+		this.emit();
+	}
+
+	finishSummarizing() {
+		if (!this.summarizing) return;
+
+		this.summarizing = null;
+		this.emit();
+	}
+
 	finishRun() {
 		this.currentNoteId = undefined;
 		this.isRunning = false;
+		this.summarizing = null;
 		this.emit();
 		this.resolveDrainWaiters();
 	}
@@ -159,6 +198,7 @@ export class IndexingRuntime {
 	markFatalError(message: string) {
 		this.currentNoteId = undefined;
 		this.isRunning = false;
+		this.summarizing = null;
 		this.fatalError = message;
 		this.emit();
 		this.resolveDrainWaiters();
@@ -234,6 +274,7 @@ export class IndexingRuntime {
 		this.queue = createEmptyIndexQueue();
 		this.currentNoteId = undefined;
 		this.isRunning = false;
+		this.summarizing = null;
 
 		for (const waiters of this.noteWaiters.values()) {
 			for (const waiter of waiters) {

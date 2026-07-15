@@ -87,6 +87,21 @@
 	font-size: 0.85em;
 }
 
+/* Centroid descriptions are whole sentences, so clamp rather than let one
+   long passage stretch the row. */
+.related-description,
+.suggestion-description {
+	display: -webkit-box;
+	-webkit-line-clamp: 2;
+	-webkit-box-orient: vertical;
+	overflow: hidden;
+	margin-top: 0.15em;
+	color: var(--text-muted);
+	font-size: var(--font-smallest);
+	line-height: 1.35;
+	white-space: normal;
+}
+
 .similarity-setting-section-heading {
 	cursor: pointer;
 }

@@ -24,11 +24,19 @@ export type IndexedNote = {
 	chunks: NoteChunk[];
 	contentHash: string,
 	updatedAt: string,
+	/**
+	 * The note's most representative passage, shown as its description.
+	 * Undefined until the summarizing pass computes it — indexing never writes
+	 * it, so re-indexing a note clears it and it gets recomputed.
+	 */
+	centroid?: string;
 };
 
 export type RelatedNote = {
 	id: string;
 	score: number;
+	/** The note's centroid passage, when one has been computed. */
+	centroid?: string;
 };
 
 export interface IframeMessage {
@@ -47,15 +55,19 @@ export type OnProgressCallback = (p: { phase: string; processed: number; total: 
 export type IndexingPriorityReason = "seed" | "open" | "edit" | "manual";
 
 export type IndexingBannerState = {
-	kind: "hidden" | "initial" | "updating" | "failed";
+	kind: "hidden" | "initial" | "updating" | "summarizing" | "failed";
 	message: string;
 	progressLabel?: string;
 	processed: number;
 	total: number;
 };
 
+/** Indexing embeds notes; summarizing derives each note's centroid description afterwards. */
+export type IndexingPhase = "indexing" | "summarizing";
+
 export type IndexingQueueSnapshot = {
 	isRunning: boolean;
+	phase: IndexingPhase;
 	hasCompletedInitialIndex: boolean;
 	currentNoteId?: string;
 	pending: number;
@@ -101,6 +113,10 @@ export interface SimilaritySettings {
 	/** Clamped 0–50: max share of a chunk's token budget reused as sentence overlap with the previous chunk. */
 	maxOverlapPercent: number;
 	titleWeight: number;
+	/** Binary-search steps used to home in on a note's centroid passage. Each step costs two embeddings. */
+	centroidSearchSteps: number;
+	/** Minimum length of a centroid description before it stops taking further sentences. */
+	centroidMinChars: number;
 }
 
 /** Bumped when the on-disk index shape changes. 1 = inline float64 JSON embeddings (legacy). 2 = embeddings in the binary sidecar. */
@@ -118,6 +134,8 @@ export type IndexEntryV2 = {
 	contentHash: string;
 	updatedAt: string;
 	chunks: ChunkEntryV2[];
+	/** Optional: absent means the summarizing pass hasn't reached this note yet. */
+	centroid?: string;
 };
 
 export type IndexV2 = IndexEntryV2[];
