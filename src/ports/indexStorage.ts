@@ -1,4 +1,14 @@
 import { IndexedNote } from "../types";
+import { IndexUnusableReason } from "../domain/indexHealth";
+
+export type IndexRepairOutcome = {
+	/** True when the index is now empty but shouldn't be — the caller must force a full reindex. */
+	rebuildRequired: boolean;
+	/** Ids of entries dropped as damaged. The normal sync plan re-indexes these. */
+	droppedIds: string[];
+	/** Set only when the whole index was discarded. */
+	discardedReason?: IndexUnusableReason;
+};
 
 export interface IndexStorage {
 	getAll(): Promise<IndexedNote[]>;
@@ -10,9 +20,10 @@ export interface IndexStorage {
 
 	isEmpty(): Promise<boolean>;
 
-	/** True if the persisted index references embeddings the binary sidecar can no longer supply (missing/corrupt/dim mismatch). */
-	needsRebuild(): Promise<boolean>;
-
-	/** One-time read of the pre-migration shape (inline float64 embeddings). Returns null once already migrated. */
-	readLegacy(): Promise<IndexedNote[] | null>;
+	/**
+	 * Verifies the persisted index and heals it in place: drops damaged entries,
+	 * or discards everything if the fault is index-wide. Idempotent — a second
+	 * run over a healthy index changes nothing.
+	 */
+	repair(): Promise<IndexRepairOutcome>;
 }

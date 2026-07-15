@@ -13,11 +13,15 @@
 
 	const sentenceSegmenter = new Intl.Segmenter('und', {granularity: 'sentence'});
 
+	// Yields each sentence with its span in `text`. Offsets are of the TRIMMED
+	// sentence, so a chunk's [start, end) maps back onto the caller's own string.
 	function segmentSentences(text) {
 		const sentences = [];
-		for (const {segment} of sentenceSegmenter.segment(text)) {
+		for (const {segment, index} of sentenceSegmenter.segment(text)) {
 			const trimmed = segment.trim();
-			if (trimmed) sentences.push(trimmed);
+			if (!trimmed) continue;
+			const start = index + (segment.length - segment.trimStart().length);
+			sentences.push({text: trimmed, start, end: start + trimmed.length});
 		}
 		return sentences;
 	}
@@ -55,17 +59,19 @@
 
 		async generateDocumentEmbeddings(text, maxOverlapPercent) {
 			await this.ready;
-			const input = text.trim();
-			if (!input) return [];
+			if (!text.trim()) return [];
 
-			const chunks = this.#chunkText(input, maxOverlapPercent);
+			// Chunk the caller's string as-is, so the spans we report index into it.
+			const chunks = this.#chunkText(text, maxOverlapPercent);
 
-			const embeddings = [];
+			const embedded = [];
 			for (const chunk of chunks) {
-				const data = await this.#embed(chunk);
-				if (data && data.length) embeddings.push(Array.from(data));
+				const data = await this.#embed(chunk.text);
+				if (data && data.length) {
+					embedded.push({embedding: Array.from(data), start: chunk.start, end: chunk.end});
+				}
 			}
-			return embeddings;
+			return embedded;
 		}
 
 
@@ -78,16 +84,21 @@
 			const overlapBudget = Math.floor((CHUNK_TOKEN_BUDGET * clampedPercent) / 100);
 
 			const sentences = segmentSentences(text)
-				.map((sentence) => ({text: sentence, tokens: this.#countTokens(sentence)}));
+				.map((sentence) => ({...sentence, tokens: this.#countTokens(sentence.text)}));
 			if (sentences.length === 0) return [];
 
 			const chunks = [];
 			let current = [];
 			let currentTokens = 0;
 
+			// A chunk spans from its first sentence's start to its last one's end.
 			const flush = () => {
 				if (current.length === 0) return;
-				chunks.push(current.map((sentence) => sentence.text).join(' '));
+				chunks.push({
+					text: current.map((sentence) => sentence.text).join(' '),
+					start: current[0].start,
+					end: current[current.length - 1].end,
+				});
 			};
 
 			const overlapSeed = () => {
@@ -107,7 +118,7 @@
 				// its own chunk and let the pipeline truncate it.
 				if (sentence.tokens >= CHUNK_TOKEN_BUDGET) {
 					flush();
-					chunks.push(sentence.text);
+					chunks.push({text: sentence.text, start: sentence.start, end: sentence.end});
 					current = [];
 					currentTokens = 0;
 					continue;

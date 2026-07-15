@@ -9,7 +9,6 @@ import { BinaryEmbeddingFileStore } from "./infra/obsidian/binaryEmbeddingFileSt
 import { EmbeddingProvider } from "./infra/embedder/embeddingProvider";
 import { JsonIndexedNoteRepository } from "./infra/index/jsonIndexedNoteRepository";
 import { IndexNoteUseCase, makeIndexNote } from "./app/indexNote";
-import { makeMigrateStore, MigrateStoreUseCase } from "./app/makeMigrateStore";
 import { GetSimilarNotesUseCase, makeGetSimilarNotes } from "./app/getSimilarNotes";
 import { InsertWikilinkAtCursorUseCase, makeInsertWikilinkAtCursor } from "./app/insertWikilinkAtCursor";
 import { makeSyncIndexToVault, SyncIndexToVaultUseCase } from "./app/syncIndexToVault";
@@ -59,7 +58,6 @@ export class AppContainer {
 	readonly embedder: EmbeddingPort;
 	readonly indexRepo: IndexRepository;
 	readonly settingsRepo: SettingsRepository;
-	readonly migrateStore: MigrateStoreUseCase;
 
 	readonly indexNote: IndexNoteUseCase;
 	readonly prepareNoteForEmbedding: PrepareNoteForEmbeddingUseCase;
@@ -90,7 +88,6 @@ export class AppContainer {
 			new ObsidianPluginDataIndexStorage(storage, binaryEmbeddingStore),
 			INDEX_WRITE_THROTTLE_MS,
 		);
-		this.migrateStore = makeMigrateStore({indexStorage: this.indexStorage});
 		this.embedder = new EmbeddingProvider();
 		this.indexRepo = new JsonIndexedNoteRepository(this.indexStorage);
 		this.settingsRepo = new ObsidianSettingsRepository(storage);

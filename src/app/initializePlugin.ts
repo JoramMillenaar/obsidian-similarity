@@ -11,11 +11,19 @@ export async function initializePlugin(
 
 	try {
 		await app.embedder.load();
-		await app.migrateStore();
 
-		if (await app.indexStorage.needsRebuild()) {
-			await app.indexStorage.rewrite([]);
-			await app.indexStorage.flush();
+		const repair = await app.indexStorage.repair();
+		if (repair.discardedReason) {
+			console.warn(`[Similarity] Index discarded (${repair.discardedReason}) — rebuilding from scratch.`);
+		}
+		if (repair.droppedIds.length > 0) {
+			console.warn(
+				`[Similarity] Dropped ${repair.droppedIds.length} damaged index entries; they will be re-indexed.`,
+				repair.droppedIds,
+			);
+		}
+
+		if (repair.rebuildRequired) {
 			app.status.update("Rebuilding index…");
 			void app.startOrRefreshIndexSync({forceReindexAll: true, awaitCompletion: false}).catch((error) => {
 				console.error("[Similarity] Index rebuild failed", error);

@@ -27,7 +27,7 @@
 import { DataAdapter, normalizePath } from "obsidian";
 import { IndexedNote } from "../types";
 import { decodeEmbeddings, encodeEmbeddings } from "../domain/embeddingCodec";
-import { packIndexedNotesToV2, unpackV2ToIndexedNotes } from "../domain/migrateEmbeddingStore";
+import { packIndexedNotesToV2, unpackV2ToIndexedNotes } from "../domain/indexPacking";
 import { heapUsedMB, kb, makeSeedIndex, measure, ms, mulberry32 } from "./benchmarkShared";
 
 // ---------------------------------------------------------------------------

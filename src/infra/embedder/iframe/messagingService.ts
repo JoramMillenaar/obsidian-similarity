@@ -1,3 +1,4 @@
+import { EmbeddedChunk } from "../../../ports";
 import { IframeMessage } from "../../../types";
 
 const EMBED_TIMEOUT_MS = 30000;
@@ -5,7 +6,7 @@ const EMBED_TIMEOUT_MS = 30000;
 export class IframeMessenger {
     private iframe: HTMLIFrameElement | null = null;
     private requestIdCounter = 0;
-    private pendingRequests = new Map<number, { resolve: (data: number[][]) => void; reject: (error: Error) => void; timeoutId: number }>();
+    private pendingRequests = new Map<number, { resolve: (data: EmbeddedChunk[]) => void; reject: (error: Error) => void; timeoutId: number }>();
 
     constructor(private iframeId: string, private workerScript: string) {}
 
@@ -36,7 +37,7 @@ export class IframeMessenger {
         if (event.origin !== window.location.origin) return;
         if (event.source !== this.iframe?.contentWindow) return;
 
-        const { requestId, data, error } = event.data as { requestId: number; data: number[][]; error?: string };
+        const { requestId, data, error } = event.data as { requestId: number; data: EmbeddedChunk[]; error?: string };
         const pending = this.pendingRequests.get(requestId);
 
         if (!pending) return;
@@ -52,7 +53,7 @@ export class IframeMessenger {
         pending.resolve(data);
     };
 
-    async sendMessage(payload: string, maxOverlapPercent: number, retries = 3): Promise<number[][] | null> {
+    async sendMessage(payload: string, maxOverlapPercent: number, retries = 3): Promise<EmbeddedChunk[] | null> {
         if (!this.iframe || !this.iframe.contentWindow) {
             throw new Error("Could not find the Iframe. Is it loaded'?");
         }
@@ -62,7 +63,7 @@ export class IframeMessenger {
             const message: IframeMessage = { requestId, payload, maxOverlapPercent };
 
             try {
-                return await new Promise<number[][]>((resolve, reject) => {
+                return await new Promise<EmbeddedChunk[]>((resolve, reject) => {
                     const timeoutId = window.setTimeout(() => {
                         if (this.pendingRequests.has(requestId)) {
                             this.pendingRequests.delete(requestId);

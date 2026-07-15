@@ -1,7 +1,8 @@
 import { hashText } from "../domain/text";
 import { normalizeEmbedding } from "../domain/embedding";
 import { isMarkdownPath } from "../domain/markdownPath";
-import { PrepareNoteResult } from "../types";
+import { EmbeddedChunk } from "../ports";
+import { NoteChunk, PrepareNoteResult } from "../types";
 import { IndexRepository } from "../ports";
 import { EmbedTextUseCase } from "./embedText";
 import { IsIgnoredPath } from "./isIgnoredPath";
@@ -48,21 +49,21 @@ export function makeIndexNote(deps: IndexNoteDeps): IndexNoteUseCase {
 			return "unchanged";
 		}
 
-		let rawEmbedding: number[] | null;
+		let embedded: EmbeddedChunk[] | null;
 		try {
-			rawEmbedding = await deps.embedText(prepared.value.preparedText);
+			embedded = await deps.embedText(prepared.value.preparedText);
 		} catch (error) {
 			await deps.indexRepo.remove(noteId);
 			throw error;
 		}
-		if (!rawEmbedding?.length) {
+		if (!embedded?.length) {
 			await deps.indexRepo.remove(noteId);
 			return "removed";
 		}
 
 		const indexedNote = {
 			id: noteId,
-			embedding: normalizeEmbedding(rawEmbedding),
+			chunks: toNoteChunks(embedded, prepared.value.preparedText),
 			contentHash,
 			updatedAt: new Date().toISOString(),
 		};
@@ -70,4 +71,15 @@ export function makeIndexNote(deps: IndexNoteDeps): IndexNoteUseCase {
 		await deps.indexRepo.upsert(indexedNote);
 		return "indexed";
 	}
+}
+
+function toNoteChunks(embedded: EmbeddedChunk[], preparedText: string): NoteChunk[] {
+	return embedded.map((chunk) => ({
+		// The model already returns unit vectors, but the binary sidecar's int8
+		// quantization assumes it — re-normalize so that stays true by construction.
+		embedding: normalizeEmbedding(chunk.embedding),
+		start: chunk.start,
+		end: chunk.end,
+		hash: hashText(preparedText.slice(chunk.start, chunk.end)),
+	}));
 }

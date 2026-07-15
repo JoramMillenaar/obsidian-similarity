@@ -6,7 +6,7 @@
  * Only ever reached behind an `if (__DEV__)` guard, so it is tree-shaken out of
  * production builds along with its importers.
  */
-import { IndexedNote } from "../types";
+import { IndexedNote, NoteChunk } from "../types";
 
 // ---------------------------------------------------------------------------
 // Timing
@@ -89,14 +89,20 @@ export function randomUnitEmbedding(dim: number, rng: () => number): number[] {
 export function makeSeedIndex(count: number, dim: number, rng: () => number): IndexedNote[] {
 	const notes: IndexedNote[] = [];
 	for (let i = 0; i < count; i++) {
+		const contentHash = Math.floor(rng() * 0xffffffff).toString(16).padStart(8, "0");
 		notes.push({
 			id: `seed-${i}.md`,
-			embedding: randomUnitEmbedding(dim, rng),
-			contentHash: Math.floor(rng() * 0xffffffff).toString(16).padStart(8, "0"),
+			chunks: [seedChunk(randomUnitEmbedding(dim, rng), contentHash)],
+			contentHash,
 			updatedAt: new Date(0).toISOString(),
 		});
 	}
 	return notes;
+}
+
+/** A single-chunk note, with a span wide enough to pass the index health check. */
+function seedChunk(embedding: number[], hash: string): NoteChunk {
+	return {embedding, start: 0, end: 1, hash};
 }
 
 // ---------------------------------------------------------------------------

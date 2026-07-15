@@ -1,5 +1,5 @@
 import { IndexedNote } from "../types";
-import { IndexStorage } from "../ports";
+import { IndexRepairOutcome, IndexStorage } from "../ports";
 
 /**
  * Wraps an IndexStorage so that rapid rewrite() calls coalesce into at most
@@ -36,12 +36,9 @@ export class ThrottledIndexStorage implements IndexStorage {
 		return await this.underlying.isEmpty();
 	}
 
-	async needsRebuild(): Promise<boolean> {
-		return await this.underlying.needsRebuild();
-	}
-
-	async readLegacy(): Promise<IndexedNote[] | null> {
-		return await this.underlying.readLegacy();
+	async repair(): Promise<IndexRepairOutcome> {
+		await this.flush();
+		return await this.underlying.repair();
 	}
 
 	async flush(): Promise<void> {

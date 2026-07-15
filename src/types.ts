@@ -12,9 +12,16 @@ export type NoteIndexCandidate = {
 	recentOpenRank?: number;
 };
 
+export type NoteChunk = {
+	embedding: number[];
+	start: number;
+	end: number;
+	hash: string;
+};
+
 export type IndexedNote = {
 	id: string;
-	embedding: number[];
+	chunks: NoteChunk[];
 	contentHash: string,
 	updatedAt: string,
 };
@@ -115,8 +122,20 @@ export type IndexEntryV2 = {
 
 export type IndexV2 = IndexEntryV2[];
 
-/** The pre-migration on-disk shape: embeddings inline as float64 JSON arrays. */
-export type LegacyIndexV1 = IndexedNote[];
+/**
+ * The v1 on-disk shape: embeddings inline as float64 JSON arrays. Frozen, and
+ * deliberately decoupled from IndexedNote so the live type can evolve freely.
+ * v1 vectors are never migrated forward — the health check detects them and
+ * discards the index so it rebuilds under the current representation.
+ */
+export type LegacyNoteV1 = {
+	id: string;
+	embedding: number[];
+	contentHash: string;
+	updatedAt: string;
+};
+
+export type LegacyIndexV1 = LegacyNoteV1[];
 
 export interface SimilarityPluginData {
 	settings: SimilaritySettings;

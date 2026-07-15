@@ -25,6 +25,7 @@
 import { IndexedNote, NoteIndexCandidate, RawNote, SimilaritySettings } from "../types";
 import {
 	EmbeddingPort,
+	IndexRepairOutcome,
 	IndexRepository,
 	IndexStorage,
 	MarkdownTextExtractor,
@@ -126,12 +127,8 @@ class InMemoryIndexStorage implements IndexStorage {
 		return this.serialized === "[]";
 	}
 
-	async needsRebuild(): Promise<boolean> {
-		return false;
-	}
-
-	async readLegacy(): Promise<IndexedNote[] | null> {
-		return null;
+	async repair(): Promise<IndexRepairOutcome> {
+		return {rebuildRequired: false, droppedIds: []};
 	}
 
 	/** Replace the whole index without counting it as a measured write. */
@@ -414,7 +411,7 @@ export async function runIndexingBenchmark(opts: BenchmarkOptions): Promise<void
 
 	// Probe the real embedding dimensionality so synthetic seeds match.
 	const probe = await opts.embedder.embed("benchmark probe text", {maxOverlapPercent: 0});
-	const dim = probe?.[0]?.length ?? 384;
+	const dim = probe?.[0]?.embedding.length ?? 384;
 	log(`  embedding dimensionality: ${dim}`);
 
 	const h = buildHarness(opts);
@@ -445,7 +442,7 @@ export async function runIndexingBenchmark(opts: BenchmarkOptions): Promise<void
 			...seed,
 			{
 				id: updateId,
-				embedding: randomUnitEmbedding(dim, rng),
+				chunks: [{embedding: randomUnitEmbedding(dim, rng), start: 0, end: 1, hash: "deadbeef"}],
 				contentHash: "deadbeef",
 				updatedAt: new Date(0).toISOString(),
 			},
