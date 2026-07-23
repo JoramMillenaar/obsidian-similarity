@@ -9,8 +9,32 @@ import { normalizePath, Notice, Plugin } from "obsidian";
 import { AppContainer } from "../appContainer";
 import { runIndexingBenchmark } from "./benchmarkIndexing";
 import { runStorageBenchmark } from "./benchmarkStorage";
+import { NotePipelineInspectorModal } from "./NotePipelineInspectorModal";
+import { isMarkdownPath } from "../domain/markdownPath";
 
 export function registerDevCommands(plugin: Plugin, container: AppContainer): void {
+	plugin.addCommand({
+		id: "dev-inspect-note-pipeline",
+		name: "DEV: Inspect note pipeline (extracted text & chunks)",
+		callback: () => {
+			const file = plugin.app.workspace.getActiveFile();
+			if (!file) {
+				new Notice("Open a note to inspect its pipeline");
+				return;
+			}
+			if (!isMarkdownPath(file.path)) {
+				new Notice("Only Markdown notes have a pipeline to inspect");
+				return;
+			}
+			new NotePipelineInspectorModal(plugin.app, {
+				noteSource: container.noteSource,
+				markdownTextExtractor: container.markdownTextExtractor,
+				settingsRepo: container.settingsRepo,
+				embedder: container.embedder,
+			}, file.path).open();
+		},
+	});
+
 	plugin.addCommand({
 		id: "dev-benchmark-indexing",
 		name: "DEV: Benchmark indexing performance",
