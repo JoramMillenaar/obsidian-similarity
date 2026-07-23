@@ -10,7 +10,6 @@ export function normalizeSettings(
 	const maxRawMarkdownChars = value?.maxRawMarkdownChars;
 	const maxExtractedChars = value?.maxExtractedChars;
 	const maxOverlapPercent = value?.maxOverlapPercent;
-	const titleWeight = value?.titleWeight;
 
 	return {
 		ignoredPaths: Array.isArray(ignored)
@@ -31,9 +30,6 @@ export function normalizeSettings(
 		maxOverlapPercent: typeof maxOverlapPercent === "number" && maxOverlapPercent >= 0
 			? Math.min(maxOverlapPercent, MAX_OVERLAP_PERCENT)
 			: DEFAULT_SETTINGS.maxOverlapPercent,
-		titleWeight: typeof titleWeight === "number" && titleWeight >= 0
-			? titleWeight
-			: DEFAULT_SETTINGS.titleWeight,
 	};
 }
 

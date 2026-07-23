@@ -66,32 +66,6 @@ export type IndexingQueueSnapshot = {
 	banner: IndexingBannerState;
 };
 
-export type IndexingWarning =
-	| "raw-markdown-truncated"
-	| "prepared-text-truncated";
-
-export type PrepareNoteRejectReason =
-	| "missing-note"
-	| "empty-content"
-	| "non-semantic-content";
-
-export type PreparedNoteForEmbedding = {
-	noteId: string;
-	preparedText: string;
-	warnings: IndexingWarning[];
-};
-
-export type PrepareNoteResult =
-	| {
-		status: "ready";
-		value: PreparedNoteForEmbedding;
-	}
-	| {
-		status: "reject";
-		reason: PrepareNoteRejectReason;
-		warnings: IndexingWarning[];
-	};
-
 export interface SimilaritySettings {
 	ignoredPaths: string[];
 	initialIndexCompleted: boolean;
@@ -100,7 +74,6 @@ export interface SimilaritySettings {
 	maxExtractedChars: number;
 	/** Clamped 0–50: max share of a chunk's token budget reused as sentence overlap with the previous chunk. */
 	maxOverlapPercent: number;
-	titleWeight: number;
 }
 
 /** Bumped when the on-disk index shape changes. 1 = inline float64 JSON embeddings (legacy). 2 = embeddings in the binary sidecar. */

@@ -33,7 +33,6 @@ import {
 	MarkInitialIndexCompletedUseCase,
 } from "./app/initialIndexState";
 import { ObsidianActiveEditor } from "./infra/obsidian/obsidianActiveEditor";
-import { makePrepareNoteForEmbedding, PrepareNoteForEmbeddingUseCase } from "./app/prepareNoteForEmbedding";
 import {
 	AwaitIndexedNoteUseCase,
 	BumpIndexPriorityUseCase,
@@ -42,6 +41,7 @@ import {
 	StartOrRefreshIndexSyncUseCase,
 	SubscribeIndexingStateUseCase,
 } from "./app/indexingCoordinator";
+import { GetNoteTextUseCase, makeGetNoteText } from "./app/getNoteText";
 
 /** Minimum spacing between full index disk writes (data.json + embeddings.bin). */
 const INDEX_WRITE_THROTTLE_MS = 1000;
@@ -60,7 +60,7 @@ export class AppContainer {
 	readonly settingsRepo: SettingsRepository;
 
 	readonly indexNote: IndexNoteUseCase;
-	readonly prepareNoteForEmbedding: PrepareNoteForEmbeddingUseCase;
+	readonly getNoteText: GetNoteTextUseCase;
 	readonly getSimilarNotes: GetSimilarNotesUseCase;
 	readonly insertWikilinkAtCursor: InsertWikilinkAtCursorUseCase;
 	readonly syncIndexToVault: SyncIndexToVaultUseCase;
@@ -98,14 +98,14 @@ export class AppContainer {
 			settingsRepo: this.settingsRepo,
 		});
 
-		this.prepareNoteForEmbedding = makePrepareNoteForEmbedding({
+		this.getNoteText = makeGetNoteText({
 			noteSource: this.noteSource,
 			markdownTextExtractor: this.markdownTextExtractor,
 			settingsRepo: this.settingsRepo,
 		});
 
 		this.indexNote = makeIndexNote({
-			prepareNoteForEmbedding: this.prepareNoteForEmbedding,
+			getNoteText: this.getNoteText,
 			embedText,
 			indexRepo: this.indexRepo,
 			isIgnoredPath: this.isIgnoredPath,
@@ -114,7 +114,7 @@ export class AppContainer {
 		this.getSimilarNotes = makeGetSimilarNotes({
 			indexRepo: this.indexRepo,
 			embedText,
-			prepareNoteForEmbedding: this.prepareNoteForEmbedding,
+			getNoteText: this.getNoteText,
 		});
 
 		this.insertWikilinkAtCursor = makeInsertWikilinkAtCursor({

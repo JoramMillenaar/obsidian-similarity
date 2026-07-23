@@ -35,7 +35,7 @@ import {
 import { JsonIndexedNoteRepository } from "../infra/index/jsonIndexedNoteRepository";
 import { makeIndexNote } from "../app/indexNote";
 import { makeEmbedText } from "../app/embedText";
-import { makePrepareNoteForEmbedding } from "../app/prepareNoteForEmbedding";
+import { makeGetNoteText } from "../app/getNoteText";
 import { DEFAULT_SETTINGS } from "../constants";
 import { heapUsedMB, kb, makeSeedIndex, mulberry32, now, randomUnitEmbedding, ms, summarize } from "./benchmarkShared";
 
@@ -288,22 +288,22 @@ function buildHarness(opts: BenchmarkOptions): Harness {
 		unload: () => opts.embedder.unload(),
 	};
 
-	const basePrepare = makePrepareNoteForEmbedding({
+	const baseGetNoteText = makeGetNoteText({
 		noteSource,
 		markdownTextExtractor: opts.markdownTextExtractor,
 		settingsRepo,
 	});
-	const prepareNoteForEmbedding = async (noteId: string) => {
+	const getNoteText = async (noteId: string) => {
 		const s = now();
 		try {
-			return await basePrepare(noteId);
+			return await baseGetNoteText(noteId);
 		} finally {
 			timings.prepare += now() - s;
 		}
 	};
 
 	const indexNote = makeIndexNote({
-		prepareNoteForEmbedding,
+		getNoteText,
 		embedText: makeEmbedText({ embedder: instrumentedEmbedder, settingsRepo }),
 		indexRepo: repo,
 		isIgnoredPath: async () => false,

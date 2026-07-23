@@ -7,21 +7,9 @@
  */
 import { App, Modal } from "obsidian";
 import { EmbeddedChunk, EmbeddingPort, MarkdownTextExtractor, NoteSource, SettingsRepository } from "../ports";
-import { IndexingWarning, PrepareNoteRejectReason } from "../types";
 import { inspectNotePipeline, NotePipelineInspection } from "./inspectNotePipeline";
 
 const STYLE_ID = "spr-note-pipeline-inspector-style";
-
-const REJECT_LABELS: Record<PrepareNoteRejectReason, string> = {
-	"missing-note": "Note not found.",
-	"empty-content": "Nothing left after extraction — no text to embed.",
-	"non-semantic-content": "Extracted text has no letters or numbers to embed.",
-};
-
-const WARNING_LABELS: Record<IndexingWarning, string> = {
-	"raw-markdown-truncated": "Raw markdown was truncated before extraction (maxRawMarkdownChars).",
-	"prepared-text-truncated": "Prepared text was truncated before chunking (maxExtractedChars).",
-};
 
 export type NotePipelineInspectorDeps = {
 	noteSource: NoteSource;
@@ -87,7 +75,6 @@ export class NotePipelineInspectorModal extends Modal {
 		this.metaPill(meta, "maxRawMarkdownChars", settings.maxRawMarkdownChars);
 		this.metaPill(meta, "maxExtractedChars", settings.maxExtractedChars);
 		this.metaPill(meta, "maxOverlapPercent", `${settings.maxOverlapPercent}%`);
-		this.metaPill(meta, "titleWeight", settings.titleWeight);
 	}
 
 	private metaPill(container: HTMLElement, label: string, value: string | number): void {
@@ -97,16 +84,16 @@ export class NotePipelineInspectorModal extends Modal {
 	}
 
 	private renderNotices(inspection: NotePipelineInspection): void {
-		const warnings = inspection.prepare.status === "ready"
-			? inspection.prepare.value.warnings
-			: inspection.prepare.warnings;
-		for (const warning of warnings) {
-			this.contentEl.createDiv({ cls: "spr-notice spr-notice-warn", text: `⚠ ${WARNING_LABELS[warning]}` });
-		}
-		if (inspection.prepare.status === "reject") {
+		if (inspection.rawMarkdownTruncated) {
 			this.contentEl.createDiv({
-				cls: "spr-notice spr-notice-reject",
-				text: `✕ Rejected: ${REJECT_LABELS[inspection.prepare.reason]}`,
+				cls: "spr-notice spr-notice-warn",
+				text: "⚠ Raw markdown was truncated before extraction (maxRawMarkdownChars).",
+			});
+		}
+		if (inspection.preparedTextTruncated) {
+			this.contentEl.createDiv({
+				cls: "spr-notice spr-notice-warn",
+				text: "⚠ Prepared text was truncated before chunking (maxExtractedChars).",
 			});
 		}
 	}
@@ -135,13 +122,13 @@ export class NotePipelineInspectorModal extends Modal {
 		const section = this.section("② Chunking (over prepared text)");
 		section.createDiv({
 			cls: "spr-hint",
-			text: "Prepared text = normalized whitespace → title-weighting → truncation. "
+			text: "Prepared text = extracted text, truncated to maxExtractedChars. "
 				+ "Chunk start/end offsets index into this exact string.",
 		});
 
 		const { preparedText, chunks } = inspection;
-		if (preparedText === null) {
-			section.createDiv({ cls: "spr-empty", text: "No prepared text — preparation rejected the note (see above)." });
+		if (!preparedText) {
+			section.createDiv({ cls: "spr-empty", text: "No prepared text — nothing left after extraction." });
 			return;
 		}
 

@@ -3,17 +3,16 @@
  *
  * Reruns the real MD→text→chunk pipeline for a single note and returns every
  * intermediate stage, so the inspector modal can show what the embedder
- * actually sees. It reuses the production building blocks — `truncateText`,
- * `prepareExtractedNoteForEmbedding`, the live `MarkdownTextExtractor`, and the
- * real `EmbeddingPort.embed` — so nothing here can drift from what indexing
- * does. Chunk `start`/`end` therefore index into `preparedText` exactly as they
- * do in production.
+ * actually sees. It mirrors `getNoteText` exactly — same bounding/extraction/
+ * truncation steps, live `MarkdownTextExtractor`, and the real
+ * `EmbeddingPort.embed` — so nothing here can drift from what indexing does.
+ * Chunk `start`/`end` therefore index into `preparedText` exactly as they do
+ * in production.
  *
  * Reached only through the `__DEV__` guard in `main.ts`, so esbuild tree-shakes
  * it (and the modal it feeds) out of production builds.
  */
-import { prepareExtractedNoteForEmbedding, truncateText } from "../domain/indexing";
-import { IndexingWarning, PrepareNoteResult, RawNote, SimilaritySettings } from "../types";
+import { RawNote, SimilaritySettings } from "../types";
 import { EmbeddedChunk, EmbeddingPort, MarkdownTextExtractor, NoteSource, SettingsRepository } from "../ports";
 
 export type NotePipelineInspection = {
@@ -26,10 +25,9 @@ export type NotePipelineInspection = {
 	rawMarkdownTruncated: boolean;
 	/** MD→semantic text: the extractor's rendered `textContent`. */
 	extractedText: string;
-	/** Full result of preparation (normalize → title-weight → truncate). */
-	prepare: PrepareNoteResult;
-	/** The exact string handed to the embedder, or null when preparation rejects. */
-	preparedText: string | null;
+	/** The exact string handed to the embedder, after the `maxExtractedChars` cap. */
+	preparedText: string;
+	preparedTextTruncated: boolean;
 	/** Chunk spans (and vectors) from the real embedder; offsets index into `preparedText`. */
 	chunks: EmbeddedChunk[];
 };
@@ -49,25 +47,11 @@ export async function inspectNotePipeline(
 	if (!note) return null;
 
 	const settings = await deps.settingsRepo.get();
-	const warnings: IndexingWarning[] = [];
 
-	// Mirror prepareNoteForEmbedding exactly, but keep every intermediate.
-	const boundedMarkdown = truncateText(
-		note.markdown,
-		settings.maxRawMarkdownChars,
-		"raw-markdown-truncated",
-		warnings,
-	);
+	// Mirror getNoteText exactly, but keep every intermediate.
+	const boundedMarkdown = note.markdown.slice(0, settings.maxRawMarkdownChars);
 	const extractedText = await deps.markdownTextExtractor.extract(boundedMarkdown);
-	const prepare = prepareExtractedNoteForEmbedding({
-		noteId: note.id,
-		title: note.title,
-		extractedText,
-		settings,
-		warnings,
-	});
-
-	const preparedText = prepare.status === "ready" ? prepare.value.preparedText : null;
+	const preparedText = extractedText.slice(0, settings.maxExtractedChars);
 
 	// Run the real embedder so the reported spans are the ones production would
 	// store. Vectors are computed and discarded here — only start/end matter.
@@ -82,8 +66,8 @@ export async function inspectNotePipeline(
 		boundedMarkdown,
 		rawMarkdownTruncated: note.markdown.length > boundedMarkdown.length,
 		extractedText,
-		prepare,
 		preparedText,
+		preparedTextTruncated: extractedText.length > preparedText.length,
 		chunks,
 	};
 }

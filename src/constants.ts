@@ -9,5 +9,4 @@ export const DEFAULT_SETTINGS: SimilaritySettings = {
 	maxRawMarkdownChars: 20000,
 	maxExtractedChars: 4800,
 	maxOverlapPercent: 15,
-	titleWeight: 3,
 };

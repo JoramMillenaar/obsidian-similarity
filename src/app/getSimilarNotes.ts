@@ -1,8 +1,8 @@
-import { PrepareNoteResult, RelatedNote } from "../types";
+import { RelatedNote } from "../types";
 import { IndexRepository } from "../ports";
 import { maxPairwiseSimilarity, normalizeEmbedding } from "../domain/embedding";
 import { EmbedTextUseCase } from "./embedText";
-import { PrepareNoteForEmbeddingUseCase } from "./prepareNoteForEmbedding";
+import { GetNoteTextUseCase } from "./getNoteText";
 
 
 export type GetSimilarNotesUseCase = (args: {
@@ -15,7 +15,7 @@ export type GetSimilarNotesUseCase = (args: {
 export function makeGetSimilarNotes(deps: {
 	indexRepo: IndexRepository;
 	embedText: EmbedTextUseCase;
-	prepareNoteForEmbedding: PrepareNoteForEmbeddingUseCase;
+	getNoteText: GetNoteTextUseCase;
 }): GetSimilarNotesUseCase {
 	return async function getSimilarNotes(args): Promise<RelatedNote[]> {
 		const {
@@ -36,17 +36,14 @@ export function makeGetSimilarNotes(deps: {
 		// If not found, we need text to compute the query embeddings.
 		if (!queryChunks) {
 			if (noteId) {
-				let prepared: PrepareNoteResult;
+				let text: string;
 				try {
-					prepared = await deps.prepareNoteForEmbedding(noteId);
+					text = await deps.getNoteText(noteId);
 				} catch {
 					return [];
 				}
-				if (prepared.status === "reject") {
-					return [];
-				}
 
-				const embedded = await deps.embedText(prepared.value.preparedText).catch(() => null);
+				const embedded = await deps.embedText(text).catch(() => null);
 				if (!embedded?.length) return [];
 				queryChunks = embedded.map((chunk) => normalizeEmbedding(chunk.embedding));
 			} else {

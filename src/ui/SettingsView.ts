@@ -36,7 +36,6 @@ export class SettingView extends PluginSettingTab {
 			maxRawMarkdownChars: settings.maxRawMarkdownChars,
 			maxExtractedChars: settings.maxExtractedChars,
 			maxOverlapPercent: settings.maxOverlapPercent,
-			titleWeight: settings.titleWeight,
 		};
 
 		new Setting(containerEl)
@@ -97,7 +96,7 @@ export class SettingView extends PluginSettingTab {
 		this.addNumericSetting(
 			advancedBody,
 			"Max extracted characters",
-			"Upper bound for prepared plain text after extraction and title weighting.",
+			"Upper bound for prepared plain text after extraction.",
 			settings.maxExtractedChars,
 			(value) => {
 				draftIndexing.maxExtractedChars = value;
@@ -110,15 +109,6 @@ export class SettingView extends PluginSettingTab {
 			settings.maxOverlapPercent,
 			(value) => {
 				draftIndexing.maxOverlapPercent = value;
-			},
-		);
-		this.addNumericSetting(
-			advancedBody,
-			"Title weight",
-			"How many times the note title is prepended before chunking.",
-			settings.titleWeight,
-			(value) => {
-				draftIndexing.titleWeight = value;
 			},
 		);
 		renderAdvancedSection();
@@ -179,7 +169,7 @@ export class SettingView extends PluginSettingTab {
 
 function validateIndexingSettings(settings: Pick<
 	SimilaritySettings,
-	"maxRawMarkdownChars" | "maxExtractedChars" | "maxOverlapPercent" | "titleWeight"
+	"maxRawMarkdownChars" | "maxExtractedChars" | "maxOverlapPercent"
 >): string | null {
 	if (settings.maxRawMarkdownChars <= 0) {
 		return "Max raw markdown characters must be greater than 0.";
@@ -190,9 +180,5 @@ function validateIndexingSettings(settings: Pick<
 	if (settings.maxOverlapPercent < 0 || settings.maxOverlapPercent > MAX_OVERLAP_PERCENT) {
 		return `Max sentence overlap must be between 0 and ${MAX_OVERLAP_PERCENT}.`;
 	}
-	if (settings.titleWeight < 0) {
-		return "Title weight cannot be negative.";
-	}
-
 	return null;
 }
