@@ -13,7 +13,7 @@ import {
 	makeBuildIndexSyncPlan,
 } from "./buildIndexSyncPlan";
 
-export type StartOrRefreshIndexSyncUseCase = (args?: {
+export type SynchronizeIndexUseCase = (args?: {
 	awaitCompletion?: boolean;
 	forceReindexAll?: boolean;
 }) => Promise<SyncResults>;
@@ -54,7 +54,7 @@ export class IndexingCoordinator {
 		});
 	}
 
-	startOrRefreshSync: StartOrRefreshIndexSyncUseCase = async (args = {}) => {
+	synchronizeIndex: SynchronizeIndexUseCase = async (args = {}) => {
 		if (this.isUnloaded) {
 			return {indexed: 0, deleted: 0};
 		}

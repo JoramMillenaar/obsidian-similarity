@@ -26,7 +26,7 @@ export default class RelatedNotes extends Plugin {
 				new SimilarNotesListView(leaf, {
 					indexRepo: this.appContainer.indexRepo,
 					getSimilarNotes: this.appContainer.getSimilarNotes,
-					startOrRefreshIndexSync: this.appContainer.startOrRefreshIndexSync,
+					synchronizeIndex: this.appContainer.synchronizeIndex,
 					subscribeIndexingState: this.appContainer.subscribeIndexingState,
 					isIgnoredPath: this.appContainer.isIgnoredPath,
 				})

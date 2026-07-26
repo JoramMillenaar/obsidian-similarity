@@ -1,6 +1,6 @@
 import { ItemView, Notice, TFile, WorkspaceLeaf } from "obsidian";
 import { GetSimilarNotesUseCase } from "../app/getSimilarNotes";
-import { StartOrRefreshIndexSyncUseCase, SubscribeIndexingStateUseCase, } from "../app/indexingCoordinator";
+import { SynchronizeIndexUseCase, SubscribeIndexingStateUseCase, } from "../app/indexingCoordinator";
 import { isMarkdownPath } from "../domain/markdownPath";
 import { IndexingQueueSnapshot } from "../types";
 import { IndexRepository } from "../ports";
@@ -16,7 +16,7 @@ type SimilarNote = { id: string; score: number };
 export type SimilarNotesListViewDeps = {
 	indexRepo: IndexRepository;
 	getSimilarNotes: GetSimilarNotesUseCase;
-	startOrRefreshIndexSync: StartOrRefreshIndexSyncUseCase;
+	synchronizeIndex: SynchronizeIndexUseCase;
 	subscribeIndexingState: SubscribeIndexingStateUseCase;
 	isIgnoredPath: (path: string) => Promise<boolean>;
 }
@@ -304,7 +304,7 @@ export class SimilarNotesListView extends ItemView {
 
 	private async startIndexing() {
 		try {
-			await this.deps.startOrRefreshIndexSync({awaitCompletion: false});
+			await this.deps.synchronizeIndex({awaitCompletion: false});
 		} catch (error) {
 			logError("Error starting indexing:", error);
 			new Notice("Failed to start indexing. See console for details.");

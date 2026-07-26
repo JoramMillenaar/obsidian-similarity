@@ -1,5 +1,5 @@
 import { OnProgressCallback } from "../types";
-import { StartOrRefreshIndexSyncUseCase, SubscribeIndexingStateUseCase, } from "./indexingCoordinator";
+import { SynchronizeIndexUseCase, SubscribeIndexingStateUseCase, } from "./indexingCoordinator";
 
 
 export type SyncIndexToVaultUseCase = (args?: {
@@ -10,7 +10,7 @@ export type SyncIndexToVaultUseCase = (args?: {
 }>;
 
 export function makeSyncIndexToVault(deps: {
-	startOrRefreshSync: StartOrRefreshIndexSyncUseCase;
+	synchronizeIndex: SynchronizeIndexUseCase;
 	subscribe: SubscribeIndexingStateUseCase;
 }): SyncIndexToVaultUseCase {
 	return async function syncIndexToVault(args = {}) {
@@ -31,7 +31,7 @@ export function makeSyncIndexToVault(deps: {
 			};
 
 		try {
-			return await deps.startOrRefreshSync({awaitCompletion: true});
+			return await deps.synchronizeIndex({awaitCompletion: true});
 		} finally {
 			unsubscribe();
 		}

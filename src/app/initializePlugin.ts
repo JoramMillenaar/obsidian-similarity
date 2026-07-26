@@ -15,7 +15,7 @@ export async function initializePlugin(
 		await app.indexStorage.repair();
 
 		app.status.update("Optimizing experience...");
-		void app.startOrRefreshIndexSync().catch((error) => {
+		void app.synchronizeIndex().catch((error) => {
 			console.error("[Similarity] Index repair failed", error);
 		});
 
@@ -45,7 +45,7 @@ export async function initializePlugin(
 			void app.indexRepo.remove(file.path).catch((error) => {
 				console.error("[Similarity] Delete from index failed", error);
 			});
-			void app.startOrRefreshIndexSync().catch((error) => {
+			void app.synchronizeIndex().catch((error) => {
 				console.error("[Similarity] Queue refresh after delete failed", error);
 			});
 
@@ -61,7 +61,7 @@ export async function initializePlugin(
 				console.error("[Similarity] Rename note failed", error);
 			});
 
-			void app.startOrRefreshIndexSync().catch((error) => {
+			void app.synchronizeIndex().catch((error) => {
 				console.error("[Similarity] Queue refresh after rename failed", error);
 			});
 

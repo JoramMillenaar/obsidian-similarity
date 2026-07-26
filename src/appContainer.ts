@@ -38,7 +38,7 @@ import {
 	BumpIndexPriorityUseCase,
 	GetIndexingStateUseCase,
 	makeIndexingCoordinator,
-	StartOrRefreshIndexSyncUseCase,
+	SynchronizeIndexUseCase,
 	SubscribeIndexingStateUseCase,
 } from "./app/indexingCoordinator";
 import { GetNoteTextUseCase, makeGetNoteText } from "./app/getNoteText";
@@ -64,7 +64,7 @@ export class AppContainer {
 	readonly getSimilarNotes: GetSimilarNotesUseCase;
 	readonly insertWikilinkAtCursor: InsertWikilinkAtCursorUseCase;
 	readonly syncIndexToVault: SyncIndexToVaultUseCase;
-	readonly startOrRefreshIndexSync: StartOrRefreshIndexSyncUseCase;
+	readonly synchronizeIndex: SynchronizeIndexUseCase;
 	readonly bumpIndexPriority: BumpIndexPriorityUseCase;
 	readonly awaitIndexedNote: AwaitIndexedNoteUseCase;
 	readonly subscribeIndexingState: SubscribeIndexingStateUseCase;
@@ -130,11 +130,11 @@ export class AppContainer {
 		});
 
 		this.syncIndexToVault = makeSyncIndexToVault({
-			startOrRefreshSync: indexingCoordinator.startOrRefreshSync,
+			synchronizeIndex: indexingCoordinator.synchronizeIndex,
 			subscribe: indexingCoordinator.subscribe,
 		});
 
-		this.startOrRefreshIndexSync = indexingCoordinator.startOrRefreshSync;
+		this.synchronizeIndex = indexingCoordinator.synchronizeIndex;
 		this.bumpIndexPriority = indexingCoordinator.bumpPriority;
 		this.awaitIndexedNote = indexingCoordinator.awaitNote;
 		this.subscribeIndexingState = indexingCoordinator.subscribe;
@@ -146,7 +146,7 @@ export class AppContainer {
 		this.updateSettings = makeUpdateSettings({
 			settingsRepo: this.settingsRepo,
 			indexStorage: this.indexStorage,
-			startOrRefreshIndexSync: this.startOrRefreshIndexSync,
+			synchronizeIndex: this.synchronizeIndex,
 		});
 		this.isInitialIndexCompleted = makeIsInitialIndexCompleted({settingsRepo: this.settingsRepo});
 		this.markInitialIndexCompleted = makeMarkInitialIndexCompleted({settingsRepo: this.settingsRepo});
