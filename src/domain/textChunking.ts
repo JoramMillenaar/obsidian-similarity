@@ -16,6 +16,9 @@ export interface TextChunk {
 	end: number;
 }
 
+/** A capability the domain needs but doesn't own: turning text into a token count. */
+export type TokenCounter = (text: string) => number;
+
 // Yields each sentence with its span in `text`. Offsets are of the TRIMMED
 // sentence, so a chunk's [start, end) maps back onto the caller's own string.
 const sentenceSegmenter = new Intl.Segmenter('und', { granularity: 'sentence' });
@@ -43,7 +46,7 @@ function sumTokens(sentences: TokenizedSentence[]): number {
  */
 export function chunkText(
 	text: string,
-	countTokens: (text: string) => number,
+	countTokens: TokenCounter,
 	chunkTokenBudget: number,
 	maxOverlapPercent = 0
 ): TextChunk[] {

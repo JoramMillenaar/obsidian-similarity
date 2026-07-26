@@ -1,4 +1,4 @@
-import { IframeMessenger } from "src/infra/embedder/iframe/messagingService";
+import { IframeMessenger } from "src/infra/embedder/messagingService";
 import { EmbeddedChunk, EmbeddingPort, EmbedOptions } from "../../ports";
 
 

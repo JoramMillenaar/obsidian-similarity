@@ -1,5 +1,5 @@
-import { EmbeddedChunk } from "../../../ports";
-import { IframeMessage } from "../../../types";
+import { EmbeddedChunk } from "../../ports";
+import { IframeMessage } from "../../types";
 
 const EMBED_TIMEOUT_MS = 30000;
 
