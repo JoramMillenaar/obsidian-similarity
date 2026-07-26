@@ -1,4 +1,5 @@
 import { env, pipeline, FeatureExtractionPipeline } from '@huggingface/transformers';
+import { chunkText } from 'src/domain/textChunking';
 
 env.allowLocalModels = false;
 
@@ -8,25 +9,6 @@ env.allowLocalModels = false;
 const MODEL_MAX_TOKENS = 256;
 const SPECIAL_TOKEN_RESERVE = 2;
 const CHUNK_TOKEN_BUDGET = MODEL_MAX_TOKENS - SPECIAL_TOKEN_RESERVE;
-const MAX_OVERLAP_PERCENT = 50;
-
-const sentenceSegmenter = new Intl.Segmenter('und', { granularity: 'sentence' });
-
-interface Sentence {
-	text: string;
-	start: number;
-	end: number;
-}
-
-interface TokenizedSentence extends Sentence {
-	tokens: number;
-}
-
-interface Chunk {
-	text: string;
-	start: number;
-	end: number;
-}
 
 interface EmbeddedChunk {
 	embedding: number[];
@@ -38,23 +20,6 @@ interface IframeMessageEventData {
 	requestId: number;
 	payload: string;
 	maxOverlapPercent?: number;
-}
-
-// Yields each sentence with its span in `text`. Offsets are of the TRIMMED
-// sentence, so a chunk's [start, end) maps back onto the caller's own string.
-function segmentSentences(text: string): Sentence[] {
-	const sentences: Sentence[] = [];
-	for (const { segment, index } of sentenceSegmenter.segment(text)) {
-		const trimmed = segment.trim();
-		if (!trimmed) continue;
-		const start = index + (segment.length - segment.trimStart().length);
-		sentences.push({ text: trimmed, start, end: start + trimmed.length });
-	}
-	return sentences;
-}
-
-function sumTokens(sentences: TokenizedSentence[]): number {
-	return sentences.reduce((total, sentence) => total + sentence.tokens, 0);
 }
 
 class DocumentEmbeddingController {
@@ -86,7 +51,7 @@ class DocumentEmbeddingController {
 		if (!text.trim()) return [];
 
 		// Chunk the caller's string as-is, so the spans we report index into it.
-		const chunks = this.#chunkText(text, maxOverlapPercent);
+		const chunks = chunkText(text, this.#countTokens, CHUNK_TOKEN_BUDGET, maxOverlapPercent);
 
 		const embedded: EmbeddedChunk[] = [];
 		for (const chunk of chunks) {
@@ -98,73 +63,9 @@ class DocumentEmbeddingController {
 		return embedded;
 	}
 
-	#countTokens(text: string): number {
+	#countTokens = (text: string): number => {
 		return this.#pipeline!.tokenizer.encode(text, { add_special_tokens: false }).length;
-	}
-
-	#chunkText(text: string, maxOverlapPercent?: number): Chunk[] {
-		const clampedPercent = Math.max(0, Math.min(maxOverlapPercent ?? 0, MAX_OVERLAP_PERCENT));
-		const overlapBudget = Math.floor((CHUNK_TOKEN_BUDGET * clampedPercent) / 100);
-
-		const sentences: TokenizedSentence[] = segmentSentences(text)
-			.map((sentence) => ({ ...sentence, tokens: this.#countTokens(sentence.text) }));
-		if (sentences.length === 0) return [];
-
-		const chunks: Chunk[] = [];
-		let current: TokenizedSentence[] = [];
-		let currentTokens = 0;
-
-		// A chunk spans from its first sentence's start to its last one's end.
-		const flush = () => {
-			if (current.length === 0) return;
-			chunks.push({
-				text: current.map((sentence) => sentence.text).join(' '),
-				start: current[0].start,
-				end: current[current.length - 1].end,
-			});
-		};
-
-		const overlapSeed = (): TokenizedSentence[] => {
-			if (overlapBudget <= 0) return [];
-			const seed: TokenizedSentence[] = [];
-			let seedTokens = 0;
-			for (let i = current.length - 1; i >= 0; i--) {
-				if (seedTokens + current[i].tokens > overlapBudget) break;
-				seed.unshift(current[i]);
-				seedTokens += current[i].tokens;
-			}
-			return seed;
-		};
-
-		for (const sentence of sentences) {
-			// A lone sentence over budget can't be packed with anything; give it
-			// its own chunk and let the pipeline truncate it.
-			if (sentence.tokens >= CHUNK_TOKEN_BUDGET) {
-				flush();
-				chunks.push({ text: sentence.text, start: sentence.start, end: sentence.end });
-				current = [];
-				currentTokens = 0;
-				continue;
-			}
-
-			if (currentTokens + sentence.tokens > CHUNK_TOKEN_BUDGET && current.length > 0) {
-				flush();
-				current = overlapSeed();
-				currentTokens = sumTokens(current);
-				// Trim overlap until the incoming sentence fits the budget.
-				while (current.length > 0 && currentTokens + sentence.tokens > CHUNK_TOKEN_BUDGET) {
-					currentTokens -= current[0].tokens;
-					current.shift();
-				}
-			}
-
-			current.push(sentence);
-			currentTokens += sentence.tokens;
-		}
-
-		flush();
-		return chunks;
-	}
+	};
 
 	// Serialized single-text inference — each call waits for the previous.
 	#embed(input: string): Promise<number[] | Float32Array | null> {
