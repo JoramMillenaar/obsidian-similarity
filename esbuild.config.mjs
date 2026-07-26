@@ -1,10 +1,6 @@
 import esbuild from "esbuild";
 import process from "process";
 import { builtinModules } from "module";
-import fs from 'fs';
-
-const iframeCode = fs.readFileSync('./src/infra/embedder/iframe/embeddingService.html');
-const iframeCodeString = JSON.stringify(iframeCode.toString());
 
 const banner =
 `/*
@@ -14,6 +10,19 @@ if you want to view the source, please visit the github repository of this plugi
 `;
 
 const prod = (process.argv[2] === "production");
+
+const iframeBuild = await esbuild.build({
+	entryPoints: ["src/infra/embedder/iframe/embeddingService.ts"],
+	bundle: true,
+	platform: "browser",
+	format: "esm",
+	target: "esnext",
+	write: false,
+	minify: prod,
+});
+const iframeScript = iframeBuild.outputFiles[0].text;
+const iframeHtml = `<script type="module">\n${iframeScript}\n</script>\n`;
+const iframeCodeString = JSON.stringify(iframeHtml);
 
 const context = await esbuild.context({
 	banner: {
