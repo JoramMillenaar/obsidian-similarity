@@ -25,7 +25,6 @@
 import { IndexedNote, NoteIndexCandidate, RawNote, SimilaritySettings } from "../types";
 import {
 	EmbeddingPort,
-	IndexRepairOutcome,
 	IndexRepository,
 	IndexStorage,
 	MarkdownTextExtractor,
@@ -127,8 +126,7 @@ class InMemoryIndexStorage implements IndexStorage {
 		return this.serialized === "[]";
 	}
 
-	async repair(): Promise<IndexRepairOutcome> {
-		return {rebuildRequired: false, droppedIds: []};
+	async repair(): Promise<void> {
 	}
 
 	/** Replace the whole index without counting it as a measured write. */

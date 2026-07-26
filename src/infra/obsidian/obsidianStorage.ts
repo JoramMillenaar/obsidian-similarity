@@ -1,5 +1,5 @@
 import { IndexedNote, IndexEntryV2, SCHEMA_VERSION } from "../../types";
-import { EmbeddingFileStore, IndexRepairOutcome, IndexStorage, PluginDataStore } from "../../ports";
+import { EmbeddingFileStore, IndexStorage, PluginDataStore } from "../../ports";
 import { decodeEmbeddings, DecodedEmbeddings, encodeEmbeddings } from "../../domain/embeddingCodec";
 import { packIndexedNotesToV2, unpackV2ToIndexedNotes } from "../../domain/indexPacking";
 import { checkIndexHealth, SidecarState } from "../../domain/indexHealth";
@@ -56,12 +56,10 @@ export class ObsidianPluginDataIndexStorage implements IndexStorage {
 	}
 
 	async isEmpty(): Promise<boolean> {
-		// getAll() already yields nothing for any index it cannot correctly serve,
-		// so "empty" and "unusable" collapse to the same answer by construction.
 		return (await this.getAll()).length === 0;
 	}
 
-	async repair(): Promise<IndexRepairOutcome> {
+	async repair(): Promise<void> {
 		const data = await this.store.read();
 		const {state, decoded} = await this.readSidecar();
 
@@ -73,13 +71,17 @@ export class ObsidianPluginDataIndexStorage implements IndexStorage {
 		});
 
 		if (health.status === "unusable") {
+			console.warn(`[Similarity] Index discarded (${health.reason}) — rebuilding from scratch.`);
 			await this.rewrite([]);
-			return {rebuildRequired: true, droppedIds: [], discardedReason: health.reason};
+			return;
 		}
 
-		if (health.droppedIds.length === 0) {
-			return {rebuildRequired: false, droppedIds: []};
-		}
+		if (health.droppedIds.length === 0) return;
+
+		console.warn(
+			`[Similarity] Dropped ${health.droppedIds.length} damaged index entries; they will be re-indexed.`,
+			health.droppedIds,
+		);
 
 		// Repack the survivors: rewrite() reassigns rows from scratch, so the
 		// dropped entries' vectors are compacted out of the sidecar as well.
@@ -89,8 +91,6 @@ export class ObsidianPluginDataIndexStorage implements IndexStorage {
 			? unpackV2ToIndexedNotes(health.validEntries, decoded.embeddings, decoded.dim, decoded.count)
 			: [];
 		await this.rewrite(survivors);
-
-		return {rebuildRequired: survivors.length === 0, droppedIds: health.droppedIds};
 	}
 
 	/** Single read of the sidecar, classified for the health check. */

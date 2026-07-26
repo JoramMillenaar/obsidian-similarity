@@ -12,36 +12,14 @@ export async function initializePlugin(
 	try {
 		await app.embedder.load();
 
-		const repair = await app.indexStorage.repair();
-		if (repair.discardedReason) {
-			console.warn(`[Similarity] Index discarded (${repair.discardedReason}) — rebuilding from scratch.`);
-		}
-		if (repair.droppedIds.length > 0) {
-			console.warn(
-				`[Similarity] Dropped ${repair.droppedIds.length} damaged index entries; they will be re-indexed.`,
-				repair.droppedIds,
-			);
-		}
+		await app.indexStorage.repair();
 
-		if (repair.rebuildRequired) {
-			app.status.update("Rebuilding index…");
-			void app.startOrRefreshIndexSync({forceReindexAll: true, awaitCompletion: false}).catch((error) => {
-				console.error("[Similarity] Index rebuild failed", error);
-			});
-		} else {
-			const [isEmpty, initialIndexCompleted] = await Promise.all([
-				app.indexRepo.isEmpty(),
-				app.isInitialIndexCompleted(),
-			]);
-			if (!initialIndexCompleted || !isEmpty) {
-				app.status.update(initialIndexCompleted ? "Repairing index…" : "Indexing vault…");
-				void app.startOrRefreshIndexSync().catch((error) => {
-					console.error("[Similarity] Index repair failed", error);
-				});
-			}
-		}
+		app.status.update("Optimizing experience...");
+		void app.startOrRefreshIndexSync().catch((error) => {
+			console.error("[Similarity] Index repair failed", error);
+		});
 
-		app.status.update("Ready", 1500);
+		app.status.update("Done", 1500);
 	} catch (error) {
 		app.status.update("Failed to start (see console)", 8000);
 		console.error("[Similarity] start() failed", error);

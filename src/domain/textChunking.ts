@@ -1,4 +1,4 @@
-export const MAX_OVERLAP_PERCENT = 50;
+import { MAX_OVERLAP_PERCENT } from "../constants";
 
 export interface Sentence {
 	text: string;
