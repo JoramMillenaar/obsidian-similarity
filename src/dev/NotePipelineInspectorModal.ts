@@ -6,14 +6,15 @@
  * dev CSS leaks into the shipped `styles.css`. Reached only behind `__DEV__`.
  */
 import { App, Modal } from "obsidian";
-import { EmbeddedChunk, EmbeddingPort, MarkdownTextExtractor, NoteSource, SettingsRepository } from "../ports";
+import { EmbeddedChunk, EmbeddingPort, NoteSource, SettingsRepository } from "../ports";
+import { GetNoteTextUseCase } from "../app/getNoteText";
 import { inspectNotePipeline, NotePipelineInspection } from "./inspectNotePipeline";
 
 const STYLE_ID = "spr-note-pipeline-inspector-style";
 
 export type NotePipelineInspectorDeps = {
 	noteSource: NoteSource;
-	markdownTextExtractor: MarkdownTextExtractor;
+	getNoteText: GetNoteTextUseCase;
 	settingsRepo: SettingsRepository;
 	embedder: EmbeddingPort;
 };
@@ -84,16 +85,10 @@ export class NotePipelineInspectorModal extends Modal {
 	}
 
 	private renderNotices(inspection: NotePipelineInspection): void {
-		if (inspection.rawMarkdownTruncated) {
+		if (inspection.rawMarkdown.length > inspection.settings.maxRawMarkdownChars) {
 			this.contentEl.createDiv({
 				cls: "spr-notice spr-notice-warn",
 				text: "⚠ Raw markdown was truncated before extraction (maxRawMarkdownChars).",
-			});
-		}
-		if (inspection.preparedTextTruncated) {
-			this.contentEl.createDiv({
-				cls: "spr-notice spr-notice-warn",
-				text: "⚠ Prepared text was truncated before chunking (maxExtractedChars).",
 			});
 		}
 	}
@@ -104,14 +99,13 @@ export class NotePipelineInspectorModal extends Modal {
 
 		const raw = section.createEl("details", { cls: "spr-collapse" });
 		raw.createEl("summary", {
-			text: `Raw markdown (${inspection.boundedMarkdown.length.toLocaleString()} chars`
-				+ `${inspection.rawMarkdownTruncated ? ", truncated" : ""})`,
+			text: `Raw markdown (${inspection.rawMarkdown.length.toLocaleString()} chars)`,
 		});
-		raw.createEl("pre", { cls: "spr-text spr-text-raw", text: inspection.boundedMarkdown });
+		raw.createEl("pre", { cls: "spr-text spr-text-raw", text: inspection.rawMarkdown });
 
-		section.createDiv({ cls: "spr-subhead", text: `Extracted text (${inspection.extractedText.length.toLocaleString()} chars)` });
-		if (inspection.extractedText) {
-			section.createEl("pre", { cls: "spr-text spr-text-extracted", text: inspection.extractedText });
+		section.createDiv({ cls: "spr-subhead", text: `Prepared text (${inspection.preparedText.length.toLocaleString()} chars)` });
+		if (inspection.preparedText) {
+			section.createEl("pre", { cls: "spr-text spr-text-extracted", text: inspection.preparedText });
 		} else {
 			section.createDiv({ cls: "spr-empty", text: "— empty —" });
 		}
@@ -122,8 +116,7 @@ export class NotePipelineInspectorModal extends Modal {
 		const section = this.section("② Chunking (over prepared text)");
 		section.createDiv({
 			cls: "spr-hint",
-			text: "Prepared text = extracted text, truncated to maxExtractedChars. "
-				+ "Chunk start/end offsets index into this exact string.",
+			text: "Chunk start/end offsets index into the prepared text shown above.",
 		});
 
 		const { preparedText, chunks } = inspection;

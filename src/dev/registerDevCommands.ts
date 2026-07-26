@@ -28,7 +28,7 @@ export function registerDevCommands(plugin: Plugin, container: AppContainer): vo
 			}
 			new NotePipelineInspectorModal(plugin.app, {
 				noteSource: container.noteSource,
-				markdownTextExtractor: container.markdownTextExtractor,
+				getNoteText: container.getNoteText,
 				settingsRepo: container.settingsRepo,
 				embedder: container.embedder,
 			}, file.path).open();

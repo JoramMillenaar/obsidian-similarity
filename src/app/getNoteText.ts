@@ -14,6 +14,7 @@ export function makeGetNoteText(deps: {
     const settings = await deps.settingsRepo.get();
     const boundedMarkdown = note.markdown.slice(0, settings.maxRawMarkdownChars);
     const extractedText = await deps.markdownTextExtractor.extract(boundedMarkdown);
-    return extractedText.slice(0, settings.maxExtractedChars);
+	const fullText = `${note.title}\n${extractedText}`;
+    return fullText.slice(0, settings.maxExtractedChars);
   };
 }
