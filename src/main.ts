@@ -72,7 +72,7 @@ export default class RelatedNotes extends Plugin {
 
 				this.appContainer.status.update("Indexing current note…");
 				try {
-					await this.appContainer.bumpIndexPriority(f.path, "manual");
+					await this.appContainer.bumpIndexPriority(f.path);
 					await this.appContainer.awaitIndexedNote(f.path);
 					this.refreshView();
 					this.appContainer.status.update("Current note refreshed", 2000);

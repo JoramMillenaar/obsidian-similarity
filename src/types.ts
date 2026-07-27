@@ -44,16 +44,6 @@ export interface SyncResults {
 
 export type OnProgressCallback = (p: { phase: string; processed: number; total: number }) => void;
 
-export type IndexingPriorityReason = "seed" | "open" | "edit" | "manual";
-
-export type IndexingBannerState = {
-	kind: "hidden" | "initial" | "updating" | "failed";
-	message: string;
-	progressLabel?: string;
-	processed: number;
-	total: number;
-};
-
 export type IndexingQueueSnapshot = {
 	isRunning: boolean;
 	hasCompletedInitialIndex: boolean;
@@ -63,7 +53,6 @@ export type IndexingQueueSnapshot = {
 	total: number;
 	failed: number;
 	fatalError?: string;
-	banner: IndexingBannerState;
 };
 
 export interface SimilaritySettings {

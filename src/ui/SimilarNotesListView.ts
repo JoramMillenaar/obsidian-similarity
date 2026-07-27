@@ -4,6 +4,7 @@ import { SynchronizeIndexUseCase, SubscribeIndexingStateUseCase, } from "../app/
 import { isMarkdownPath } from "../domain/markdownPath";
 import { IndexingQueueSnapshot } from "../types";
 import { IndexRepository } from "../ports";
+import { getIndexingBannerState } from "./indexingBanner";
 
 export function logError(message: unknown, ...optionalParams: unknown[]) {
 	console.error("[Similarity]:", message, ...optionalParams);
@@ -32,12 +33,6 @@ export class SimilarNotesListView extends ItemView {
 		processed: 0,
 		total: 0,
 		failed: 0,
-		banner: {
-			kind: "hidden",
-			message: "",
-			processed: 0,
-			total: 0,
-		},
 	};
 	private unsubscribeIndexingState?: () => void;
 	private refreshTimer?: number;
@@ -122,7 +117,7 @@ export class SimilarNotesListView extends ItemView {
 	}
 
 	private renderIndexingBanner(container: HTMLElement) {
-		const banner = this.indexingState.banner;
+		const banner = getIndexingBannerState(this.indexingState);
 		const existing = container.querySelector(".similarity-index-banner");
 		if (!this.shouldShowIndexingBanner()) {
 			existing?.remove();
@@ -209,7 +204,7 @@ export class SimilarNotesListView extends ItemView {
 				return;
 			}
 
-			if (this.indexingState.banner.kind === "failed") {
+			if (getIndexingBannerState(this.indexingState).kind === "failed") {
 				this.renderMessage(
 					workingContainer,
 					indexEmpty
@@ -356,7 +351,8 @@ export class SimilarNotesListView extends ItemView {
 	}
 
 	private shouldShowIndexingBanner(): boolean {
-		const {banner, total} = this.indexingState;
+		const {total} = this.indexingState;
+		const banner = getIndexingBannerState(this.indexingState);
 		if (banner.kind === "hidden" || banner.kind === "failed") {
 			return banner.kind === "failed";
 		}
@@ -365,7 +361,9 @@ export class SimilarNotesListView extends ItemView {
 	}
 
 	private shouldRefreshResults(previous: IndexingQueueSnapshot, snapshot: IndexingQueueSnapshot): boolean {
-		if (previous.banner.kind !== snapshot.banner.kind || previous.fatalError !== snapshot.fatalError) {
+		const previousBannerKind = getIndexingBannerState(previous).kind;
+		const snapshotBannerKind = getIndexingBannerState(snapshot).kind;
+		if (previousBannerKind !== snapshotBannerKind || previous.fatalError !== snapshot.fatalError) {
 			return true;
 		}
 		if (previous.isRunning && !snapshot.isRunning) {

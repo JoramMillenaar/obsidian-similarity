@@ -13,6 +13,8 @@ export interface IndexRepository {
 
 	remove(noteId: string): Promise<void>;
 
+	clear(): Promise<void>;
+
 	rename(oldId: string, newId: string): Promise<void>;
 
 	flush(): Promise<void>;

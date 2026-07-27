@@ -31,7 +31,7 @@ export async function initializePlugin(
 			if (!(file instanceof TFile)) return;
 
 			app.upsertDebouncer.schedule(file.path, async () => {
-				await app.bumpIndexPriority(file.path, "edit").catch((error) => {
+				await app.bumpIndexPriority(file.path).catch((error) => {
 					console.error("[Similarity] Reindex failed", error);
 				});
 			});
@@ -72,7 +72,7 @@ export async function initializePlugin(
 	plugin.registerEvent(
 		plugin.app.workspace.on("file-open", (file) => {
 			if (file instanceof TFile) {
-				void app.bumpIndexPriority(file.path, "open").catch((error) => {
+				void app.bumpIndexPriority(file.path).catch((error) => {
 					console.error("[Similarity] Priority bump failed", error);
 				});
 			}

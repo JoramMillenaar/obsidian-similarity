@@ -44,6 +44,10 @@ export class JsonIndexedNoteRepository implements IndexRepository {
 		await this.storage.rewrite(next);
 	}
 
+	async clear() {
+		await this.storage.rewrite([]);
+	}
+
 	async rename(oldId: string, newId: string) {
 		if (oldId === newId) return;
 

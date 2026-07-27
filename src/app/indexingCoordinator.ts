@@ -1,27 +1,17 @@
 import { isPathIgnored } from "../domain/ignoreRules";
 import { isMarkdownPath } from "../domain/markdownPath";
-import {
-	IndexingPriorityReason,
-	IndexingQueueSnapshot,
-	SyncResults,
-} from "../types";
-import { IndexRepository, NoteSource, SettingsRepository } from "../ports";
+import { IndexingQueueSnapshot, SyncResults } from "../types";
+import { IndexRepository, SettingsRepository } from "../ports";
 import { IndexNoteOutcome, IndexNoteUseCase } from "./indexNote";
 import { IndexingRuntime } from "./indexingRuntime";
-import {
-	BuildIndexSyncPlanUseCase,
-	makeBuildIndexSyncPlan,
-} from "./buildIndexSyncPlan";
+import { BuildIndexSyncPlanUseCase, IndexSyncPlan } from "./buildIndexSyncPlan";
 
 export type SynchronizeIndexUseCase = (args?: {
 	awaitCompletion?: boolean;
 	forceReindexAll?: boolean;
 }) => Promise<SyncResults>;
 
-export type BumpIndexPriorityUseCase = (
-	noteId: string,
-	reason: Exclude<IndexingPriorityReason, "seed">,
-) => Promise<void>;
+export type BumpIndexPriorityUseCase = (noteId: string) => Promise<void>;
 
 export type AwaitIndexedNoteUseCase = (noteId: string) => Promise<void>;
 
@@ -32,27 +22,20 @@ export type SubscribeIndexingStateUseCase = (
 export type GetIndexingStateUseCase = () => IndexingQueueSnapshot;
 
 type IndexingCoordinatorDeps = {
-	noteSource: NoteSource;
 	indexRepo: IndexRepository;
 	settingsRepo: SettingsRepository;
 	indexNote: IndexNoteUseCase;
+	buildIndexSyncPlan: BuildIndexSyncPlanUseCase;
 };
 
 export class IndexingCoordinator {
 	private readonly runtime = new IndexingRuntime();
-	private readonly buildIndexSyncPlan: BuildIndexSyncPlanUseCase;
 	private hasLoadedInitialIndexState = false;
 	private isUnloaded = false;
 	private processingPromise: Promise<void> | null = null;
 	private refreshChain: Promise<void> = Promise.resolve();
 
-	constructor(private readonly deps: IndexingCoordinatorDeps) {
-		this.buildIndexSyncPlan = makeBuildIndexSyncPlan({
-			noteSource: deps.noteSource,
-			indexRepo: deps.indexRepo,
-			settingsRepo: deps.settingsRepo,
-		});
-	}
+	constructor(private readonly deps: IndexingCoordinatorDeps) {}
 
 	synchronizeIndex: SynchronizeIndexUseCase = async (args = {}) => {
 		if (this.isUnloaded) {
@@ -68,7 +51,11 @@ export class IndexingCoordinator {
 			const before = this.runtime.getLifetimeResults();
 
 			try {
-				await this.applySyncPlan({forceReindexAll: args.forceReindexAll});
+				if (args.forceReindexAll) {
+					await this.deps.indexRepo.clear();
+				}
+				const plan = await this.deps.buildIndexSyncPlan();
+				await this.applySyncPlan(plan);
 				this.ensureProcessing();
 				if (!this.processingPromise) {
 					await this.maybePersistInitialIndexCompleted();
@@ -100,7 +87,7 @@ export class IndexingCoordinator {
 		return await next;
 	};
 
-	bumpPriority: BumpIndexPriorityUseCase = async (noteId, reason) => {
+	bumpPriority: BumpIndexPriorityUseCase = async (noteId) => {
 		if (this.isUnloaded) {
 			return;
 		}
@@ -122,7 +109,7 @@ export class IndexingCoordinator {
 			return;
 		}
 
-		this.runtime.bump(noteId, reason);
+		this.runtime.bump(noteId);
 		this.ensureProcessing();
 	};
 
@@ -179,21 +166,12 @@ export class IndexingCoordinator {
 		await this.deps.settingsRepo.updatePartial({initialIndexCompleted: true});
 	}
 
-	private async applySyncPlan(args: {forceReindexAll?: boolean}) {
-		const plan = await this.buildIndexSyncPlan({
-			queuedIds: this.runtime.getQueuedIds(),
-			forceReindexAll: args.forceReindexAll,
-		});
-
+	private async applySyncPlan(plan: IndexSyncPlan) {
 		for (const noteId of plan.idsToRemoveFromIndex) {
 			await this.deps.indexRepo.remove(noteId);
 		}
 
 		this.runtime.recordDeleted(plan.idsToRemoveFromIndex);
-		this.runtime.removeQueuedNotes([
-			...plan.idsToRemoveFromIndex,
-			...plan.idsToRemoveFromQueue,
-		]);
 		this.runtime.replaceSeedQueue(plan.idsToSeed);
 	}
 

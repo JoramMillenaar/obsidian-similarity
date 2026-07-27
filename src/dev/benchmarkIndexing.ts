@@ -267,6 +267,7 @@ function buildHarness(opts: BenchmarkOptions): Harness {
 		upsertMany: (notes) => baseRepo.upsertMany(notes),
 		listAll: () => baseRepo.listAll(),
 		isEmpty: () => baseRepo.isEmpty(),
+		clear: () => baseRepo.clear(),
 		rename: (oldId, newId) => baseRepo.rename(oldId, newId),
 		flush: () => baseRepo.flush(),
 	};

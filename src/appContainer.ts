@@ -42,6 +42,7 @@ import {
 	SubscribeIndexingStateUseCase,
 } from "./app/indexingCoordinator";
 import { GetNoteTextUseCase, makeGetNoteText } from "./app/getNoteText";
+import { makeBuildIndexSyncPlan } from "./app/buildIndexSyncPlan";
 
 /** Minimum spacing between full index disk writes (data.json + embeddings.bin). */
 const INDEX_WRITE_THROTTLE_MS = 1000;
@@ -122,11 +123,17 @@ export class AppContainer {
 			noteSource: this.noteSource,
 		});
 
-		const indexingCoordinator = makeIndexingCoordinator({
+		const buildIndexSyncPlan = makeBuildIndexSyncPlan({
 			noteSource: this.noteSource,
 			indexRepo: this.indexRepo,
 			settingsRepo: this.settingsRepo,
+		});
+
+		const indexingCoordinator = makeIndexingCoordinator({
+			indexRepo: this.indexRepo,
+			settingsRepo: this.settingsRepo,
 			indexNote: this.indexNote,
+			buildIndexSyncPlan,
 		});
 
 		this.syncIndexToVault = makeSyncIndexToVault({

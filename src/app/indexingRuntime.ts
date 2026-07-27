@@ -1,18 +1,11 @@
 import {
 	bumpQueuedNote,
-	countQueuedNotes,
 	createEmptyIndexQueue,
 	dequeueNextQueuedNote,
-	getIndexingBannerState,
-	hasQueuedNote,
 	mergeSeedQueue,
 	removeQueuedNotes,
 } from "../domain/indexingQueue";
-import {
-	IndexingPriorityReason,
-	IndexingQueueSnapshot,
-	SyncResults,
-} from "../types";
+import { IndexingQueueSnapshot, SyncResults } from "../types";
 
 export class IndexingRuntime {
 	private queue = createEmptyIndexQueue();
@@ -37,20 +30,15 @@ export class IndexingRuntime {
 	}
 
 	getSnapshot(): IndexingQueueSnapshot {
-		const base = {
+		return {
 			isRunning: this.isRunning,
 			hasCompletedInitialIndex: this.hasCompletedInitialIndex,
 			currentNoteId: this.currentNoteId,
-			pending: countQueuedNotes(this.queue),
+			pending: this.queue.length,
 			processed: this.processedInRun,
-			total: this.processedInRun + countQueuedNotes(this.queue) + (this.currentNoteId ? 1 : 0),
+			total: this.processedInRun + this.queue.length + (this.currentNoteId ? 1 : 0),
 			failed: this.failedInRun,
 			fatalError: this.fatalError,
-		};
-
-		return {
-			...base,
-			banner: getIndexingBannerState(base),
 		};
 	}
 
@@ -61,17 +49,8 @@ export class IndexingRuntime {
 		};
 	}
 
-	getQueuedIds(): string[] {
-		return [
-			...this.queue.manual,
-			...this.queue.edit,
-			...this.queue.open,
-			...this.queue.seed,
-		];
-	}
-
 	hasPendingWork(): boolean {
-		return countQueuedNotes(this.queue) > 0;
+		return this.queue.length > 0;
 	}
 
 	getCurrentNoteId(): string | undefined {
@@ -178,12 +157,12 @@ export class IndexingRuntime {
 		this.emit();
 	}
 
-	bump(noteId: string, reason: Exclude<IndexingPriorityReason, "seed">) {
+	bump(noteId: string) {
 		if (this.currentNoteId === noteId) {
 			return;
 		}
 
-		this.queue = bumpQueuedNote(this.queue, noteId, reason);
+		this.queue = bumpQueuedNote(this.queue, noteId);
 		this.emit();
 	}
 
@@ -194,15 +173,12 @@ export class IndexingRuntime {
 
 		const before = this.queue;
 		this.queue = removeQueuedNotes(this.queue, noteIds);
-		if (before.manual === this.queue.manual
-			&& before.edit === this.queue.edit
-			&& before.open === this.queue.open
-			&& before.seed === this.queue.seed) {
+		if (before === this.queue) {
 			return;
 		}
 
 		for (const noteId of noteIds) {
-			if (!hasQueuedNote(this.queue, noteId) && this.currentNoteId !== noteId) {
+			if (!this.queue.includes(noteId) && this.currentNoteId !== noteId) {
 				this.resolveNoteWaiters(noteId);
 			}
 		}
@@ -210,7 +186,7 @@ export class IndexingRuntime {
 	}
 
 	async awaitNote(noteId: string): Promise<void> {
-		if (!this.currentNoteId && !hasQueuedNote(this.queue, noteId)) {
+		if (!this.currentNoteId && !this.queue.includes(noteId)) {
 			return;
 		}
 

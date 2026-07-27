@@ -17,7 +17,8 @@ export function makeSyncIndexToVault(deps: {
 		const {onProgress} = args;
 		const unsubscribe = onProgress
 			? deps.subscribe((snapshot) => {
-				if (snapshot.banner.kind === "hidden") {
+				const isIdle = !snapshot.fatalError && !snapshot.isRunning && snapshot.pending === 0;
+				if (isIdle) {
 					return;
 				}
 
