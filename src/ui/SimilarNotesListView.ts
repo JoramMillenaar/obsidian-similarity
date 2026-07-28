@@ -1,6 +1,6 @@
 import { ItemView, Notice, TFile, WorkspaceLeaf } from "obsidian";
 import { GetSimilarNotesUseCase } from "../app/getSimilarNotes";
-import { SynchronizeIndexUseCase, SubscribeIndexingStateUseCase, } from "../app/indexingCoordinator";
+import { SubscribeIndexingStateUseCase, SynchronizeIndexUseCase, } from "../app/indexingCoordinator";
 import { isMarkdownPath } from "../domain/markdownPath";
 import { IndexingQueueSnapshot } from "../types";
 import { IndexRepository } from "../ports";
@@ -28,7 +28,6 @@ export class SimilarNotesListView extends ItemView {
 	private lastAutoRefreshAt = 0;
 	private indexingState: IndexingQueueSnapshot = {
 		isRunning: false,
-		hasCompletedInitialIndex: false,
 		pending: 0,
 		processed: 0,
 		total: 0,
@@ -216,13 +215,13 @@ export class SimilarNotesListView extends ItemView {
 				return;
 			}
 
-			if (indexEmpty && (this.indexingState.isRunning || !this.indexingState.hasCompletedInitialIndex)) {
+			if (indexEmpty && this.indexingState.isRunning) {
 				this.renderMessage(workingContainer, "Indexing is underway. Related notes will appear as the queue progresses.");
 				this.commitRenderedContent(targetContainer, workingContainer, showLoading);
 				return;
 			}
 
-			if (!indexEmpty && (this.indexingState.isRunning || !this.indexingState.hasCompletedInitialIndex)) {
+			if (!indexEmpty && this.indexingState.isRunning) {
 				this.renderMessage(workingContainer, "No related notes were similar enough yet. More may appear while indexing continues.");
 				this.commitRenderedContent(targetContainer, workingContainer, showLoading);
 				return;
@@ -299,7 +298,7 @@ export class SimilarNotesListView extends ItemView {
 
 	private async startIndexing() {
 		try {
-			await this.deps.synchronizeIndex({awaitCompletion: false});
+			await this.deps.synchronizeIndex();
 		} catch (error) {
 			logError("Error starting indexing:", error);
 			new Notice("Failed to start indexing. See console for details.");

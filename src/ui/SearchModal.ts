@@ -24,7 +24,6 @@ export class SearchModal extends SuggestModal<RelatedNote> {
 	private isAutoRefreshing = false;
 	private indexingState: IndexingQueueSnapshot = {
 		isRunning: false,
-		hasCompletedInitialIndex: false,
 		pending: 0,
 		processed: 0,
 		total: 0,

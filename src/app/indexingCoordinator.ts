@@ -1,19 +1,16 @@
 import { isPathIgnored } from "../domain/ignoreRules";
 import { isMarkdownPath } from "../domain/markdownPath";
-import { IndexingQueueSnapshot, SyncResults } from "../types";
+import { IndexingQueueSnapshot } from "../types";
 import { IndexRepository, SettingsRepository } from "../ports";
-import { IndexNoteOutcome, IndexNoteUseCase } from "./indexNote";
+import { IndexNoteUseCase } from "./indexNote";
 import { IndexingRuntime } from "./indexingRuntime";
 import { BuildIndexSyncPlanUseCase, IndexSyncPlan } from "./buildIndexSyncPlan";
 
 export type SynchronizeIndexUseCase = (args?: {
-	awaitCompletion?: boolean;
 	forceReindexAll?: boolean;
-}) => Promise<SyncResults>;
+}) => Promise<void>;
 
 export type BumpIndexPriorityUseCase = (noteId: string) => Promise<void>;
-
-export type AwaitIndexedNoteUseCase = (noteId: string) => Promise<void>;
 
 export type SubscribeIndexingStateUseCase = (
 	listener: (snapshot: IndexingQueueSnapshot) => void,
@@ -30,7 +27,6 @@ type IndexingCoordinatorDeps = {
 
 export class IndexingCoordinator {
 	private readonly runtime = new IndexingRuntime();
-	private hasLoadedInitialIndexState = false;
 	private isUnloaded = false;
 	private processingPromise: Promise<void> | null = null;
 	private refreshChain: Promise<void> = Promise.resolve();
@@ -38,17 +34,10 @@ export class IndexingCoordinator {
 	constructor(private readonly deps: IndexingCoordinatorDeps) {}
 
 	synchronizeIndex: SynchronizeIndexUseCase = async (args = {}) => {
-		if (this.isUnloaded) {
-			return {indexed: 0, deleted: 0};
-		}
+		if (this.isUnloaded) return;
 
-		const run = async (): Promise<SyncResults> => {
-			if (this.isUnloaded) {
-				return {indexed: 0, deleted: 0};
-			}
-
-			await this.ensureInitialStateLoaded();
-			const before = this.runtime.getLifetimeResults();
+		const run = async (): Promise<void> => {
+			if (this.isUnloaded) return;
 
 			try {
 				if (args.forceReindexAll) {
@@ -60,26 +49,11 @@ export class IndexingCoordinator {
 				if (!this.processingPromise) {
 					await this.maybePersistInitialIndexCompleted();
 				}
-				if (args.awaitCompletion) {
-					await this.runtime.awaitIdle();
-					if (this.runtime.hasFatalError()) {
-						throw new Error(this.runtime.getFatalError());
-					}
-				}
 			} catch (error) {
 				const message = error instanceof Error ? error.message : String(error);
 				this.runtime.markFatalError(message);
 				console.error("[Similarity] Failed to refresh indexing queue:", error);
-				if (args.awaitCompletion) {
-					throw error;
-				}
 			}
-
-			const after = this.runtime.getLifetimeResults();
-			return {
-				indexed: after.indexed - before.indexed,
-				deleted: after.deleted - before.deleted,
-			};
 		};
 
 		const next = this.refreshChain.then(run, run);
@@ -88,18 +62,11 @@ export class IndexingCoordinator {
 	};
 
 	bumpPriority: BumpIndexPriorityUseCase = async (noteId) => {
-		if (this.isUnloaded) {
-			return;
-		}
+		if (this.isUnloaded) return;
 
-		await this.ensureInitialStateLoaded();
+		if (!isMarkdownPath(noteId)) return;
 
-		if (!isMarkdownPath(noteId)) {
-			return;
-		}
-		if (this.runtime.getCurrentNoteId() === noteId) {
-			return;
-		}
+		if (this.runtime.getCurrentNoteId() === noteId) return
 
 		const settings = await this.deps.settingsRepo.get();
 		if (isPathIgnored(noteId, settings.ignoredPaths)) {
@@ -113,22 +80,9 @@ export class IndexingCoordinator {
 		this.ensureProcessing();
 	};
 
-	awaitNote: AwaitIndexedNoteUseCase = async (noteId) => {
-		if (this.isUnloaded) {
-			return;
-		}
-
-		await this.runtime.awaitNote(noteId);
-	};
-
 	subscribe: SubscribeIndexingStateUseCase = (listener) => {
-		if (this.isUnloaded) {
-			return () => {};
-		}
-
-		const unsubscribe = this.runtime.subscribe(listener);
-		void this.ensureInitialStateLoaded();
-		return unsubscribe;
+		if (this.isUnloaded) return () => {};
+		return this.runtime.subscribe(listener);
 	};
 
 	getSnapshot: GetIndexingStateUseCase = () => this.runtime.getSnapshot();
@@ -140,30 +94,15 @@ export class IndexingCoordinator {
 		this.runtime.unload();
 	};
 
-	private async ensureInitialStateLoaded() {
-		if (this.hasLoadedInitialIndexState || this.isUnloaded) {
-			return;
-		}
-
-		this.runtime.setInitialIndexCompleted(
-			(await this.deps.settingsRepo.get()).initialIndexCompleted,
-		);
-		this.hasLoadedInitialIndexState = true;
-	}
-
 	private async maybePersistInitialIndexCompleted() {
 		if (
 			this.isUnloaded
-			|| this.runtime.hasCompletedInitialPass()
 			|| this.runtime.getCurrentNoteId()
 			|| this.runtime.hasPendingWork()
 			|| this.runtime.hasFatalError()
 		) {
 			return;
 		}
-
-		this.runtime.markInitialIndexCompleted();
-		await this.deps.settingsRepo.updatePartial({initialIndexCompleted: true});
 	}
 
 	private async applySyncPlan(plan: IndexSyncPlan) {
@@ -191,19 +130,14 @@ export class IndexingCoordinator {
 					return;
 				}
 
-				let outcome: IndexNoteOutcome | undefined;
 				try {
-					outcome = await this.deps.indexNote(noteId);
+					await this.deps.indexNote(noteId);
 				} catch (error) {
 					this.runtime.recordProcessingFailure();
 					console.error(`[Similarity] Failed to index note ${noteId}:`, error);
 				}
 
-				if (outcome === "indexed") {
-					this.runtime.recordIndexed();
-				}
-
-				this.runtime.finishCurrent(noteId);
+				this.runtime.finishCurrent();
 
 				if (this.isUnloaded) {
 					this.runtime.finishRun();

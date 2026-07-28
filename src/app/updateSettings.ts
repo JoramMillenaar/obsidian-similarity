@@ -22,7 +22,6 @@ export function makeUpdateSettings(deps: {
 		}
 
 		await deps.synchronizeIndex({
-			awaitCompletion: false,
 			forceReindexAll: true,
 		});
 		return {reindexQueued: true};

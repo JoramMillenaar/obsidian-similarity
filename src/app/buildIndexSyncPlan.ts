@@ -1,7 +1,8 @@
 import { deriveSyncActions } from "../domain/getSyncActions";
 import { isPathIgnored } from "../domain/ignoreRules";
 import { IndexRepository, NoteSource, SettingsRepository } from "../ports";
-import { sortInitialIndexCandidates } from "../domain/indexingQueue";
+
+import { sortIndexCandidates } from "../domain/sortIndexCandidates";
 
 export type IndexSyncPlan = {
 	idsToRemoveFromIndex: string[];
@@ -28,7 +29,7 @@ export function makeBuildIndexSyncPlan(deps: {
 			candidates.map((candidate) => candidate.id),
 			indexedIds,
 		);
-		const idsToSeed = sortInitialIndexCandidates(
+		const idsToSeed = sortIndexCandidates(
 			[...new Set(actions.toAdd)]
 				.map((noteId) => candidateMap.get(noteId))
 				.filter((candidate): candidate is NonNullable<typeof candidate> => Boolean(candidate)),

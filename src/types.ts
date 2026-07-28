@@ -37,16 +37,8 @@ export interface IframeMessage {
 	maxOverlapPercent?: number;
 }
 
-export interface SyncResults {
-	indexed: number;
-	deleted: number;
-}
-
-export type OnProgressCallback = (p: { phase: string; processed: number; total: number }) => void;
-
 export type IndexingQueueSnapshot = {
 	isRunning: boolean;
-	hasCompletedInitialIndex: boolean;
 	currentNoteId?: string;
 	pending: number;
 	processed: number;
@@ -57,11 +49,9 @@ export type IndexingQueueSnapshot = {
 
 export interface SimilaritySettings {
 	ignoredPaths: string[];
-	initialIndexCompleted: boolean;
 	advancedOpen: boolean;
 	maxRawMarkdownChars: number;
 	maxExtractedChars: number;
-	/** Clamped 0–50: max share of a chunk's token budget reused as sentence overlap with the previous chunk. */
 	maxOverlapPercent: number;
 }
 

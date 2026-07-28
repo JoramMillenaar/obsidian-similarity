@@ -1,25 +1,14 @@
-import {
-	bumpQueuedNote,
-	createEmptyIndexQueue,
-	dequeueNextQueuedNote,
-	mergeSeedQueue,
-	removeQueuedNotes,
-} from "../domain/indexingQueue";
-import { IndexingQueueSnapshot, SyncResults } from "../types";
+import { IndexingQueueSnapshot } from "../types";
+import { UniqueDeque } from "../domain/uniqueDeque";
 
 export class IndexingRuntime {
-	private queue = createEmptyIndexQueue();
+	private queue = new UniqueDeque();
 	private currentNoteId: string | undefined;
 	private isRunning = false;
 	private processedInRun = 0;
 	private failedInRun = 0;
-	private hasCompletedInitialIndex = false;
 	private fatalError: string | undefined;
-	private lifetimeIndexed = 0;
-	private lifetimeDeleted = 0;
 	private readonly listeners = new Set<(snapshot: IndexingQueueSnapshot) => void>();
-	private readonly noteWaiters = new Map<string, Array<() => void>>();
-	private drainWaiters: Array<() => void> = [];
 
 	subscribe(listener: (snapshot: IndexingQueueSnapshot) => void): () => void {
 		this.listeners.add(listener);
@@ -32,20 +21,12 @@ export class IndexingRuntime {
 	getSnapshot(): IndexingQueueSnapshot {
 		return {
 			isRunning: this.isRunning,
-			hasCompletedInitialIndex: this.hasCompletedInitialIndex,
 			currentNoteId: this.currentNoteId,
 			pending: this.queue.length,
 			processed: this.processedInRun,
 			total: this.processedInRun + this.queue.length + (this.currentNoteId ? 1 : 0),
 			failed: this.failedInRun,
 			fatalError: this.fatalError,
-		};
-	}
-
-	getLifetimeResults(): SyncResults {
-		return {
-			indexed: this.lifetimeIndexed,
-			deleted: this.lifetimeDeleted,
 		};
 	}
 
@@ -61,28 +42,6 @@ export class IndexingRuntime {
 		return Boolean(this.fatalError);
 	}
 
-	getFatalError(): string | undefined {
-		return this.fatalError;
-	}
-
-	hasCompletedInitialPass(): boolean {
-		return this.hasCompletedInitialIndex;
-	}
-
-	setInitialIndexCompleted(value: boolean) {
-		if (this.hasCompletedInitialIndex === value) {
-			return;
-		}
-
-		this.hasCompletedInitialIndex = value;
-		this.emit();
-	}
-
-	markInitialIndexCompleted() {
-		this.hasCompletedInitialIndex = true;
-		this.emit();
-	}
-
 	beginRun() {
 		this.processedInRun = 0;
 		this.failedInRun = 0;
@@ -92,27 +51,21 @@ export class IndexingRuntime {
 	}
 
 	takeNext(): string | null {
-		const next = dequeueNextQueuedNote(this.queue);
-		if (!next) {
+		const noteId = this.queue.popLeft();
+		if (!noteId) {
 			return null;
 		}
 
-		this.queue = next.queue;
-		this.currentNoteId = next.noteId;
+		this.currentNoteId = noteId;
 		this.isRunning = true;
 		this.emit();
-		return next.noteId;
+		return noteId;
 	}
 
-	finishCurrent(noteId: string) {
+	finishCurrent() {
 		this.processedInRun++;
 		this.currentNoteId = undefined;
-		this.resolveNoteWaiters(noteId);
 		this.emit();
-	}
-
-	recordIndexed() {
-		this.lifetimeIndexed++;
 	}
 
 	recordDeleted(noteIds: string[]) {
@@ -120,7 +73,6 @@ export class IndexingRuntime {
 			return;
 		}
 
-		this.lifetimeDeleted += noteIds.length;
 		this.emit();
 	}
 
@@ -132,7 +84,6 @@ export class IndexingRuntime {
 		this.currentNoteId = undefined;
 		this.isRunning = false;
 		this.emit();
-		this.resolveDrainWaiters();
 	}
 
 	markFatalError(message: string) {
@@ -140,29 +91,17 @@ export class IndexingRuntime {
 		this.isRunning = false;
 		this.fatalError = message;
 		this.emit();
-		this.resolveDrainWaiters();
-	}
-
-	clearFatalError() {
-		if (!this.fatalError) {
-			return;
-		}
-
-		this.fatalError = undefined;
-		this.emit();
 	}
 
 	replaceSeedQueue(seedIds: string[]) {
-		this.queue = mergeSeedQueue(this.queue, seedIds);
+		this.queue.mergeRight(seedIds);
 		this.emit();
 	}
 
 	bump(noteId: string) {
-		if (this.currentNoteId === noteId) {
-			return;
-		}
+		if (this.currentNoteId === noteId) return;
 
-		this.queue = bumpQueuedNote(this.queue, noteId);
+		this.queue.bumpLeft(noteId);
 		this.emit();
 	}
 
@@ -171,74 +110,20 @@ export class IndexingRuntime {
 			return;
 		}
 
-		const before = this.queue;
-		this.queue = removeQueuedNotes(this.queue, noteIds);
-		if (before === this.queue) {
+		const removedAny = noteIds.some((noteId) => this.queue.has(noteId));
+		this.queue.removeMany(noteIds);
+		if (!removedAny) {
 			return;
 		}
 
-		for (const noteId of noteIds) {
-			if (!this.queue.includes(noteId) && this.currentNoteId !== noteId) {
-				this.resolveNoteWaiters(noteId);
-			}
-		}
 		this.emit();
 	}
 
-	async awaitNote(noteId: string): Promise<void> {
-		if (!this.currentNoteId && !this.queue.includes(noteId)) {
-			return;
-		}
-
-		await new Promise<void>((resolve) => {
-			const current = this.noteWaiters.get(noteId) ?? [];
-			this.noteWaiters.set(noteId, [...current, resolve]);
-		});
-	}
-
-	async awaitIdle(): Promise<void> {
-		if (!this.isRunning && !this.currentNoteId && !this.hasPendingWork()) {
-			return;
-		}
-
-		await new Promise<void>((resolve) => {
-			this.drainWaiters.push(resolve);
-		});
-	}
-
 	unload() {
-		this.queue = createEmptyIndexQueue();
+		this.queue = new UniqueDeque();
 		this.currentNoteId = undefined;
 		this.isRunning = false;
-
-		for (const waiters of this.noteWaiters.values()) {
-			for (const waiter of waiters) {
-				waiter();
-			}
-		}
-		this.noteWaiters.clear();
-
-		this.resolveDrainWaiters();
 		this.listeners.clear();
-	}
-
-	private resolveNoteWaiters(noteId: string) {
-		const waiters = this.noteWaiters.get(noteId);
-		if (!waiters?.length) {
-			return;
-		}
-
-		this.noteWaiters.delete(noteId);
-		for (const waiter of waiters) {
-			waiter();
-		}
-	}
-
-	private resolveDrainWaiters() {
-		for (const waiter of this.drainWaiters) {
-			waiter();
-		}
-		this.drainWaiters = [];
 	}
 
 	private emit() {

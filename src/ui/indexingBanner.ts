@@ -17,9 +17,7 @@ export function getIndexingBannerState(snapshot: IndexingQueueSnapshot): Indexin
 	if (snapshot.fatalError) {
 		return {
 			kind: "failed",
-			message: snapshot.hasCompletedInitialIndex
-				? "Index updates paused after an error. Results may be stale until you sync again."
-				: "Indexing paused after an error. Results may be incomplete until you sync again.",
+			message: "Indexing paused after an error. Try restarting your Obsidian.",
 			progressLabel,
 			processed,
 			total,
@@ -28,10 +26,8 @@ export function getIndexingBannerState(snapshot: IndexingQueueSnapshot): Indexin
 
 	if (snapshot.isRunning || snapshot.pending > 0) {
 		return {
-			kind: snapshot.hasCompletedInitialIndex ? "updating" : "initial",
-			message: snapshot.hasCompletedInitialIndex
-				? "Index update in progress. Results may shift as more notes are processed."
-				: "Initial indexing in progress. Results are already available, but they may still be incomplete.",
+			kind: "updating",
+			message: "Optimizing your experience. Results may shift as more notes are processed.",
 			progressLabel,
 			processed,
 			total,

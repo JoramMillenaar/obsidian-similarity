@@ -11,7 +11,6 @@ import { JsonIndexedNoteRepository } from "./infra/index/jsonIndexedNoteReposito
 import { IndexNoteUseCase, makeIndexNote } from "./app/indexNote";
 import { GetSimilarNotesUseCase, makeGetSimilarNotes } from "./app/getSimilarNotes";
 import { InsertWikilinkAtCursorUseCase, makeInsertWikilinkAtCursor } from "./app/insertWikilinkAtCursor";
-import { makeSyncIndexToVault, SyncIndexToVaultUseCase } from "./app/syncIndexToVault";
 import { makeEmbedText } from "./app/embedText";
 import {
 	EmbeddingPort,
@@ -28,7 +27,6 @@ import { IsIgnoredPath, makeIsIgnoredPath } from "./app/isIgnoredPath";
 import { makeUpdateSettings, UpdateSettingsUseCase } from "./app/updateSettings";
 import { ObsidianActiveEditor } from "./infra/obsidian/obsidianActiveEditor";
 import {
-	AwaitIndexedNoteUseCase,
 	BumpIndexPriorityUseCase,
 	GetIndexingStateUseCase,
 	makeIndexingCoordinator,
@@ -58,10 +56,8 @@ export class AppContainer {
 	readonly getNoteText: GetNoteTextUseCase;
 	readonly getSimilarNotes: GetSimilarNotesUseCase;
 	readonly insertWikilinkAtCursor: InsertWikilinkAtCursorUseCase;
-	readonly syncIndexToVault: SyncIndexToVaultUseCase;
 	readonly synchronizeIndex: SynchronizeIndexUseCase;
 	readonly bumpIndexPriority: BumpIndexPriorityUseCase;
-	readonly awaitIndexedNote: AwaitIndexedNoteUseCase;
 	readonly subscribeIndexingState: SubscribeIndexingStateUseCase;
 	readonly getIndexingState: GetIndexingStateUseCase;
 	readonly isIgnoredPath: IsIgnoredPath;
@@ -128,14 +124,8 @@ export class AppContainer {
 			buildIndexSyncPlan,
 		});
 
-		this.syncIndexToVault = makeSyncIndexToVault({
-			synchronizeIndex: indexingCoordinator.synchronizeIndex,
-			subscribe: indexingCoordinator.subscribe,
-		});
-
 		this.synchronizeIndex = indexingCoordinator.synchronizeIndex;
 		this.bumpIndexPriority = indexingCoordinator.bumpPriority;
-		this.awaitIndexedNote = indexingCoordinator.awaitNote;
 		this.subscribeIndexingState = indexingCoordinator.subscribe;
 		this.getIndexingState = indexingCoordinator.getSnapshot;
 		this.unloadIndexingCoordinator = indexingCoordinator.unload;
