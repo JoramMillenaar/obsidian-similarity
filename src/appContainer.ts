@@ -26,12 +26,6 @@ import { ObsidianPluginDataStore } from "./infra/obsidian/obsidianPluginDataStor
 import { ObsidianSettingsRepository } from "./infra/obsidian/obsidianSettings";
 import { IsIgnoredPath, makeIsIgnoredPath } from "./app/isIgnoredPath";
 import { makeUpdateSettings, UpdateSettingsUseCase } from "./app/updateSettings";
-import {
-	IsInitialIndexCompletedUseCase,
-	makeIsInitialIndexCompleted,
-	makeMarkInitialIndexCompleted,
-	MarkInitialIndexCompletedUseCase,
-} from "./app/initialIndexState";
 import { ObsidianActiveEditor } from "./infra/obsidian/obsidianActiveEditor";
 import {
 	AwaitIndexedNoteUseCase,
@@ -72,8 +66,6 @@ export class AppContainer {
 	readonly getIndexingState: GetIndexingStateUseCase;
 	readonly isIgnoredPath: IsIgnoredPath;
 	readonly updateSettings: UpdateSettingsUseCase;
-	readonly isInitialIndexCompleted: IsInitialIndexCompletedUseCase;
-	readonly markInitialIndexCompleted: MarkInitialIndexCompletedUseCase;
 
 	readonly upsertDebouncer: KeyedDebouncer<string>;
 
@@ -155,8 +147,6 @@ export class AppContainer {
 			indexStorage: this.indexStorage,
 			synchronizeIndex: this.synchronizeIndex,
 		});
-		this.isInitialIndexCompleted = makeIsInitialIndexCompleted({settingsRepo: this.settingsRepo});
-		this.markInitialIndexCompleted = makeMarkInitialIndexCompleted({settingsRepo: this.settingsRepo});
 	}
 
 	async shutdown(): Promise<void> {
