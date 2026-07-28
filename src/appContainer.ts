@@ -126,7 +126,7 @@ export class AppContainer {
 
 		this.synchronizeIndex = indexingCoordinator.synchronizeIndex;
 		this.bumpIndexPriority = indexingCoordinator.bumpPriority;
-		this.subscribeIndexingState = indexingCoordinator.subscribe;
+		this.subscribeIndexingState = indexingCoordinator.subscribeIndexingState;
 		this.getIndexingState = indexingCoordinator.getSnapshot;
 		this.unloadIndexingCoordinator = indexingCoordinator.unload;
 

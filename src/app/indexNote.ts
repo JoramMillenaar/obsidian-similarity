@@ -34,8 +34,6 @@ export function makeIndexNote(deps: IndexNoteDeps): IndexNoteUseCase {
 		try {
 			text = await deps.getNoteText(noteId);
 		} catch {
-			// The note may simply no longer exist (e.g. deleted while queued) — that's
-			// not a processing failure, just an invariant to settle silently.
 			await deps.indexRepo.remove(noteId);
 			return "removed";
 		}
@@ -73,8 +71,6 @@ export function makeIndexNote(deps: IndexNoteDeps): IndexNoteUseCase {
 
 function toNoteChunks(embedded: EmbeddedChunk[], preparedText: string): NoteChunk[] {
 	return embedded.map((chunk) => ({
-		// The model already returns unit vectors, but the binary sidecar's int8
-		// quantization assumes it — re-normalize so that stays true by construction.
 		embedding: normalizeEmbedding(chunk.embedding),
 		start: chunk.start,
 		end: chunk.end,

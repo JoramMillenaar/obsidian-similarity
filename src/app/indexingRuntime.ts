@@ -3,7 +3,6 @@ import { UniqueDeque } from "../domain/uniqueDeque";
 
 export class IndexingRuntime {
 	private queue = new UniqueDeque();
-	private currentNoteId: string | undefined;
 	private isRunning = false;
 	private processedInRun = 0;
 	private failedInRun = 0;
@@ -21,10 +20,9 @@ export class IndexingRuntime {
 	getSnapshot(): IndexingQueueSnapshot {
 		return {
 			isRunning: this.isRunning,
-			currentNoteId: this.currentNoteId,
 			pending: this.queue.length,
 			processed: this.processedInRun,
-			total: this.processedInRun + this.queue.length + (this.currentNoteId ? 1 : 0),
+			total: this.processedInRun + this.queue.length,
 			failed: this.failedInRun,
 			fatalError: this.fatalError,
 		};
@@ -32,14 +30,6 @@ export class IndexingRuntime {
 
 	hasPendingWork(): boolean {
 		return this.queue.length > 0;
-	}
-
-	getCurrentNoteId(): string | undefined {
-		return this.currentNoteId;
-	}
-
-	hasFatalError(): boolean {
-		return Boolean(this.fatalError);
 	}
 
 	beginRun() {
@@ -52,11 +42,8 @@ export class IndexingRuntime {
 
 	takeNext(): string | null {
 		const noteId = this.queue.popLeft();
-		if (!noteId) {
-			return null;
-		}
+		if (!noteId) return null;
 
-		this.currentNoteId = noteId;
 		this.isRunning = true;
 		this.emit();
 		return noteId;
@@ -64,15 +51,6 @@ export class IndexingRuntime {
 
 	finishCurrent() {
 		this.processedInRun++;
-		this.currentNoteId = undefined;
-		this.emit();
-	}
-
-	recordDeleted(noteIds: string[]) {
-		if (noteIds.length === 0) {
-			return;
-		}
-
 		this.emit();
 	}
 
@@ -81,13 +59,11 @@ export class IndexingRuntime {
 	}
 
 	finishRun() {
-		this.currentNoteId = undefined;
 		this.isRunning = false;
 		this.emit();
 	}
 
 	markFatalError(message: string) {
-		this.currentNoteId = undefined;
 		this.isRunning = false;
 		this.fatalError = message;
 		this.emit();
@@ -99,8 +75,6 @@ export class IndexingRuntime {
 	}
 
 	bump(noteId: string) {
-		if (this.currentNoteId === noteId) return;
-
 		this.queue.bumpLeft(noteId);
 		this.emit();
 	}
@@ -121,7 +95,6 @@ export class IndexingRuntime {
 
 	unload() {
 		this.queue = new UniqueDeque();
-		this.currentNoteId = undefined;
 		this.isRunning = false;
 		this.listeners.clear();
 	}

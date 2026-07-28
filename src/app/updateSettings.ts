@@ -20,10 +20,8 @@ export function makeUpdateSettings(deps: {
 		if (await deps.indexStorage.isEmpty()) {
 			return {reindexQueued: false};
 		}
-
-		await deps.synchronizeIndex({
-			forceReindexAll: true,
-		});
+		// TODO: before we reindexed everything on setting change. Should we just keep this simple and make the self-heal bulletproof?
+		await deps.synchronizeIndex();
 		return {reindexQueued: true};
 	};
 }
