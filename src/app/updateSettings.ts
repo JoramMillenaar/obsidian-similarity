@@ -1,6 +1,6 @@
 import { SimilaritySettings } from "../types";
 import { SettingsRepository } from "../ports";
-import { SynchronizeIndexUseCase } from "./indexingCoordinator";
+import { SynchronizeIndexUseCase } from "./indexSyncWorker";
 
 export type UpdateSettingsResult = {
 	reindexQueued: boolean;

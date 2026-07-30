@@ -29,10 +29,10 @@ import { ObsidianActiveEditor } from "./infra/obsidian/obsidianActiveEditor";
 import {
 	BumpIndexPriorityUseCase,
 	GetIndexingStateUseCase,
-	makeIndexingCoordinator,
+	makeIndexSyncWorker,
 	SynchronizeIndexUseCase,
 	SubscribeIndexingStateUseCase,
-} from "./app/indexingCoordinator";
+} from "./app/indexSyncWorker";
 import { GetNoteTextUseCase, makeGetNoteText } from "./app/getNoteText";
 import { makeBuildIndexSyncPlan } from "./app/buildIndexSyncPlan";
 
@@ -65,7 +65,7 @@ export class AppContainer {
 
 	readonly upsertDebouncer: KeyedDebouncer<string>;
 
-	private readonly unloadIndexingCoordinator: () => void;
+	private readonly unloadIndexSyncWorker: () => void;
 
 	constructor(plugin: Plugin) {
 		this.status = new ObsidianStatusBar(plugin);
@@ -117,18 +117,18 @@ export class AppContainer {
 			settingsRepo: this.settingsRepo,
 		});
 
-		const indexingCoordinator = makeIndexingCoordinator({
+		const indexSyncWorker = makeIndexSyncWorker({
 			indexRepo: this.indexRepo,
-			settingsRepo: this.settingsRepo,
 			indexNote: this.indexNote,
 			buildIndexSyncPlan,
+			isIgnoredPath: this.isIgnoredPath,
 		});
 
-		this.synchronizeIndex = indexingCoordinator.synchronizeIndex;
-		this.bumpIndexPriority = indexingCoordinator.bumpPriority;
-		this.subscribeIndexingState = indexingCoordinator.subscribeIndexingState;
-		this.getIndexingState = indexingCoordinator.getSnapshot;
-		this.unloadIndexingCoordinator = indexingCoordinator.unload;
+		this.synchronizeIndex = indexSyncWorker.synchronizeIndex;
+		this.bumpIndexPriority = indexSyncWorker.bumpPriority;
+		this.subscribeIndexingState = indexSyncWorker.subscribeIndexingState;
+		this.getIndexingState = indexSyncWorker.getSnapshot;
+		this.unloadIndexSyncWorker = indexSyncWorker.unload;
 
 		this.upsertDebouncer = new KeyedDebouncer<string>(1100);
 
@@ -140,7 +140,7 @@ export class AppContainer {
 	}
 
 	async shutdown(): Promise<void> {
-		this.unloadIndexingCoordinator();
+		this.unloadIndexSyncWorker();
 		this.upsertDebouncer.cancel();
 		await this.indexStorage.flush().catch((error) => {
 			console.error("[Similarity] Failed to flush index on shutdown:", error);

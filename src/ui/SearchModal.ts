@@ -1,7 +1,7 @@
 import { App, Notice, Platform, SuggestModal, TFile } from "obsidian";
 import { GetSimilarNotesUseCase } from "../app/getSimilarNotes";
 import { InsertWikilinkAtCursorUseCase } from "../app/insertWikilinkAtCursor";
-import { SubscribeIndexingStateUseCase } from "../app/indexingCoordinator";
+import { SubscribeIndexingStateUseCase } from "../app/indexSyncWorker";
 import { KeyedDebouncer } from "../domain/debouncer";
 import { isMarkdownPath } from "../domain/markdownPath";
 import { IndexingQueueSnapshot, RelatedNote } from "../types";

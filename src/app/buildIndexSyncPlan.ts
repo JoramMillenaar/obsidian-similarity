@@ -1,4 +1,3 @@
-import { deriveSyncActions } from "../domain/getSyncActions";
 import { isPathIgnored } from "../domain/ignoreRules";
 import { IndexRepository, NoteSource, SettingsRepository } from "../ports";
 
@@ -18,26 +17,31 @@ export function makeBuildIndexSyncPlan(deps: {
 }): BuildIndexSyncPlanUseCase {
 	return async function buildIndexSyncPlan() {
 		const settings = await deps.settingsRepo.get();
-		const allCandidates = deps.noteSource.listIndexCandidates();
-		const candidates = allCandidates.filter(
-			(candidate) => !isPathIgnored(candidate.id, settings.ignoredPaths),
-		);
-		const candidateMap = new Map(candidates.map((candidate) => [candidate.id, candidate]));
+		const candidates = deps.noteSource
+			.listIndexCandidates()
+			.filter((candidate) => !isPathIgnored(candidate.id, settings.ignoredPaths));
+		const candidateIds = new Set(candidates.map((candidate) => candidate.id));
+
 		const index = await deps.indexRepo.listAll();
-		const indexedIds = index.map((entry) => entry.id);
-		const actions = deriveSyncActions(
-			candidates.map((candidate) => candidate.id),
-			indexedIds,
-		);
-		const idsToSeed = sortIndexCandidates(
-			[...new Set(actions.toAdd)]
-				.map((noteId) => candidateMap.get(noteId))
-				.filter((candidate): candidate is NonNullable<typeof candidate> => Boolean(candidate)),
-		);
+		const indexedById = new Map(index.map((entry) => [entry.id, entry]));
+
+		const idsToRemoveFromIndex = index
+			.map((entry) => entry.id)
+			.filter((id) => !candidateIds.has(id));
+
+		// A candidate needs (re-)seeding when it has no index entry yet, or its
+		// file was modified after it was last indexed. `indexNote`'s content-hash
+		// check is the backstop if mtime is wrong or imprecise — worst case a
+		// note is re-seeded and turns out unchanged, which is cheap.
+		const staleCandidates = candidates.filter((candidate) => {
+			const indexed = indexedById.get(candidate.id);
+			if (!indexed) return true;
+			return candidate.modifiedAt > new Date(indexed.updatedAt).getTime();
+		});
 
 		return {
-			idsToRemoveFromIndex: [...new Set(actions.toRemove)],
-			idsToSeed,
+			idsToRemoveFromIndex,
+			idsToSeed: sortIndexCandidates(staleCandidates),
 		};
 	};
 }

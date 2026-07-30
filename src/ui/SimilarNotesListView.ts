@@ -1,6 +1,6 @@
 import { ItemView, Notice, TFile, WorkspaceLeaf } from "obsidian";
 import { GetSimilarNotesUseCase } from "../app/getSimilarNotes";
-import { SubscribeIndexingStateUseCase, SynchronizeIndexUseCase, } from "../app/indexingCoordinator";
+import { SubscribeIndexingStateUseCase, SynchronizeIndexUseCase, } from "../app/indexSyncWorker";
 import { isMarkdownPath } from "../domain/markdownPath";
 import { IndexingQueueSnapshot } from "../types";
 import { IndexRepository } from "../ports";
