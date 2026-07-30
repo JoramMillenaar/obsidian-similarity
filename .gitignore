@@ -21,6 +21,7 @@ main.js
 
 # obsidian
 data.json
+embeddings.bin
 # ...but keep committed migration test fixtures (frozen golden vaults)
 !test/fixtures/**/data.json
 
