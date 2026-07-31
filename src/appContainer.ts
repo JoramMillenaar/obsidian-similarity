@@ -28,7 +28,6 @@ import { makeUpdateSettings, UpdateSettingsUseCase } from "./app/updateSettings"
 import { ObsidianActiveEditor } from "./infra/obsidian/obsidianActiveEditor";
 import { GetIndexingStateUseCase, IndexingProgress, SubscribeIndexingStateUseCase } from "./app/indexingProgress";
 import { makeSynchronizeIndex, SynchronizeIndexUseCase } from "./app/synchronizeIndex";
-import { makeRequestNoteIndex } from "./app/requestNoteIndex";
 import { GetNoteTextUseCase, makeGetNoteText } from "./app/getNoteText";
 import { makeBuildIndexSyncPlan } from "./app/buildIndexSyncPlan";
 import { LiveNoteSync, makeLiveNoteSync } from "./app/liveNoteSync";
@@ -140,7 +139,7 @@ export class AppContainer {
 
 		this.liveNoteSync = makeLiveNoteSync({
 			indexRepo: this.indexRepo,
-			requestIndex: makeRequestNoteIndex({progress: queueState, indexNote: this.indexNote}),
+			indexNote: this.indexNote,
 			updateDebouncer: this.upsertDebouncer,
 		});
 

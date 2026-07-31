@@ -20,15 +20,6 @@ type PendingJob = {
 	promise: Promise<unknown>;
 };
 
-/**
- * Serializes embedding work behind a single in-flight job so the embedder
- * (and the model backing it) is never asked to do two things at once.
- *
- * Keyed submissions coalesce: a second submit for a key that's already
- * pending joins the first job's promise instead of running twice, and — if
- * its priority is higher — promotes the existing entry rather than queueing
- * a duplicate.
- */
 export class EmbeddingQueue {
 	private readonly queue = new IndexQueue();
 	private readonly jobs = new Map<string, PendingJob>();
