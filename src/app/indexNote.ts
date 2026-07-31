@@ -1,25 +1,28 @@
 import { hashText } from "../domain/text";
 import { normalizeEmbedding } from "../domain/embedding";
 import { isMarkdownPath } from "../domain/markdownPath";
-import { EmbeddedChunk } from "../ports";
+import { EmbeddedChunk, IndexRepository } from "../ports";
 import { NoteChunk } from "../types";
-import { IndexRepository } from "../ports";
-import { EmbedTextUseCase } from "./embedText";
+import { EmbedTextUseCase, Priority } from "./embedText";
 import { IsIgnoredPath } from "./isIgnoredPath";
 import { GetNoteTextUseCase } from "./getNoteText";
 
 export type IndexNoteDeps = {
 	getNoteText: GetNoteTextUseCase;
-	embedText: EmbedTextUseCase;
 	indexRepo: IndexRepository;
 	isIgnoredPath: IsIgnoredPath;
+	embedText: EmbedTextUseCase;
 };
 
 export type IndexNoteOutcome = "indexed" | "removed" | "unchanged";
-export type IndexNoteUseCase = (noteId: string) => Promise<IndexNoteOutcome>;
+
+export type IndexNoteUseCase = (
+	noteId: string,
+	priority?: Priority,
+) => Promise<IndexNoteOutcome>;
 
 export function makeIndexNote(deps: IndexNoteDeps): IndexNoteUseCase {
-	return async function indexNote(noteId: string) {
+	return async function indexNote(noteId: string, priority?: Priority) {
 		if (!isMarkdownPath(noteId)) {
 			await deps.indexRepo.remove(noteId);
 			return "removed";
@@ -47,7 +50,7 @@ export function makeIndexNote(deps: IndexNoteDeps): IndexNoteUseCase {
 
 		let embedded: EmbeddedChunk[] | null;
 		try {
-			embedded = await deps.embedText(text);
+			embedded = await deps.embedText(text, priority);
 		} catch (error) {
 			await deps.indexRepo.remove(noteId);
 			throw error;

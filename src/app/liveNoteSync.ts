@@ -1,8 +1,6 @@
-import { isMarkdownPath } from "../domain/markdownPath";
 import { KeyedDebouncer } from "../domain/debouncer";
 import { IndexRepository } from "../ports";
-import { IsIgnoredPath } from "./isIgnoredPath";
-import { BumpIndexPriorityUseCase, HasPendingIndexUseCase, RequestIndexUseCase } from "./indexSyncWorker";
+import { IndexNoteUseCase } from "./indexNote";
 
 
 export type LiveNoteSync = {
@@ -14,30 +12,20 @@ export type LiveNoteSync = {
 
 export type LiveNoteSyncDeps = {
 	indexRepo: IndexRepository;
-	isIgnoredPath: IsIgnoredPath;
-	bumpPriority: BumpIndexPriorityUseCase;
-	requestIndex: RequestIndexUseCase;
-	hasPendingIndex: HasPendingIndexUseCase;
+	indexNote: IndexNoteUseCase;
 	updateDebouncer: KeyedDebouncer<string>;
 };
 
 export function makeLiveNoteSync(deps: LiveNoteSyncDeps): LiveNoteSync {
 	return {
 		view(noteId) {
-			deps.bumpPriority(noteId);
+			// TODO: too expensive just do a queue check instead if you can.
+			void deps.indexNote(noteId, "medium");
 		},
 
 		update(noteId) {
-			if (!isMarkdownPath(noteId)) return;
-
-			if (deps.hasPendingIndex(noteId)) {
-				deps.bumpPriority(noteId);
-				return;
-			}
-
 			deps.updateDebouncer.schedule(noteId, async () => {
-				if (await deps.isIgnoredPath(noteId)) return;
-				deps.requestIndex(noteId);
+				await deps.indexNote(noteId, "medium");
 			});
 		},
 

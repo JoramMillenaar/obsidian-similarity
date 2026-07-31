@@ -1,16 +1,24 @@
 /**
- * Ordering for the sync backlog: two priority tiers, each a FIFO set of paths
- * whose index state is unknown. `urgent` drains before `backlog` entirely.
- * Actions aren't decided here — the worker resolves what a path actually
- * needs when it's taken off the queue, so drift between this queue and the
- * vault/index is harmless.
+ * Ordering for the embedding backlog: three priority tiers, each a FIFO set
+ * of keys whose work is pending. `high` drains before `medium` before `low`.
+ * Actions aren't decided here — the queue's owner resolves what a key
+ * actually needs when it's taken off, so drift between this queue and
+ * whatever it backs is harmless.
  */
+export type Priority = "high" | "medium" | "low";
+
+const TIERS: Priority[] = ["high", "medium", "low"];
+const RANK: Record<Priority, number> = {high: 2, medium: 1, low: 0};
+
 export class IndexQueue {
-	private urgent = new Set<string>();
-	private backlog = new Set<string>();
+	private tiers: Record<Priority, Set<string>> = {
+		high: new Set(),
+		medium: new Set(),
+		low: new Set(),
+	};
 
 	get pending(): number {
-		return this.urgent.size + this.backlog.size;
+		return this.tiers.high.size + this.tiers.medium.size + this.tiers.low.size;
 	}
 
 	get isEmpty(): boolean {
@@ -18,35 +26,37 @@ export class IndexQueue {
 	}
 
 	has(id: string): boolean {
-		return this.urgent.has(id) || this.backlog.has(id);
+		return TIERS.some((tier) => this.tiers[tier].has(id));
 	}
 
-	bump(id: string): void {
-		this.backlog.delete(id);
-		this.urgent.delete(id);
-		this.urgent.add(id);
+	priorityOf(id: string): Priority | undefined {
+		return TIERS.find((tier) => this.tiers[tier].has(id));
 	}
 
-	seed(ids: string[]): void {
-		for (const id of ids) {
-			if (this.urgent.has(id)) continue;
-			this.backlog.add(id);
-		}
+	/** Adds a key at the given priority, or promotes it if already queued at a lower one. Never downgrades. */
+	enqueue(id: string, priority: Priority): void {
+		const current = this.priorityOf(id);
+		if (current && RANK[current] >= RANK[priority]) return;
+		if (current) this.tiers[current].delete(id);
+		this.tiers[priority].add(id);
 	}
 
 	take(): string | null {
-		for (const tier of [this.urgent, this.backlog]) {
-			const next = tier.values().next();
-			if (!next.done) {
-				tier.delete(next.value);
-				return next.value;
-			}
+		for (const tier of TIERS) {
+			const next = takeFrom(this.tiers[tier]);
+			if (next != null) return next;
 		}
 		return null;
 	}
 
 	clear(): void {
-		this.urgent.clear();
-		this.backlog.clear();
+		for (const tier of TIERS) this.tiers[tier].clear();
 	}
+}
+
+function takeFrom(tier: Set<string>): string | null {
+	const next = tier.values().next();
+	if (next.done) return null;
+	tier.delete(next.value);
+	return next.value;
 }

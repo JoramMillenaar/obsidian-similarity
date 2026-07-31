@@ -26,15 +26,13 @@ import { ObsidianSettingsRepository } from "./infra/obsidian/obsidianSettings";
 import { IsIgnoredPath, makeIsIgnoredPath } from "./app/isIgnoredPath";
 import { makeUpdateSettings, UpdateSettingsUseCase } from "./app/updateSettings";
 import { ObsidianActiveEditor } from "./infra/obsidian/obsidianActiveEditor";
-import {
-	GetIndexingStateUseCase,
-	makeIndexSyncWorker,
-	SynchronizeIndexUseCase,
-	SubscribeIndexingStateUseCase,
-} from "./app/indexSyncWorker";
+import { GetIndexingStateUseCase, IndexingProgress, SubscribeIndexingStateUseCase } from "./app/indexingProgress";
+import { makeSynchronizeIndex, SynchronizeIndexUseCase } from "./app/synchronizeIndex";
+import { makeRequestNoteIndex } from "./app/requestNoteIndex";
 import { GetNoteTextUseCase, makeGetNoteText } from "./app/getNoteText";
 import { makeBuildIndexSyncPlan } from "./app/buildIndexSyncPlan";
 import { LiveNoteSync, makeLiveNoteSync } from "./app/liveNoteSync";
+import { EmbeddingQueue } from "./app/embeddingQueue";
 
 const INDEX_WRITE_THROTTLE_MS = 1000;
 
@@ -46,6 +44,7 @@ export class AppContainer {
 	readonly embedder: EmbeddingPort;
 	readonly indexRepo: IndexRepository;
 	readonly settingsRepo: SettingsRepository;
+	readonly embeddingQueue: EmbeddingQueue;
 
 	readonly indexNote: IndexNoteUseCase;
 	readonly getNoteText: GetNoteTextUseCase;
@@ -60,7 +59,8 @@ export class AppContainer {
 
 	readonly upsertDebouncer: KeyedDebouncer<string>;
 
-	private readonly unloadIndexSyncWorker: () => void;
+	private readonly unloadEmbeddingQueue: () => void;
+	private readonly disposeIndexingProgress: () => void;
 
 	constructor(plugin: Plugin) {
 		this.status = new ObsidianStatusBar(plugin);
@@ -75,8 +75,20 @@ export class AppContainer {
 		this.embedder = new EmbeddingProvider();
 		this.indexRepo = new JsonIndexedNoteRepository(this.indexStorage);
 		this.settingsRepo = new ObsidianSettingsRepository(storage);
-		const embedText = makeEmbedText({embedder: this.embedder, settingsRepo: this.settingsRepo});
 		const activeEditor = new ObsidianActiveEditor(plugin);
+
+		this.embeddingQueue = new EmbeddingQueue();
+		const queueState = new IndexingProgress();
+		const embedText = makeEmbedText({
+			embedder: this.embedder,
+			settingsRepo: this.settingsRepo,
+			queue: this.embeddingQueue
+		})
+
+		this.embeddingQueue.subscribe((event) => {
+			if (event.type === "drained") return this.indexRepo.flush();
+			if (event.type === "stopped") queueState.reportFatalError(event.error);
+		});
 
 		this.isIgnoredPath = makeIsIgnoredPath({
 			settingsRepo: this.settingsRepo,
@@ -90,9 +102,9 @@ export class AppContainer {
 
 		this.indexNote = makeIndexNote({
 			getNoteText: this.getNoteText,
-			embedText,
 			indexRepo: this.indexRepo,
 			isIgnoredPath: this.isIgnoredPath,
+			embedText
 		});
 
 		this.getSimilarNotes = makeGetSimilarNotes({
@@ -112,26 +124,23 @@ export class AppContainer {
 			settingsRepo: this.settingsRepo,
 		});
 
-		const indexSyncWorker = makeIndexSyncWorker({
+		this.synchronizeIndex = makeSynchronizeIndex({
 			indexRepo: this.indexRepo,
 			indexNote: this.indexNote,
 			buildIndexSyncPlan,
+			progress: queueState,
 		});
 
-		this.synchronizeIndex = indexSyncWorker.synchronizeIndex;
-		this.subscribeIndexingState = indexSyncWorker.subscribeIndexingState;
-		this.getIndexingState = indexSyncWorker.getSnapshot;
-		this.unloadIndexSyncWorker = indexSyncWorker.unload;
+		this.subscribeIndexingState = queueState.subscribeIndexingState;
+		this.getIndexingState = queueState.getSnapshot;
+		this.unloadEmbeddingQueue = this.embeddingQueue.unload;
+		this.disposeIndexingProgress = queueState.dispose;
 
 		this.upsertDebouncer = new KeyedDebouncer<string>(1100);
 
 		this.liveNoteSync = makeLiveNoteSync({
-			noteSource: this.noteSource,
 			indexRepo: this.indexRepo,
-			isIgnoredPath: this.isIgnoredPath,
-			bumpPriority: indexSyncWorker.bumpPriority,
-			requestIndex: indexSyncWorker.requestIndex,
-			hasPendingIndex: indexSyncWorker.hasPending,
+			requestIndex: makeRequestNoteIndex({progress: queueState, indexNote: this.indexNote}),
 			updateDebouncer: this.upsertDebouncer,
 		});
 
@@ -143,7 +152,8 @@ export class AppContainer {
 	}
 
 	async shutdown(): Promise<void> {
-		this.unloadIndexSyncWorker();
+		this.unloadEmbeddingQueue();
+		this.disposeIndexingProgress();
 		this.upsertDebouncer.cancel();
 		await this.indexStorage.flush().catch((error) => {
 			console.error("[Similarity] Failed to flush index on shutdown:", error);

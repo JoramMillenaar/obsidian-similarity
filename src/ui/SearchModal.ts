@@ -1,10 +1,10 @@
 import { App, Notice, Platform, SuggestModal, TFile } from "obsidian";
 import { GetSimilarNotesUseCase } from "../app/getSimilarNotes";
 import { InsertWikilinkAtCursorUseCase } from "../app/insertWikilinkAtCursor";
-import { SubscribeIndexingStateUseCase } from "../app/indexSyncWorker";
+import { SubscribeIndexingStateUseCase } from "../app/indexingProgress";
 import { KeyedDebouncer } from "../domain/debouncer";
 import { isMarkdownPath } from "../domain/markdownPath";
-import { IndexingQueueSnapshot, RelatedNote } from "../types";
+import { IDLE_INDEXING_SNAPSHOT, IndexingQueueSnapshot, RelatedNote } from "../types";
 import { IndexRepository } from "../ports";
 import { getIndexingBannerState } from "./indexingBanner";
 
@@ -22,13 +22,7 @@ export class SearchModal extends SuggestModal<RelatedNote> {
 	private readonly debouncer: KeyedDebouncer<string>;
 	private chooseMode: "open" | "open-new-tab" | "open-right" | "insert-link" = "open";
 	private isAutoRefreshing = false;
-	private indexingState: IndexingQueueSnapshot = {
-		isRunning: false,
-		pending: 0,
-		processed: 0,
-		total: 0,
-		failed: 0,
-	};
+	private indexingState: IndexingQueueSnapshot = IDLE_INDEXING_SNAPSHOT;
 	private lastAutoRefreshAt = 0;
 	private unsubscribeIndexingState?: () => void;
 	private refreshTimer?: number;

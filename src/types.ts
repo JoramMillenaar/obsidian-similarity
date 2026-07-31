@@ -45,6 +45,16 @@ export type IndexingQueueSnapshot = {
 	total: number;
 	failed: number;
 	fatalError?: string;
+	failedIds: string[];
+};
+
+export const IDLE_INDEXING_SNAPSHOT: IndexingQueueSnapshot = {
+	isRunning: false,
+	pending: 0,
+	processed: 0,
+	total: 0,
+	failed: 0,
+	failedIds: [],
 };
 
 export interface SimilaritySettings {

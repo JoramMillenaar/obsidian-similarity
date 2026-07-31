@@ -1,8 +1,9 @@
 import { ItemView, Notice, TFile, WorkspaceLeaf } from "obsidian";
 import { GetSimilarNotesUseCase } from "../app/getSimilarNotes";
-import { SubscribeIndexingStateUseCase, SynchronizeIndexUseCase, } from "../app/indexSyncWorker";
+import { SubscribeIndexingStateUseCase } from "../app/indexingProgress";
+import { SynchronizeIndexUseCase } from "../app/synchronizeIndex";
 import { isMarkdownPath } from "../domain/markdownPath";
-import { IndexingQueueSnapshot } from "../types";
+import { IDLE_INDEXING_SNAPSHOT, IndexingQueueSnapshot } from "../types";
 import { IndexRepository } from "../ports";
 import { getIndexingBannerState } from "./indexingBanner";
 
@@ -26,13 +27,7 @@ export class SimilarNotesListView extends ItemView {
 	private static readonly MIN_ITEMS_FOR_PROGRESS_BANNER = 8;
 	private isLoading = false;
 	private lastAutoRefreshAt = 0;
-	private indexingState: IndexingQueueSnapshot = {
-		isRunning: false,
-		pending: 0,
-		processed: 0,
-		total: 0,
-		failed: 0,
-	};
+	private indexingState: IndexingQueueSnapshot = IDLE_INDEXING_SNAPSHOT;
 	private unsubscribeIndexingState?: () => void;
 	private refreshTimer?: number;
 

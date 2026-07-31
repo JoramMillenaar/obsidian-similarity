@@ -34,6 +34,7 @@ import {
 import { JsonIndexedNoteRepository } from "../infra/index/jsonIndexedNoteRepository";
 import { makeIndexNote } from "../app/indexNote";
 import { makeEmbedText } from "../app/embedText";
+import { EmbeddingQueue } from "../app/embeddingQueue";
 import { makeGetNoteText } from "../app/getNoteText";
 import { DEFAULT_SETTINGS } from "../constants";
 import { heapUsedMB, kb, makeSeedIndex, mulberry32, now, randomUnitEmbedding, ms, summarize } from "./benchmarkShared";
@@ -301,9 +302,16 @@ function buildHarness(opts: BenchmarkOptions): Harness {
 		}
 	};
 
+	// The benchmark measures the raw embedder port, so it backs embedText with
+	// its own single-purpose queue rather than sharing one across runs.
+	const embedText = makeEmbedText({
+		embedder: instrumentedEmbedder,
+		settingsRepo,
+		queue: new EmbeddingQueue(),
+	});
 	const indexNote = makeIndexNote({
 		getNoteText,
-		embedText: makeEmbedText({ embedder: instrumentedEmbedder, settingsRepo }),
+		embedText,
 		indexRepo: repo,
 		isIgnoredPath: async () => false,
 	});
