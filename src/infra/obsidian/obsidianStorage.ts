@@ -1,21 +1,14 @@
 import { IndexedNote, IndexEntryV2, SCHEMA_VERSION } from "../../types";
 import { EmbeddingFileStore, IndexStorage, PluginDataStore } from "../../ports";
-import { decodeEmbeddings, DecodedEmbeddings, encodeEmbeddings } from "../../domain/embeddingCodec";
+import { DecodedEmbeddings, decodeEmbeddings, encodeEmbeddings } from "../../domain/embeddingCodec";
 import { packIndexedNotesToV2, unpackV2ToIndexedNotes } from "../../domain/indexPacking";
 import { checkIndexHealth, SidecarState } from "../../domain/indexHealth";
 
-/** The sidecar as read from disk: the raw bytes plus whatever we could decode from them. */
 type SidecarRead = {
 	state: SidecarState;
 	decoded: DecodedEmbeddings | null;
 };
 
-/**
- * Backs IndexStorage with a slim JSON index (schemaVersion 2: id/contentHash/
- * updatedAt/chunks, no floats) plus the embeddings binary sidecar. Callers
- * still deal only in IndexedNote[] with inline chunk embeddings — the binary
- * split is entirely an implementation detail behind this adapter.
- */
 export class ObsidianPluginDataIndexStorage implements IndexStorage {
 	constructor(
 		private readonly store: PluginDataStore,
@@ -80,20 +73,14 @@ export class ObsidianPluginDataIndexStorage implements IndexStorage {
 
 		console.warn(
 			`[Similarity] Dropped ${health.droppedIds.length} damaged index entries; they will be re-indexed.`,
-			health.droppedIds,
 		);
 
-		// Repack the survivors: rewrite() reassigns rows from scratch, so the
-		// dropped entries' vectors are compacted out of the sidecar as well.
-		// `decoded` is non-null here — a checked (non-unusable) index with entries
-		// can only come from a readable sidecar.
 		const survivors = decoded
 			? unpackV2ToIndexedNotes(health.validEntries, decoded.embeddings, decoded.dim, decoded.count)
 			: [];
 		await this.rewrite(survivors);
 	}
 
-	/** Single read of the sidecar, classified for the health check. */
 	private async readSidecar(): Promise<SidecarRead> {
 		const buffer = await this.binaryStore.read();
 		if (!buffer) return {state: {status: "missing"}, decoded: null};
