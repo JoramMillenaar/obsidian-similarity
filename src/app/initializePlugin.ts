@@ -30,11 +30,7 @@ export async function initializePlugin(
 			const file = info.file;
 			if (!(file instanceof TFile)) return;
 
-			app.upsertDebouncer.schedule(file.path, async () => {
-				await app.bumpIndexPriority(file.path).catch((error) => {
-					console.error("[Similarity] Reindex failed", error);
-				});
-			});
+			app.liveNoteSync.update(file.path);
 		}),
 	);
 
@@ -42,12 +38,7 @@ export async function initializePlugin(
 		plugin.app.vault.on("delete", (file) => {
 			if (!(file instanceof TFile)) return;
 
-			void app.indexRepo.remove(file.path).catch((error) => {
-				console.error("[Similarity] Delete from index failed", error);
-			});
-			void app.synchronizeIndex().catch((error) => {
-				console.error("[Similarity] Queue refresh after delete failed", error);
-			});
+			void app.liveNoteSync.delete(file.path);
 
 			app.status.update("Note removed from index", 1500);
 		}),
@@ -57,13 +48,7 @@ export async function initializePlugin(
 		plugin.app.vault.on("rename", (file, oldPath) => {
 			if (!(file instanceof TFile)) return;
 
-			void app.indexRepo.rename(oldPath, file.path).catch((error) => {
-				console.error("[Similarity] Rename note failed", error);
-			});
-
-			void app.synchronizeIndex().catch((error) => {
-				console.error("[Similarity] Queue refresh after rename failed", error);
-			});
+			void app.liveNoteSync.rename(oldPath, file.path);
 
 			app.status.update("Index updated (rename)", 1500);
 		}),
@@ -72,9 +57,7 @@ export async function initializePlugin(
 	plugin.registerEvent(
 		plugin.app.workspace.on("file-open", (file) => {
 			if (file instanceof TFile) {
-				void app.bumpIndexPriority(file.path).catch((error) => {
-					console.error("[Similarity] Priority bump failed", error);
-				});
+				app.liveNoteSync.view(file.path);
 			}
 
 			const leaf = plugin.app.workspace.getLeavesOfType(VIEW_TYPE_SIMILARITY).first();

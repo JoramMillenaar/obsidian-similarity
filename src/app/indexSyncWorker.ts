@@ -1,14 +1,16 @@
-import { isMarkdownPath } from "../domain/markdownPath";
 import { IndexQueue } from "../domain/indexQueue";
 import { IndexingQueueSnapshot } from "../types";
 import { IndexRepository } from "../ports";
 import { IndexNoteUseCase } from "./indexNote";
-import { IsIgnoredPath } from "./isIgnoredPath";
 import { BuildIndexSyncPlanUseCase, IndexSyncPlan } from "./buildIndexSyncPlan";
 
 export type SynchronizeIndexUseCase = () => Promise<void>;
 
-export type BumpIndexPriorityUseCase = (noteId: string) => Promise<void>;
+export type BumpIndexPriorityUseCase = (noteId: string) => void;
+
+export type RequestIndexUseCase = (noteId: string) => void;
+
+export type HasPendingIndexUseCase = (noteId: string) => boolean;
 
 export type SubscribeIndexingStateUseCase = (
 	listener: (snapshot: IndexingQueueSnapshot) => void,
@@ -20,7 +22,6 @@ type IndexSyncWorkerDeps = {
 	indexRepo: IndexRepository;
 	indexNote: IndexNoteUseCase;
 	buildIndexSyncPlan: BuildIndexSyncPlanUseCase;
-	isIgnoredPath: IsIgnoredPath;
 };
 
 export class IndexSyncWorker {
@@ -57,15 +58,25 @@ export class IndexSyncWorker {
 		return await next;
 	};
 
-	bumpPriority: BumpIndexPriorityUseCase = async (noteId) => {
+	// Only reprioritizes work already queued from a sync — never queues a
+	// note on its own, so opening a note is a no-op while idle.
+	bumpPriority: BumpIndexPriorityUseCase = (noteId) => {
+		if (this.isUnloaded || !this.queue.has(noteId)) return;
+		this.requestIndex(noteId);
+	};
+
+	// Unconditionally queues a note for (re)indexing, urgently.
+	requestIndex: RequestIndexUseCase = (noteId) => {
 		if (this.isUnloaded) return;
-		if (!isMarkdownPath(noteId)) return;
-		if (await this.deps.isIgnoredPath(noteId)) return;
 
 		this.failedIds.delete(noteId);
 		this.queue.bump(noteId);
 		this.emit();
 		this.ensureProcessing();
+	};
+
+	hasPending: HasPendingIndexUseCase = (noteId) => {
+		return this.queue.has(noteId);
 	};
 
 	subscribeIndexingState: SubscribeIndexingStateUseCase = (listener) => {

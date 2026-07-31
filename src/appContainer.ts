@@ -27,7 +27,6 @@ import { IsIgnoredPath, makeIsIgnoredPath } from "./app/isIgnoredPath";
 import { makeUpdateSettings, UpdateSettingsUseCase } from "./app/updateSettings";
 import { ObsidianActiveEditor } from "./infra/obsidian/obsidianActiveEditor";
 import {
-	BumpIndexPriorityUseCase,
 	GetIndexingStateUseCase,
 	makeIndexSyncWorker,
 	SynchronizeIndexUseCase,
@@ -35,14 +34,10 @@ import {
 } from "./app/indexSyncWorker";
 import { GetNoteTextUseCase, makeGetNoteText } from "./app/getNoteText";
 import { makeBuildIndexSyncPlan } from "./app/buildIndexSyncPlan";
+import { LiveNoteSync, makeLiveNoteSync } from "./app/liveNoteSync";
 
-/** Minimum spacing between full index disk writes (data.json + embeddings.bin). */
 const INDEX_WRITE_THROTTLE_MS = 1000;
 
-/**
- * Application container and composition root.
- * Owns concrete infrastructure adapters, wires use cases, and releases runtime resources.
- */
 export class AppContainer {
 	readonly status: StatusReporter;
 	readonly noteSource: NoteSource;
@@ -57,11 +52,11 @@ export class AppContainer {
 	readonly getSimilarNotes: GetSimilarNotesUseCase;
 	readonly insertWikilinkAtCursor: InsertWikilinkAtCursorUseCase;
 	readonly synchronizeIndex: SynchronizeIndexUseCase;
-	readonly bumpIndexPriority: BumpIndexPriorityUseCase;
 	readonly subscribeIndexingState: SubscribeIndexingStateUseCase;
 	readonly getIndexingState: GetIndexingStateUseCase;
 	readonly isIgnoredPath: IsIgnoredPath;
 	readonly updateSettings: UpdateSettingsUseCase;
+	readonly liveNoteSync: LiveNoteSync;
 
 	readonly upsertDebouncer: KeyedDebouncer<string>;
 
@@ -121,16 +116,24 @@ export class AppContainer {
 			indexRepo: this.indexRepo,
 			indexNote: this.indexNote,
 			buildIndexSyncPlan,
-			isIgnoredPath: this.isIgnoredPath,
 		});
 
 		this.synchronizeIndex = indexSyncWorker.synchronizeIndex;
-		this.bumpIndexPriority = indexSyncWorker.bumpPriority;
 		this.subscribeIndexingState = indexSyncWorker.subscribeIndexingState;
 		this.getIndexingState = indexSyncWorker.getSnapshot;
 		this.unloadIndexSyncWorker = indexSyncWorker.unload;
 
 		this.upsertDebouncer = new KeyedDebouncer<string>(1100);
+
+		this.liveNoteSync = makeLiveNoteSync({
+			noteSource: this.noteSource,
+			indexRepo: this.indexRepo,
+			isIgnoredPath: this.isIgnoredPath,
+			bumpPriority: indexSyncWorker.bumpPriority,
+			requestIndex: indexSyncWorker.requestIndex,
+			hasPendingIndex: indexSyncWorker.hasPending,
+			updateDebouncer: this.upsertDebouncer,
+		});
 
 		this.updateSettings = makeUpdateSettings({
 			settingsRepo: this.settingsRepo,

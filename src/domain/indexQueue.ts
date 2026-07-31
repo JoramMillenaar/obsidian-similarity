@@ -17,6 +17,10 @@ export class IndexQueue {
 		return this.pending === 0;
 	}
 
+	has(id: string): boolean {
+		return this.urgent.has(id) || this.backlog.has(id);
+	}
+
 	bump(id: string): void {
 		this.backlog.delete(id);
 		this.urgent.delete(id);
