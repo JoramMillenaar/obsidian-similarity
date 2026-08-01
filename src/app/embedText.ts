@@ -1,41 +1,21 @@
-import { averageEmbeddings } from "../domain/embedding";
-import { chunkTextByFixedWindow } from "../domain/textChunking";
-import { EmbeddingPort } from "../ports";
+import { EmbeddedChunk, EmbeddingPort, SettingsRepository } from "../ports";
+import { EmbeddingQueue, Priority } from "./embeddingQueue";
+import { hashText } from "../domain/text";
 
-export type EmbedTextUseCase = (text: string) => Promise<number[] | null>;
-export type EmbedChunksUseCase = (chunks: string[]) => Promise<number[] | null>;
+export type { Priority };
+
+export type EmbedTextUseCase = (text: string, priority?: Priority) => Promise<EmbeddedChunk[] | null>;
+
 
 export function makeEmbedText(deps: {
 	embedder: EmbeddingPort;
+	settingsRepo: SettingsRepository;
+	queue: EmbeddingQueue;
 }): EmbedTextUseCase {
-	return async function embedText(text: string): Promise<number[] | null> {
-		const chunks = chunkTextByFixedWindow(text);
-		return embedChunks(chunks, deps.embedder);
+	return async function embedText(text: string, priority?: Priority): Promise<EmbeddedChunk[] | null> {
+		const {maxOverlapPercent} = await deps.settingsRepo.get();
+		const chunks = await deps.queue.submit(hashText(text), () => deps.embedder.embed(text, {maxOverlapPercent}), priority)
+		if (!chunks || chunks.length === 0) return null;
+		return chunks;
 	};
-}
-
-export function makeEmbedChunks(deps: {
-	embedder: EmbeddingPort;
-}): EmbedChunksUseCase {
-	return async function embedPreparedChunks(chunks: string[]): Promise<number[] | null> {
-		return embedChunks(chunks, deps.embedder);
-	};
-}
-
-async function embedChunks(
-	chunks: string[],
-	embedder: EmbeddingPort,
-): Promise<number[] | null> {
-	if (chunks.length === 0) return null;
-
-	const embeddings: number[][] = [];
-
-	for (const chunk of chunks) {
-		const embedding = await embedder.embed(chunk);
-		if (embedding?.length) {
-			embeddings.push(embedding);
-		}
-	}
-
-	return averageEmbeddings(embeddings);
 }

@@ -19,27 +19,23 @@ export function normalizeEmbedding(embedding: Embedding): Embedding {
 	return out;
 }
 
-export function averageEmbeddings(embeddings: Embedding[]): Embedding | null {
-	if (embeddings.length === 0) return null;
+/**
+ * Similarity between two chunked documents: the best score over every pair of
+ * chunks. Two notes are related if ANY passage of one matches any passage of
+ * the other — averaging the chunks instead would dilute a strong local match
+ * into the noise of the whole note.
+ */
+export function maxPairwiseSimilarity(a: Embedding[], b: Embedding[]): number {
+	let best = -Infinity;
 
-	const embeddingSize = embeddings[0].length;
-	const meanEmbedding = new Array<number>(embeddingSize).fill(0);
-
-	for (const embedding of embeddings) {
-		if (embedding.length !== embeddingSize) {
-			throw new Error(`averageEmbeddings: length mismatch (${embedding.length} vs ${embeddingSize})`);
-		}
-
-		for (let i = 0; i < embeddingSize; i++) {
-			meanEmbedding[i] += embedding[i];
+	for (const left of a) {
+		for (const right of b) {
+			const score = cosineSimilarity(left, right);
+			if (score > best) best = score;
 		}
 	}
 
-	for (let i = 0; i < embeddingSize; i++) {
-		meanEmbedding[i] /= embeddings.length;
-	}
-
-	return meanEmbedding;
+	return Number.isFinite(best) ? best : 0;
 }
 
 export function cosineSimilarity(a: number[], b: number[]): number {

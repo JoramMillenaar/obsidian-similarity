@@ -19,8 +19,14 @@ main.js
 # Exclude sourcemaps
 *.map
 
+# dev-only tooling: kept locally, never pushed to the remote
+src/dev/
+
 # obsidian
 data.json
+embeddings.bin
+# ...but keep committed migration test fixtures (frozen golden vaults)
+!test/fixtures/**/data.json
 
 # Exclude macOS Finder (System Explorer) View States
 .DS_Store

@@ -1,20 +1,18 @@
 import { IndexedNote, IndexEntryV2, SCHEMA_VERSION } from "../../types";
-import { IndexStorage } from "../../ports";
-import { ObsidianPluginDataStore } from "./obsidianPluginDataStore";
-import { BinaryEmbeddingFileStore } from "./binaryEmbeddingFileStore";
-import { decodeEmbeddings, encodeEmbeddings, isBinaryLayoutValid } from "../../domain/embeddingCodec";
-import { packIndexedNotesToV2, unpackV2ToIndexedNotes } from "../../domain/migrateEmbeddingStore";
+import { EmbeddingFileStore, IndexStorage, PluginDataStore } from "../../ports";
+import { DecodedEmbeddings, decodeEmbeddings, encodeEmbeddings } from "../../domain/embeddingCodec";
+import { packIndexedNotesToV2, unpackV2ToIndexedNotes } from "../../domain/indexPacking";
+import { checkIndexHealth, SidecarState } from "../../domain/indexHealth";
 
-/**
- * Backs IndexStorage with a slim JSON index (schemaVersion 2: id/contentHash/
- * updatedAt/chunks, no floats) plus the embeddings binary sidecar. Callers
- * still deal only in IndexedNote[] with inline `embedding: number[]` — the
- * binary split is entirely an implementation detail behind this adapter.
- */
+type SidecarRead = {
+	state: SidecarState;
+	decoded: DecodedEmbeddings | null;
+};
+
 export class ObsidianPluginDataIndexStorage implements IndexStorage {
 	constructor(
-		private readonly store: ObsidianPluginDataStore,
-		private readonly binaryStore: BinaryEmbeddingFileStore,
+		private readonly store: PluginDataStore,
+		private readonly binaryStore: EmbeddingFileStore,
 	) {
 	}
 
@@ -25,16 +23,8 @@ export class ObsidianPluginDataIndexStorage implements IndexStorage {
 		const entries = data.index as IndexEntryV2[];
 		if (entries.length === 0) return [];
 
-		const buffer = await this.binaryStore.read();
-		if (!buffer) return [];
-
-		let decoded;
-		try {
-			decoded = decodeEmbeddings(buffer);
-		} catch {
-			return [];
-		}
-		if (decoded.dim !== data.embeddingDim) return [];
+		const {decoded} = await this.readSidecar();
+		if (!decoded || decoded.dim !== data.embeddingDim) return [];
 
 		return unpackV2ToIndexedNotes(entries, decoded.embeddings, decoded.dim, decoded.count);
 	}
@@ -59,50 +49,55 @@ export class ObsidianPluginDataIndexStorage implements IndexStorage {
 	}
 
 	async isEmpty(): Promise<boolean> {
+		return (await this.getAll()).length === 0;
+	}
+
+	async repair(): Promise<void> {
 		const data = await this.store.read();
-		if (data.index.length === 0) return true;
+		const {state, decoded} = await this.readSidecar();
 
-		// Pre-migration entries carry inline embeddings, so they're usable as-is.
-		if (data.schemaVersion < SCHEMA_VERSION) return false;
+		const health = checkIndexHealth({
+			schemaVersion: data.schemaVersion,
+			embeddingDim: data.embeddingDim,
+			entries: data.index,
+			sidecar: state,
+		});
 
-		// v2 entries are only usable if the binary sidecar can actually supply
-		// their vectors. If it's missing/corrupt/dim-mismatched, getAll() yields
-		// [], so report empty here too — otherwise the UI thinks the index is
-		// populated while every lookup silently returns nothing.
+		if (health.status === "unusable") {
+			console.warn(`[Similarity] Index discarded (${health.reason}) — rebuilding from scratch.`);
+			await this.rewrite([]);
+			return;
+		}
+
+		if (health.droppedIds.length === 0) return;
+
+		console.warn(
+			`[Similarity] Dropped ${health.droppedIds.length} damaged index entries; they will be re-indexed.`,
+		);
+
+		const survivors = decoded
+			? unpackV2ToIndexedNotes(health.validEntries, decoded.embeddings, decoded.dim, decoded.count)
+			: [];
+		await this.rewrite(survivors);
+	}
+
+	private async readSidecar(): Promise<SidecarRead> {
 		const buffer = await this.binaryStore.read();
-		if (!buffer) return true;
+		if (!buffer) return {state: {status: "missing"}, decoded: null};
 
 		try {
 			const decoded = decodeEmbeddings(buffer);
-			return decoded.dim !== data.embeddingDim;
+			return {
+				state: {
+					status: "ok",
+					dim: decoded.dim,
+					count: decoded.count,
+					byteLength: buffer.byteLength,
+				},
+				decoded,
+			};
 		} catch {
-			return true;
+			return {state: {status: "corrupt"}, decoded: null};
 		}
-	}
-
-	async needsRebuild(): Promise<boolean> {
-		const data = await this.store.read();
-		if (data.schemaVersion < SCHEMA_VERSION) return false; // migration's job, not a rebuild
-		if (data.index.length === 0) return false;
-
-		const buffer = await this.binaryStore.read();
-		if (!buffer) return true;
-
-		try {
-			const decoded = decodeEmbeddings(buffer);
-			return (
-				decoded.dim !== data.embeddingDim
-				|| !isBinaryLayoutValid(buffer.byteLength, decoded.dim, decoded.count)
-				|| decoded.count < data.index.length
-			);
-		} catch {
-			return true;
-		}
-	}
-
-	async readLegacy(): Promise<IndexedNote[] | null> {
-		const data = await this.store.read();
-		if (data.schemaVersion >= SCHEMA_VERSION) return null;
-		return data.index as IndexedNote[];
 	}
 }

@@ -1,9 +1,11 @@
 import { ItemView, Notice, TFile, WorkspaceLeaf } from "obsidian";
 import { GetSimilarNotesUseCase } from "../app/getSimilarNotes";
-import { StartOrRefreshIndexSyncUseCase, SubscribeIndexingStateUseCase, } from "../app/indexingCoordinator";
+import { SubscribeIndexingStateUseCase } from "../app/indexingProgress";
+import { SynchronizeIndexUseCase } from "../app/synchronizeIndex";
 import { isMarkdownPath } from "../domain/markdownPath";
-import { IndexingQueueSnapshot } from "../types";
+import { IDLE_INDEXING_SNAPSHOT, IndexingQueueSnapshot } from "../types";
 import { IndexRepository } from "../ports";
+import { getIndexingBannerState } from "./indexingBanner";
 
 export function logError(message: unknown, ...optionalParams: unknown[]) {
 	console.error("[Similarity]:", message, ...optionalParams);
@@ -16,7 +18,7 @@ type SimilarNote = { id: string; score: number };
 export type SimilarNotesListViewDeps = {
 	indexRepo: IndexRepository;
 	getSimilarNotes: GetSimilarNotesUseCase;
-	startOrRefreshIndexSync: StartOrRefreshIndexSyncUseCase;
+	synchronizeIndex: SynchronizeIndexUseCase;
 	subscribeIndexingState: SubscribeIndexingStateUseCase;
 	isIgnoredPath: (path: string) => Promise<boolean>;
 }
@@ -25,20 +27,7 @@ export class SimilarNotesListView extends ItemView {
 	private static readonly MIN_ITEMS_FOR_PROGRESS_BANNER = 8;
 	private isLoading = false;
 	private lastAutoRefreshAt = 0;
-	private indexingState: IndexingQueueSnapshot = {
-		isRunning: false,
-		hasCompletedInitialIndex: false,
-		pending: 0,
-		processed: 0,
-		total: 0,
-		failed: 0,
-		banner: {
-			kind: "hidden",
-			message: "",
-			processed: 0,
-			total: 0,
-		},
-	};
+	private indexingState: IndexingQueueSnapshot = IDLE_INDEXING_SNAPSHOT;
 	private unsubscribeIndexingState?: () => void;
 	private refreshTimer?: number;
 
@@ -122,7 +111,7 @@ export class SimilarNotesListView extends ItemView {
 	}
 
 	private renderIndexingBanner(container: HTMLElement) {
-		const banner = this.indexingState.banner;
+		const banner = getIndexingBannerState(this.indexingState);
 		const existing = container.querySelector(".similarity-index-banner");
 		if (!this.shouldShowIndexingBanner()) {
 			existing?.remove();
@@ -209,7 +198,7 @@ export class SimilarNotesListView extends ItemView {
 				return;
 			}
 
-			if (this.indexingState.banner.kind === "failed") {
+			if (getIndexingBannerState(this.indexingState).kind === "failed") {
 				this.renderMessage(
 					workingContainer,
 					indexEmpty
@@ -221,13 +210,13 @@ export class SimilarNotesListView extends ItemView {
 				return;
 			}
 
-			if (indexEmpty && (this.indexingState.isRunning || !this.indexingState.hasCompletedInitialIndex)) {
+			if (indexEmpty && this.indexingState.isRunning) {
 				this.renderMessage(workingContainer, "Indexing is underway. Related notes will appear as the queue progresses.");
 				this.commitRenderedContent(targetContainer, workingContainer, showLoading);
 				return;
 			}
 
-			if (!indexEmpty && (this.indexingState.isRunning || !this.indexingState.hasCompletedInitialIndex)) {
+			if (!indexEmpty && this.indexingState.isRunning) {
 				this.renderMessage(workingContainer, "No related notes were similar enough yet. More may appear while indexing continues.");
 				this.commitRenderedContent(targetContainer, workingContainer, showLoading);
 				return;
@@ -304,7 +293,7 @@ export class SimilarNotesListView extends ItemView {
 
 	private async startIndexing() {
 		try {
-			await this.deps.startOrRefreshIndexSync({awaitCompletion: false});
+			await this.deps.synchronizeIndex();
 		} catch (error) {
 			logError("Error starting indexing:", error);
 			new Notice("Failed to start indexing. See console for details.");
@@ -356,7 +345,8 @@ export class SimilarNotesListView extends ItemView {
 	}
 
 	private shouldShowIndexingBanner(): boolean {
-		const {banner, total} = this.indexingState;
+		const {total} = this.indexingState;
+		const banner = getIndexingBannerState(this.indexingState);
 		if (banner.kind === "hidden" || banner.kind === "failed") {
 			return banner.kind === "failed";
 		}
@@ -365,7 +355,9 @@ export class SimilarNotesListView extends ItemView {
 	}
 
 	private shouldRefreshResults(previous: IndexingQueueSnapshot, snapshot: IndexingQueueSnapshot): boolean {
-		if (previous.banner.kind !== snapshot.banner.kind || previous.fatalError !== snapshot.fatalError) {
+		const previousBannerKind = getIndexingBannerState(previous).kind;
+		const snapshotBannerKind = getIndexingBannerState(snapshot).kind;
+		if (previousBannerKind !== snapshotBannerKind || previous.fatalError !== snapshot.fatalError) {
 			return true;
 		}
 		if (previous.isRunning && !snapshot.isRunning) {

@@ -9,11 +9,9 @@ import { BinaryEmbeddingFileStore } from "./infra/obsidian/binaryEmbeddingFileSt
 import { EmbeddingProvider } from "./infra/embedder/embeddingProvider";
 import { JsonIndexedNoteRepository } from "./infra/index/jsonIndexedNoteRepository";
 import { IndexNoteUseCase, makeIndexNote } from "./app/indexNote";
-import { makeMigrateStore, MigrateStoreUseCase } from "./app/makeMigrateStore";
 import { GetSimilarNotesUseCase, makeGetSimilarNotes } from "./app/getSimilarNotes";
 import { InsertWikilinkAtCursorUseCase, makeInsertWikilinkAtCursor } from "./app/insertWikilinkAtCursor";
-import { makeSyncIndexToVault, SyncIndexToVaultUseCase } from "./app/syncIndexToVault";
-import { makeEmbedChunks, makeEmbedText } from "./app/embedText";
+import { makeEmbedText } from "./app/embedText";
 import {
 	EmbeddingPort,
 	IndexRepository,
@@ -21,36 +19,24 @@ import {
 	MarkdownTextExtractor,
 	NoteSource,
 	SettingsRepository,
+	SimilarityView,
 	StatusReporter,
 } from "./ports";
+import { ObsidianSimilarityView } from "./infra/obsidian/obsidianSimilarityView";
 import { ObsidianPluginDataStore } from "./infra/obsidian/obsidianPluginDataStore";
 import { ObsidianSettingsRepository } from "./infra/obsidian/obsidianSettings";
 import { IsIgnoredPath, makeIsIgnoredPath } from "./app/isIgnoredPath";
 import { makeUpdateSettings, UpdateSettingsUseCase } from "./app/updateSettings";
-import {
-	IsInitialIndexCompletedUseCase,
-	makeIsInitialIndexCompleted,
-	makeMarkInitialIndexCompleted,
-	MarkInitialIndexCompletedUseCase,
-} from "./app/initialIndexState";
 import { ObsidianActiveEditor } from "./infra/obsidian/obsidianActiveEditor";
-import { makePrepareNoteForEmbedding, PrepareNoteForEmbeddingUseCase } from "./app/prepareNoteForEmbedding";
-import {
-	AwaitIndexedNoteUseCase,
-	BumpIndexPriorityUseCase,
-	GetIndexingStateUseCase,
-	makeIndexingCoordinator,
-	StartOrRefreshIndexSyncUseCase,
-	SubscribeIndexingStateUseCase,
-} from "./app/indexingCoordinator";
+import { GetIndexingStateUseCase, IndexingProgress, SubscribeIndexingStateUseCase } from "./app/indexingProgress";
+import { makeSynchronizeIndex, SynchronizeIndexUseCase } from "./app/synchronizeIndex";
+import { GetNoteTextUseCase, makeGetNoteText } from "./app/getNoteText";
+import { makeBuildIndexSyncPlan } from "./app/buildIndexSyncPlan";
+import { LiveNoteSync, makeLiveNoteSync } from "./app/liveNoteSync";
+import { EmbeddingQueue } from "./app/embeddingQueue";
 
-/** Minimum spacing between full index disk writes (data.json + embeddings.bin). */
 const INDEX_WRITE_THROTTLE_MS = 1000;
 
-/**
- * Application container and composition root.
- * Owns concrete infrastructure adapters, wires use cases, and releases runtime resources.
- */
 export class AppContainer {
 	readonly status: StatusReporter;
 	readonly noteSource: NoteSource;
@@ -59,26 +45,24 @@ export class AppContainer {
 	readonly embedder: EmbeddingPort;
 	readonly indexRepo: IndexRepository;
 	readonly settingsRepo: SettingsRepository;
-	readonly migrateStore: MigrateStoreUseCase;
+	readonly embeddingQueue: EmbeddingQueue;
+	readonly similarityView: SimilarityView;
 
 	readonly indexNote: IndexNoteUseCase;
-	readonly prepareNoteForEmbedding: PrepareNoteForEmbeddingUseCase;
+	readonly getNoteText: GetNoteTextUseCase;
 	readonly getSimilarNotes: GetSimilarNotesUseCase;
 	readonly insertWikilinkAtCursor: InsertWikilinkAtCursorUseCase;
-	readonly syncIndexToVault: SyncIndexToVaultUseCase;
-	readonly startOrRefreshIndexSync: StartOrRefreshIndexSyncUseCase;
-	readonly bumpIndexPriority: BumpIndexPriorityUseCase;
-	readonly awaitIndexedNote: AwaitIndexedNoteUseCase;
+	readonly synchronizeIndex: SynchronizeIndexUseCase;
 	readonly subscribeIndexingState: SubscribeIndexingStateUseCase;
 	readonly getIndexingState: GetIndexingStateUseCase;
 	readonly isIgnoredPath: IsIgnoredPath;
 	readonly updateSettings: UpdateSettingsUseCase;
-	readonly isInitialIndexCompleted: IsInitialIndexCompletedUseCase;
-	readonly markInitialIndexCompleted: MarkInitialIndexCompletedUseCase;
+	readonly liveNoteSync: LiveNoteSync;
 
 	readonly upsertDebouncer: KeyedDebouncer<string>;
 
-	private readonly unloadIndexingCoordinator: () => void;
+	private readonly unloadEmbeddingQueue: () => void;
+	private readonly disposeIndexingProgress: () => void;
 
 	constructor(plugin: Plugin) {
 		this.status = new ObsidianStatusBar(plugin);
@@ -90,36 +74,46 @@ export class AppContainer {
 			new ObsidianPluginDataIndexStorage(storage, binaryEmbeddingStore),
 			INDEX_WRITE_THROTTLE_MS,
 		);
-		this.migrateStore = makeMigrateStore({indexStorage: this.indexStorage});
 		this.embedder = new EmbeddingProvider();
-		const embedText = makeEmbedText({embedder: this.embedder});
-		const embedChunks = makeEmbedChunks({embedder: this.embedder});
 		this.indexRepo = new JsonIndexedNoteRepository(this.indexStorage);
 		this.settingsRepo = new ObsidianSettingsRepository(storage);
 		const activeEditor = new ObsidianActiveEditor(plugin);
+		this.similarityView = new ObsidianSimilarityView(plugin);
+
+		this.embeddingQueue = new EmbeddingQueue();
+		const queueState = new IndexingProgress();
+		const embedText = makeEmbedText({
+			embedder: this.embedder,
+			settingsRepo: this.settingsRepo,
+			queue: this.embeddingQueue
+		})
+
+		this.embeddingQueue.subscribe((event) => {
+			if (event.type === "drained") return this.indexRepo.flush();
+			if (event.type === "stopped") queueState.reportFatalError(event.error);
+		});
 
 		this.isIgnoredPath = makeIsIgnoredPath({
 			settingsRepo: this.settingsRepo,
 		});
 
-		this.prepareNoteForEmbedding = makePrepareNoteForEmbedding({
+		this.getNoteText = makeGetNoteText({
 			noteSource: this.noteSource,
 			markdownTextExtractor: this.markdownTextExtractor,
 			settingsRepo: this.settingsRepo,
 		});
 
 		this.indexNote = makeIndexNote({
-			prepareNoteForEmbedding: this.prepareNoteForEmbedding,
-			embedChunks,
+			getNoteText: this.getNoteText,
 			indexRepo: this.indexRepo,
 			isIgnoredPath: this.isIgnoredPath,
+			embedText
 		});
 
 		this.getSimilarNotes = makeGetSimilarNotes({
 			indexRepo: this.indexRepo,
 			embedText,
-			embedChunks,
-			prepareNoteForEmbedding: this.prepareNoteForEmbedding,
+			getNoteText: this.getNoteText,
 		});
 
 		this.insertWikilinkAtCursor = makeInsertWikilinkAtCursor({
@@ -127,38 +121,42 @@ export class AppContainer {
 			noteSource: this.noteSource,
 		});
 
-		const indexingCoordinator = makeIndexingCoordinator({
+		const buildIndexSyncPlan = makeBuildIndexSyncPlan({
 			noteSource: this.noteSource,
 			indexRepo: this.indexRepo,
 			settingsRepo: this.settingsRepo,
+		});
+
+		this.synchronizeIndex = makeSynchronizeIndex({
+			indexRepo: this.indexRepo,
 			indexNote: this.indexNote,
+			buildIndexSyncPlan,
+			progress: queueState,
 		});
 
-		this.syncIndexToVault = makeSyncIndexToVault({
-			startOrRefreshSync: indexingCoordinator.startOrRefreshSync,
-			subscribe: indexingCoordinator.subscribe,
-		});
-
-		this.startOrRefreshIndexSync = indexingCoordinator.startOrRefreshSync;
-		this.bumpIndexPriority = indexingCoordinator.bumpPriority;
-		this.awaitIndexedNote = indexingCoordinator.awaitNote;
-		this.subscribeIndexingState = indexingCoordinator.subscribe;
-		this.getIndexingState = indexingCoordinator.getSnapshot;
-		this.unloadIndexingCoordinator = indexingCoordinator.unload;
+		this.subscribeIndexingState = queueState.subscribeIndexingState;
+		this.getIndexingState = queueState.getSnapshot;
+		this.unloadEmbeddingQueue = this.embeddingQueue.unload;
+		this.disposeIndexingProgress = queueState.dispose;
 
 		this.upsertDebouncer = new KeyedDebouncer<string>(1100);
+
+		this.liveNoteSync = makeLiveNoteSync({
+			indexRepo: this.indexRepo,
+			indexNote: this.indexNote,
+			updateDebouncer: this.upsertDebouncer,
+		});
 
 		this.updateSettings = makeUpdateSettings({
 			settingsRepo: this.settingsRepo,
 			indexStorage: this.indexStorage,
-			startOrRefreshIndexSync: this.startOrRefreshIndexSync,
+			synchronizeIndex: this.synchronizeIndex,
 		});
-		this.isInitialIndexCompleted = makeIsInitialIndexCompleted({settingsRepo: this.settingsRepo});
-		this.markInitialIndexCompleted = makeMarkInitialIndexCompleted({settingsRepo: this.settingsRepo});
 	}
 
 	async shutdown(): Promise<void> {
-		this.unloadIndexingCoordinator();
+		this.unloadEmbeddingQueue();
+		this.disposeIndexingProgress();
 		this.upsertDebouncer.cancel();
 		await this.indexStorage.flush().catch((error) => {
 			console.error("[Similarity] Failed to flush index on shutdown:", error);

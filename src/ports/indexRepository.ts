@@ -13,8 +13,9 @@ export interface IndexRepository {
 
 	remove(noteId: string): Promise<void>;
 
+	clear(): Promise<void>;
+
 	rename(oldId: string, newId: string): Promise<void>;
 
-	/** Forces any throttled/pending disk write to complete immediately. */
 	flush(): Promise<void>;
 }

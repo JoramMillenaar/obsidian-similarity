@@ -1,11 +1,12 @@
 import { App, Notice, Platform, SuggestModal, TFile } from "obsidian";
 import { GetSimilarNotesUseCase } from "../app/getSimilarNotes";
 import { InsertWikilinkAtCursorUseCase } from "../app/insertWikilinkAtCursor";
-import { SubscribeIndexingStateUseCase } from "../app/indexingCoordinator";
+import { SubscribeIndexingStateUseCase } from "../app/indexingProgress";
 import { KeyedDebouncer } from "../domain/debouncer";
 import { isMarkdownPath } from "../domain/markdownPath";
-import { IndexingQueueSnapshot, RelatedNote } from "../types";
+import { IDLE_INDEXING_SNAPSHOT, IndexingQueueSnapshot, RelatedNote } from "../types";
 import { IndexRepository } from "../ports";
+import { getIndexingBannerState } from "./indexingBanner";
 
 export type SearchModalDeps = {
 	getSimilarNotes: GetSimilarNotesUseCase;
@@ -21,20 +22,7 @@ export class SearchModal extends SuggestModal<RelatedNote> {
 	private readonly debouncer: KeyedDebouncer<string>;
 	private chooseMode: "open" | "open-new-tab" | "open-right" | "insert-link" = "open";
 	private isAutoRefreshing = false;
-	private indexingState: IndexingQueueSnapshot = {
-		isRunning: false,
-		hasCompletedInitialIndex: false,
-		pending: 0,
-		processed: 0,
-		total: 0,
-		failed: 0,
-		banner: {
-			kind: "hidden",
-			message: "",
-			processed: 0,
-			total: 0,
-		},
-	};
+	private indexingState: IndexingQueueSnapshot = IDLE_INDEXING_SNAPSHOT;
 	private lastAutoRefreshAt = 0;
 	private unsubscribeIndexingState?: () => void;
 	private refreshTimer?: number;
@@ -122,7 +110,7 @@ export class SearchModal extends SuggestModal<RelatedNote> {
 				try {
 					const indexEmpty = await this.deps.indexRepo.isEmpty();
 					if (indexEmpty) {
-						this.emptyStateText = this.indexingState.banner.kind !== "hidden"
+						this.emptyStateText = getIndexingBannerState(this.indexingState).kind !== "hidden"
 							? SearchModal.EMPTY_DURING_INDEX_STATE
 							: SearchModal.EMPTY_INDEX_STATE;
 						resolve([]);
@@ -215,7 +203,7 @@ export class SearchModal extends SuggestModal<RelatedNote> {
 			}
 
 			if (indexEmpty) {
-				this.emptyStateText = this.indexingState.banner.kind !== "hidden"
+				this.emptyStateText = getIndexingBannerState(this.indexingState).kind !== "hidden"
 					? SearchModal.EMPTY_DURING_INDEX_STATE
 					: SearchModal.EMPTY_INDEX_STATE;
 				return [];
@@ -234,7 +222,7 @@ export class SearchModal extends SuggestModal<RelatedNote> {
 	}
 
 	private getNoResultsText(): string {
-		return this.indexingState.banner.kind !== "hidden"
+		return getIndexingBannerState(this.indexingState).kind !== "hidden"
 			? SearchModal.NO_RESULTS_DURING_INDEX_STATE
 			: SearchModal.NO_RESULTS_EMPTY_STATE;
 	}
@@ -256,7 +244,7 @@ export class SearchModal extends SuggestModal<RelatedNote> {
 			return;
 		}
 
-		const banner = this.indexingState.banner;
+		const banner = getIndexingBannerState(this.indexingState);
 		this.bannerEl.empty();
 		this.bannerEl.className = `similarity-index-banner similarity-index-banner-${banner.kind}`;
 		this.bannerEl.toggleClass("is-hidden", !this.shouldShowIndexingBanner());
@@ -302,7 +290,9 @@ export class SearchModal extends SuggestModal<RelatedNote> {
 	}
 
 	private shouldRefreshSuggestions(previous: IndexingQueueSnapshot, snapshot: IndexingQueueSnapshot): boolean {
-		if (previous.banner.kind !== snapshot.banner.kind || previous.fatalError !== snapshot.fatalError) {
+		const previousBannerKind = getIndexingBannerState(previous).kind;
+		const snapshotBannerKind = getIndexingBannerState(snapshot).kind;
+		if (previousBannerKind !== snapshotBannerKind || previous.fatalError !== snapshot.fatalError) {
 			return true;
 		}
 		if (previous.isRunning && !snapshot.isRunning) {
@@ -322,7 +312,8 @@ export class SearchModal extends SuggestModal<RelatedNote> {
 	}
 
 	private shouldShowIndexingBanner(): boolean {
-		const {banner, total} = this.indexingState;
+		const {total} = this.indexingState;
+		const banner = getIndexingBannerState(this.indexingState);
 		if (banner.kind === "hidden" || banner.kind === "failed") {
 			return banner.kind === "failed";
 		}

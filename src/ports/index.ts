@@ -1,8 +1,11 @@
 export type { ActiveEditor } from "./activeEditor";
-export type { EmbeddingPort } from "./embeddingPort";
+export type { EmbeddingPort, EmbedOptions, EmbeddedChunk } from "./embeddingPort";
+export type { EmbeddingFileStore } from "./embeddingFileStore";
 export type { IndexRepository } from "./indexRepository";
 export type { IndexStorage } from "./indexStorage";
+export type { PluginDataStore } from "./pluginDataStore";
 export type { MarkdownTextExtractor } from "./markdownTextExtractor";
 export type { NoteSource } from "./noteSource";
 export type { SettingsRepository } from "./settingsRepository";
 export type { StatusReporter } from "./statusReporter";
+export type { SimilarityView, ActivateOptions } from "./similarityView";

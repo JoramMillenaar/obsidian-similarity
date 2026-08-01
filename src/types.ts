@@ -12,9 +12,16 @@ export type NoteIndexCandidate = {
 	recentOpenRank?: number;
 };
 
+export type NoteChunk = {
+	embedding: number[];
+	start: number;
+	end: number;
+	hash: string;
+};
+
 export type IndexedNote = {
 	id: string;
-	embedding: number[];
+	chunks: NoteChunk[];
 	contentHash: string,
 	updatedAt: string,
 };
@@ -27,73 +34,35 @@ export type RelatedNote = {
 export interface IframeMessage {
 	requestId: number;
 	payload: string;
+	maxOverlapPercent?: number;
 }
-
-export interface SyncResults {
-	indexed: number;
-	deleted: number;
-}
-
-export type OnProgressCallback = (p: { phase: string; processed: number; total: number }) => void;
-
-export type IndexingPriorityReason = "seed" | "open" | "edit" | "manual";
-
-export type IndexingBannerState = {
-	kind: "hidden" | "initial" | "updating" | "failed";
-	message: string;
-	progressLabel?: string;
-	processed: number;
-	total: number;
-};
 
 export type IndexingQueueSnapshot = {
 	isRunning: boolean;
-	hasCompletedInitialIndex: boolean;
 	currentNoteId?: string;
 	pending: number;
 	processed: number;
 	total: number;
 	failed: number;
 	fatalError?: string;
-	banner: IndexingBannerState;
+	failedIds: string[];
 };
 
-export type IndexingWarning =
-	| "raw-markdown-truncated"
-	| "prepared-text-truncated"
-	| "chunk-limit-reached";
-
-export type PrepareNoteRejectReason =
-	| "missing-note"
-	| "empty-content"
-	| "non-semantic-content";
-
-export type PreparedNoteForEmbedding = {
-	noteId: string;
-	preparedText: string;
-	chunks: string[];
-	warnings: IndexingWarning[];
+export const IDLE_INDEXING_SNAPSHOT: IndexingQueueSnapshot = {
+	isRunning: false,
+	pending: 0,
+	processed: 0,
+	total: 0,
+	failed: 0,
+	failedIds: [],
 };
-
-export type PrepareNoteResult =
-	| {
-		status: "ready";
-		value: PreparedNoteForEmbedding;
-	}
-	| {
-		status: "reject";
-		reason: PrepareNoteRejectReason;
-		warnings: IndexingWarning[];
-	};
 
 export interface SimilaritySettings {
 	ignoredPaths: string[];
-	initialIndexCompleted: boolean;
 	advancedOpen: boolean;
 	maxRawMarkdownChars: number;
 	maxExtractedChars: number;
-	maxChunks: number;
-	titleWeight: number;
+	maxOverlapPercent: number;
 }
 
 /** Bumped when the on-disk index shape changes. 1 = inline float64 JSON embeddings (legacy). 2 = embeddings in the binary sidecar. */
@@ -115,8 +84,20 @@ export type IndexEntryV2 = {
 
 export type IndexV2 = IndexEntryV2[];
 
-/** The pre-migration on-disk shape: embeddings inline as float64 JSON arrays. */
-export type LegacyIndexV1 = IndexedNote[];
+/**
+ * The v1 on-disk shape: embeddings inline as float64 JSON arrays. Frozen, and
+ * deliberately decoupled from IndexedNote so the live type can evolve freely.
+ * v1 vectors are never migrated forward — the health check detects them and
+ * discards the index so it rebuilds under the current representation.
+ */
+export type LegacyNoteV1 = {
+	id: string;
+	embedding: number[];
+	contentHash: string;
+	updatedAt: string;
+};
+
+export type LegacyIndexV1 = LegacyNoteV1[];
 
 export interface SimilarityPluginData {
 	settings: SimilaritySettings;

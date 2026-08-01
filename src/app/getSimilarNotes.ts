@@ -1,8 +1,8 @@
-import { PrepareNoteResult, RelatedNote } from "../types";
+import { RelatedNote } from "../types";
 import { IndexRepository } from "../ports";
-import { cosineSimilarity, normalizeEmbedding } from "../domain/embedding";
-import { EmbedChunksUseCase, EmbedTextUseCase } from "./embedText";
-import { PrepareNoteForEmbeddingUseCase } from "./prepareNoteForEmbedding";
+import { maxPairwiseSimilarity, normalizeEmbedding } from "../domain/embedding";
+import { EmbedTextUseCase } from "./embedText";
+import { GetNoteTextUseCase } from "./getNoteText";
 
 
 export type GetSimilarNotesUseCase = (args: {
@@ -15,8 +15,7 @@ export type GetSimilarNotesUseCase = (args: {
 export function makeGetSimilarNotes(deps: {
 	indexRepo: IndexRepository;
 	embedText: EmbedTextUseCase;
-	embedChunks: EmbedChunksUseCase;
-	prepareNoteForEmbedding: PrepareNoteForEmbeddingUseCase;
+	getNoteText: GetNoteTextUseCase;
 }): GetSimilarNotesUseCase {
 	return async function getSimilarNotes(args): Promise<RelatedNote[]> {
 		const {
@@ -26,47 +25,39 @@ export function makeGetSimilarNotes(deps: {
 			minScore = 0.25,
 		} = args;
 
-		// Prefer using an existing embedding if we have a noteId in the index.
-		let queryEmbedding: number[] | undefined;
+		// Prefer using existing embeddings if we have a noteId in the index.
+		let queryChunks: number[][] | undefined;
 
 		if (noteId) {
 			const existing = await deps.indexRepo.findById(noteId);
-			if (existing) queryEmbedding = existing.embedding;
+			if (existing) queryChunks = existing.chunks.map((chunk) => chunk.embedding);
 		}
 
-		// If not found, we need text to compute the query embedding.
-		if (!queryEmbedding) {
+		// If not found, we need text to compute the query embeddings.
+		if (!queryChunks) {
 			if (noteId) {
-				let prepared: PrepareNoteResult;
+				let text: string;
 				try {
-					prepared = await deps.prepareNoteForEmbedding(noteId);
+					text = await deps.getNoteText(noteId);
 				} catch {
-					return [];
-				}
-				if (prepared.status === "reject") {
 					return [];
 				}
 
-				let embedding: number[] | null;
-				try {
-					embedding = await deps.embedChunks(prepared.value.chunks);
-				} catch {
-					return [];
-				}
-				if (!embedding) return [];
-				queryEmbedding = normalizeEmbedding(embedding);
+				const embedded = await deps.embedText(text, "high").catch(() => null);
+				if (!embedded?.length) return [];
+				queryChunks = embedded.map((chunk) => normalizeEmbedding(chunk.embedding));
 			} else {
 				if (!text) {
 					throw new Error("getRelatedNotes: need either noteId present in index, or text to embed.");
 				}
-				const embedding = await deps.embedText(text);
-				if (!embedding) throw new Error("getRelatedNotes: could not embed text");
-				queryEmbedding = normalizeEmbedding(embedding);
+				const embedded = await deps.embedText(text, "high");
+				if (!embedded?.length) throw new Error("getRelatedNotes: could not embed text");
+				queryChunks = embedded.map((chunk) => normalizeEmbedding(chunk.embedding));
 			}
 		}
 
-		const finalEmbedding = queryEmbedding;
-		if (!finalEmbedding) {
+		const finalChunks = queryChunks;
+		if (!finalChunks.length) {
 			throw new Error("getRelatedNotes: missing query embedding");
 		}
 
@@ -76,7 +67,7 @@ export function makeGetSimilarNotes(deps: {
 			.filter(n => (noteId ? n.id !== noteId : true))
 			.map(n => ({
 				id: n.id,
-				score: cosineSimilarity(finalEmbedding, n.embedding),
+				score: maxPairwiseSimilarity(finalChunks, n.chunks.map((chunk) => chunk.embedding)),
 			}))
 			.filter(r => Number.isFinite(r.score) && r.score >= minScore)
 			.sort((a, b) => b.score - a.score)

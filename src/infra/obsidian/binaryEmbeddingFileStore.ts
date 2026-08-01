@@ -1,11 +1,12 @@
 import { normalizePath, Plugin } from "obsidian";
+import { EmbeddingFileStore } from "../../ports";
 
 /**
  * Owns the vault mechanics (path, exists/read/write) for the embeddings
  * binary sidecar. The only file that touches `obsidian` for this feature —
  * everything else works in ArrayBuffer/Float32Array terms.
  */
-export class BinaryEmbeddingFileStore {
+export class BinaryEmbeddingFileStore implements EmbeddingFileStore {
 	private readonly dir: string;
 	private readonly path: string;
 

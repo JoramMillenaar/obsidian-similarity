@@ -1,5 +1,5 @@
-import { IframeMessenger } from "src/infra/embedder/iframe/messagingService";
-import { EmbeddingPort } from "../../ports";
+import { IframeMessenger } from "src/infra/embedder/messagingService";
+import { EmbeddedChunk, EmbeddingPort, EmbedOptions } from "../../ports";
 
 
 export class EmbeddingProvider implements EmbeddingPort {
@@ -13,8 +13,8 @@ export class EmbeddingProvider implements EmbeddingPort {
 		await this.iframeMessenger.initialize();
 	}
 
-	async embed(text: string): Promise<number[] | null> {
-		return await this.iframeMessenger.sendMessage(text);
+	async embed(text: string, options: EmbedOptions): Promise<EmbeddedChunk[] | null> {
+		return await this.iframeMessenger.sendMessage(text, options.maxOverlapPercent);
 	}
 
 	unload(): void {

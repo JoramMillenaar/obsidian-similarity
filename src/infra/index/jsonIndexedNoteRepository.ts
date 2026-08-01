@@ -19,6 +19,7 @@ export class JsonIndexedNoteRepository implements IndexRepository {
 	async upsertMany(notes: IndexedNote[]) {
 		if (notes.length === 0) return;
 
+		// TODO: this should technically be atomic
 		const index = await this.storage.getAll();
 
 		const map = new Map(index.map(n => [n.id, n]));
@@ -42,6 +43,10 @@ export class JsonIndexedNoteRepository implements IndexRepository {
 		const index = await this.storage.getAll();
 		const next = index.filter(n => n.id !== noteId);
 		await this.storage.rewrite(next);
+	}
+
+	async clear() {
+		await this.storage.rewrite([]);
 	}
 
 	async rename(oldId: string, newId: string) {

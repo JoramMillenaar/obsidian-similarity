@@ -1,30 +1,21 @@
 import { SimilaritySettings } from "../types";
-import { SettingsRepository } from "../ports";
-import { StartOrRefreshIndexSyncUseCase } from "./indexingCoordinator";
-
-export type UpdateSettingsResult = {
-	reindexQueued: boolean;
-};
+import { IndexStorage, SettingsRepository } from "../ports";
+import { SynchronizeIndexUseCase } from "./synchronizeIndex";
 
 export type UpdateSettingsUseCase = (
 	patch: Partial<SimilaritySettings>,
-) => Promise<UpdateSettingsResult>;
+) => Promise<void>;
 
 export function makeUpdateSettings(deps: {
 	settingsRepo: SettingsRepository;
-	indexStorage: { isEmpty: () => Promise<boolean> };
-	startOrRefreshIndexSync: StartOrRefreshIndexSyncUseCase;
+	indexStorage: IndexStorage;
+	synchronizeIndex: SynchronizeIndexUseCase;
 }): UpdateSettingsUseCase {
 	return async function updateSettings(patch) {
 		await deps.settingsRepo.updatePartial(patch);
-		if (await deps.indexStorage.isEmpty()) {
-			return {reindexQueued: false};
-		}
 
-		await deps.startOrRefreshIndexSync({
-			awaitCompletion: false,
-			forceReindexAll: true,
-		});
-		return {reindexQueued: true};
+		// Now we need to make sure the index reflects the updated settings.
+		await deps.indexStorage.repair();
+		await deps.synchronizeIndex();
 	};
 }

@@ -36,12 +36,9 @@ export class ThrottledIndexStorage implements IndexStorage {
 		return await this.underlying.isEmpty();
 	}
 
-	async needsRebuild(): Promise<boolean> {
-		return await this.underlying.needsRebuild();
-	}
-
-	async readLegacy(): Promise<IndexedNote[] | null> {
-		return await this.underlying.readLegacy();
+	async repair(): Promise<void> {
+		await this.flush();
+		await this.underlying.repair();
 	}
 
 	async flush(): Promise<void> {
