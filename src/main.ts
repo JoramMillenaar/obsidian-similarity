@@ -3,9 +3,9 @@ import { SearchModal } from "./ui/SearchModal";
 import { initializePlugin } from "./app/initializePlugin";
 import { AppContainer } from "./appContainer";
 import { SimilarNotesListView, VIEW_TYPE_SIMILARITY } from "./ui/SimilarNotesListView";
-import { activateRightLeafView } from "./app/activateRightLeafView";
 import { SettingView } from "./ui/SettingsView";
 import { registerDevCommands } from "./dev/registerDevCommands";
+import { registerObsidianEvents } from "./infra/obsidian/registerObsidianEvents";
 
 export default class RelatedNotes extends Plugin {
 	private appContainer!: AppContainer;
@@ -53,12 +53,13 @@ export default class RelatedNotes extends Plugin {
 			id: "open-similar-notes",
 			name: "Open similar notes",
 			callback: async () => {
-				await activateRightLeafView(this, {reveal: true, focus: true});
+				await this.appContainer.similarityView.activate({reveal: true, focus: true});
 			},
 		});
 
 		this.app.workspace.onLayoutReady(() => {
-			void initializePlugin(this, this.appContainer);
+			registerObsidianEvents(this, this.appContainer);
+			void initializePlugin(this.appContainer);
 		});
 
 		if (__DEV__) {

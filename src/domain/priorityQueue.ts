@@ -1,16 +1,9 @@
-/**
- * Ordering for the embedding backlog: three priority tiers, each a FIFO set
- * of keys whose work is pending. `high` drains before `medium` before `low`.
- * Actions aren't decided here — the queue's owner resolves what a key
- * actually needs when it's taken off, so drift between this queue and
- * whatever it backs is harmless.
- */
 export type Priority = "high" | "medium" | "low";
 
 const TIERS: Priority[] = ["high", "medium", "low"];
 const RANK: Record<Priority, number> = {high: 2, medium: 1, low: 0};
 
-export class IndexQueue {
+export class PriorityQueue {
 	private tiers: Record<Priority, Set<string>> = {
 		high: new Set(),
 		medium: new Set(),
@@ -33,7 +26,6 @@ export class IndexQueue {
 		return TIERS.find((tier) => this.tiers[tier].has(id));
 	}
 
-	/** Adds a key at the given priority, or promotes it if already queued at a lower one. Never downgrades. */
 	enqueue(id: string, priority: Priority): void {
 		const current = this.priorityOf(id);
 		if (current && RANK[current] >= RANK[priority]) return;

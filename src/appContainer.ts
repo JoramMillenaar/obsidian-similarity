@@ -19,8 +19,10 @@ import {
 	MarkdownTextExtractor,
 	NoteSource,
 	SettingsRepository,
+	SimilarityView,
 	StatusReporter,
 } from "./ports";
+import { ObsidianSimilarityView } from "./infra/obsidian/obsidianSimilarityView";
 import { ObsidianPluginDataStore } from "./infra/obsidian/obsidianPluginDataStore";
 import { ObsidianSettingsRepository } from "./infra/obsidian/obsidianSettings";
 import { IsIgnoredPath, makeIsIgnoredPath } from "./app/isIgnoredPath";
@@ -44,6 +46,7 @@ export class AppContainer {
 	readonly indexRepo: IndexRepository;
 	readonly settingsRepo: SettingsRepository;
 	readonly embeddingQueue: EmbeddingQueue;
+	readonly similarityView: SimilarityView;
 
 	readonly indexNote: IndexNoteUseCase;
 	readonly getNoteText: GetNoteTextUseCase;
@@ -75,6 +78,7 @@ export class AppContainer {
 		this.indexRepo = new JsonIndexedNoteRepository(this.indexStorage);
 		this.settingsRepo = new ObsidianSettingsRepository(storage);
 		const activeEditor = new ObsidianActiveEditor(plugin);
+		this.similarityView = new ObsidianSimilarityView(plugin);
 
 		this.embeddingQueue = new EmbeddingQueue();
 		const queueState = new IndexingProgress();

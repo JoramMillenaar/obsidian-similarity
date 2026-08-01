@@ -1,4 +1,4 @@
-import { IndexQueue, Priority } from "../domain/indexQueue";
+import { PriorityQueue, Priority } from "../domain/priorityQueue";
 
 export type { Priority };
 
@@ -21,7 +21,7 @@ type PendingJob = {
 };
 
 export class EmbeddingQueue {
-	private readonly queue = new IndexQueue();
+	private readonly queue = new PriorityQueue();
 	private readonly jobs = new Map<string, PendingJob>();
 	private readonly observers = new Set<EmbeddingQueueObserver>();
 
