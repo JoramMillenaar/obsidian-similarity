@@ -30,7 +30,8 @@ export class EmbeddingModel {
 	}
 
 	countTokens = (text: string): number => {
-		return this.#pipeline!.tokenizer.encode(text, { add_special_tokens: false }).length;
+		if (!this.#pipeline) throw new Error("pipeline not yet initialized");
+		return this.#pipeline.tokenizer.encode(text, {add_special_tokens: false}).length;
 	};
 
 	// Serialized single-text inference — each call waits for the previous.
@@ -38,7 +39,11 @@ export class EmbeddingModel {
 		return new Promise((resolve, reject) => {
 			this.#queue = this.#queue.then(async () => {
 				try {
-					const result = await this.#pipeline!(input, { pooling: 'mean', normalize: true });
+					if (!this.#pipeline) return reject(new Error("pipeline not yet initialized"));
+					const result: { data: Float32Array } = await this.#pipeline(input, {
+						pooling: 'mean',
+						normalize: true
+					});
 					resolve(result.data);
 				} catch (err) {
 					reject(err instanceof Error ? err : new Error(String(err)));
