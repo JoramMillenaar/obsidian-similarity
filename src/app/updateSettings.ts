@@ -1,27 +1,21 @@
 import { SimilaritySettings } from "../types";
-import { SettingsRepository } from "../ports";
+import { IndexStorage, SettingsRepository } from "../ports";
 import { SynchronizeIndexUseCase } from "./synchronizeIndex";
-
-export type UpdateSettingsResult = {
-	reindexQueued: boolean;
-};
 
 export type UpdateSettingsUseCase = (
 	patch: Partial<SimilaritySettings>,
-) => Promise<UpdateSettingsResult>;
+) => Promise<void>;
 
 export function makeUpdateSettings(deps: {
 	settingsRepo: SettingsRepository;
-	indexStorage: { isEmpty: () => Promise<boolean> };
+	indexStorage: IndexStorage;
 	synchronizeIndex: SynchronizeIndexUseCase;
 }): UpdateSettingsUseCase {
 	return async function updateSettings(patch) {
 		await deps.settingsRepo.updatePartial(patch);
-		if (await deps.indexStorage.isEmpty()) {
-			return {reindexQueued: false};
-		}
-		// TODO: before we reindexed everything on setting change. Should we just keep this simple and make the self-heal bulletproof?
+
+		// Now we need to make sure the index reflects the updated settings.
+		await deps.indexStorage.repair();
 		await deps.synchronizeIndex();
-		return {reindexQueued: true};
 	};
 }

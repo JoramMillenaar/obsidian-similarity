@@ -126,15 +126,11 @@ export class SettingView extends PluginSettingTab {
 							return;
 						}
 
-						const result = await this.deps.updateSettings({
+						await this.deps.updateSettings({
 							ignoredPaths: draftIgnored,
 							...draftIndexing,
 						});
-						if (result.reindexQueued) {
-							new Notice("Settings saved. Index rebuild queued in the background.");
-						} else {
-							new Notice("Settings saved.");
-						}
+						new Notice("Settings saved.");
 					} finally {
 						button.setDisabled(false);
 					}

@@ -8,12 +8,7 @@ export type SubscribeIndexingStateUseCase = (
 
 export type GetIndexingStateUseCase = () => IndexingQueueSnapshot;
 
-/**
- * Tracks note-level indexing progress independent of the embedding queue's
- * own bookkeeping — the embedding queue coalesces work by content hash, so
- * it has no notion of a note. This tracks whatever key the caller gives it
- * (a note id) across the lifetime of a single async run.
- */
+
 export class IndexingProgress {
 	private readonly pending = new Set<string>();
 	private readonly running = new Set<string>();
@@ -25,7 +20,6 @@ export class IndexingProgress {
 	private fatalError: string | undefined;
 	private emitScheduled = false;
 
-	/** Pre-registers keys as pending so total/pending reflect a whole batch before any of it starts. */
 	watchAll(keys: string[]): void {
 		for (const key of keys) this.watch(key);
 		this.scheduleEmit();
@@ -75,7 +69,6 @@ export class IndexingProgress {
 		};
 	};
 
-	/** Surfaces an error from outside the tracked runs themselves (e.g. the embedding queue's processing loop dying). */
 	reportFatalError = (error: unknown) => {
 		this.fatalError = error instanceof Error ? error.message : String(error);
 		this.scheduleEmit();
