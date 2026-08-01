@@ -10,7 +10,7 @@ import { makeGenerateDocumentEmbeddings } from './generateDocumentEmbeddings';
 const model = new EmbeddingModel();
 const generateDocumentEmbeddings = makeGenerateDocumentEmbeddings(model);
 
-window.addEventListener('message', async (event: MessageEvent<IframeMessage>) => {
+async function handleMessage(event: MessageEvent<IframeMessage>): Promise<void> {
 	const { requestId, payload, maxOverlapPercent } = event.data;
 
 	if (payload === 'ping') {
@@ -29,4 +29,8 @@ window.addEventListener('message', async (event: MessageEvent<IframeMessage>) =>
 		const message = error instanceof Error ? error.message : String(error);
 		(event.source as Window).postMessage({ requestId, data: [], error: message }, window.origin);
 	}
+}
+
+window.addEventListener('message', (event: MessageEvent<IframeMessage>) => {
+	void handleMessage(event);
 });

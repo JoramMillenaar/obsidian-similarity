@@ -24,7 +24,7 @@ export function walk(node: Node, out: string[]): void {
 		out.push(node.nodeValue ?? "");
 		return;
 	}
-	if (!(node instanceof HTMLElement) || node.matches(SKIP)) return;
+	if (!node.instanceOf(HTMLElement) || node.matches(SKIP)) return;
 
 	if (node.tagName === "TABLE") {
 		out.push(tableToText(node));

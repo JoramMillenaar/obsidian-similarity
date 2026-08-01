@@ -32,5 +32,5 @@ export function stripFencedCode(md: string): string {
 // means the body renders as literal text and can't become a link or a query.
 export function neutralizeInlineCode(md: string): string {
 	return md.replace(/(`+)([^\n]*?)\1/g, (_full, _ticks, body: string) =>
-		body.replace(/[\\`*_{}\[\]()#+\-.!|~^=<>$]/g, "\\$&"));
+		body.replace(/[\\`*_{}[\]()#+\-.!|~^=<>$]/g, "\\$&"));
 }

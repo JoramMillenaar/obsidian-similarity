@@ -47,7 +47,7 @@ export class EmbeddingQueue {
 			reject = rej;
 		});
 
-		this.jobs.set(key, {run: run as EmbeddingJob<unknown>, resolve, reject, promise});
+		this.jobs.set(key, {run, resolve, reject, promise});
 		this.queue.enqueue(key, priority);
 
 		this.ensureProcessing();
@@ -71,7 +71,7 @@ export class EmbeddingQueue {
 		}
 		this.jobs.clear();
 
-		this.notify({type: "cleared"});
+		void this.notify({type: "cleared"});
 		this.observers.clear();
 	};
 
@@ -100,7 +100,7 @@ export class EmbeddingQueue {
 			}
 		} catch (error) {
 			if (this.isUnloaded) return;
-			this.notify({type: "stopped", error});
+			await this.notify({type: "stopped", error});
 			console.error("[Similarity] Embedding queue stopped:", error);
 		}
 	}
@@ -110,14 +110,14 @@ export class EmbeddingQueue {
 		if (!job) return;
 
 		this.jobs.delete(key);
-		this.notify({type: "started", key});
+		await this.notify({type: "started", key});
 
 		try {
 			job.resolve(await job.run());
-			this.notify({type: "settled", key});
+			await this.notify({type: "settled", key});
 		} catch (error) {
 			job.reject(error);
-			this.notify({type: "settled", key, error});
+			await this.notify({type: "settled", key, error});
 			console.error(`[Similarity] Embedding job failed for ${key}:`, error);
 		}
 	}

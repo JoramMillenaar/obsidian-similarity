@@ -1,16 +1,12 @@
 /**
  * DEV-ONLY modal that visualizes the MD→semantic-text→chunk pipeline for the
  * active note. See `inspectNotePipeline.ts` for how the stages are produced.
- *
- * Styling is injected as a scoped <style> on open (and removed on close) so no
- * dev CSS leaks into the shipped `styles.css`. Reached only behind `__DEV__`.
+ * Styling lives in `styles.css` (spr- prefixed rules). Reached only behind `__DEV__`.
  */
 import { App, Modal } from "obsidian";
 import { EmbeddedChunk, EmbeddingPort, NoteSource, SettingsRepository } from "../ports";
 import { GetNoteTextUseCase } from "../app/getNoteText";
 import { inspectNotePipeline, NotePipelineInspection } from "./inspectNotePipeline";
-
-const STYLE_ID = "spr-note-pipeline-inspector-style";
 
 export type NotePipelineInspectorDeps = {
 	noteSource: NoteSource;
@@ -29,7 +25,6 @@ export class NotePipelineInspectorModal extends Modal {
 	}
 
 	onOpen(): void {
-		this.injectStyle();
 		this.modalEl.addClass("spr-inspector-modal");
 		this.titleEl.setText("Note pipeline inspector");
 		this.contentEl.addClass("spr-inspector");
@@ -57,7 +52,6 @@ export class NotePipelineInspectorModal extends Modal {
 
 	onClose(): void {
 		this.contentEl.empty();
-		activeDocument.getElementById(STYLE_ID)?.remove();
 	}
 
 	private render(inspection: NotePipelineInspection): void {
@@ -226,74 +220,8 @@ export class NotePipelineInspectorModal extends Modal {
 		return section;
 	}
 
-	private injectStyle(): void {
-		if (activeDocument.getElementById(STYLE_ID)) return;
-		const style = activeDocument.head.createEl("style", { attr: { id: STYLE_ID } });
-		style.setText(INSPECTOR_CSS);
-	}
 }
 
 function clamp(value: number, min: number, max: number): number {
 	return Math.max(min, Math.min(value, max));
 }
-
-const INSPECTOR_CSS = `
-.spr-inspector-modal { width: min(920px, 92vw); }
-.spr-inspector { max-height: 78vh; overflow-y: auto; }
-.spr-loading, .spr-error { padding: 12px 0; color: var(--text-muted); }
-.spr-error { color: var(--text-error); }
-
-.spr-header { margin-bottom: 10px; }
-.spr-note-path { font-weight: 600; word-break: break-all; margin-bottom: 6px; }
-.spr-meta { display: flex; flex-wrap: wrap; gap: 6px; }
-.spr-pill { display: inline-flex; align-items: center; gap: 5px; font-size: 11px;
-	background: var(--background-secondary); border: 1px solid var(--background-modifier-border);
-	border-radius: 5px; padding: 2px 7px; }
-.spr-pill-key { color: var(--text-muted); font-family: var(--font-monospace); }
-.spr-pill-val { font-weight: 600; font-family: var(--font-monospace); }
-
-.spr-notice { border-radius: 6px; padding: 7px 10px; margin: 8px 0; font-size: 13px; }
-.spr-notice-warn { background: rgba(224, 169, 74, 0.12); color: var(--text-warning, #d08b28); }
-.spr-notice-reject { background: rgba(224, 99, 122, 0.12); color: var(--text-error); }
-
-.spr-section { margin-top: 18px; }
-.spr-section-title { font-size: 13px; font-weight: 700; letter-spacing: 0.02em;
-	text-transform: uppercase; color: var(--text-muted); margin-bottom: 8px;
-	border-bottom: 1px solid var(--background-modifier-border); padding-bottom: 4px; }
-.spr-subhead { font-size: 12px; font-weight: 600; color: var(--text-muted); margin: 12px 0 5px; }
-.spr-hint { font-size: 12px; color: var(--text-muted); margin-bottom: 10px; }
-.spr-empty { color: var(--text-faint); font-style: italic; padding: 4px 0; }
-
-.spr-collapse { margin-bottom: 6px; }
-.spr-collapse > summary { cursor: pointer; font-size: 12px; color: var(--text-muted); }
-
-.spr-text { font-family: var(--font-monospace); font-size: 12px; line-height: 1.6;
-	white-space: pre-wrap; word-break: break-word; background: var(--background-primary-alt);
-	border: 1px solid var(--background-modifier-border); border-radius: 6px;
-	padding: 10px; margin: 0; max-height: 260px; overflow-y: auto; }
-.spr-text-raw { color: var(--text-muted); }
-
-.spr-legend { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 8px; font-size: 11px; }
-.spr-legend-item { padding: 1px 7px; border-radius: 4px; }
-
-.spr-chunk-map { line-height: 1.9; }
-.spr-seg-0 { background: rgba(95, 208, 192, 0.22); }
-.spr-seg-1 { background: rgba(120, 150, 230, 0.22); }
-.spr-seg-overlap { background: rgba(224, 169, 74, 0.38); }
-.spr-seg-gap { background: rgba(224, 99, 122, 0.16); border-bottom: 1px dashed var(--text-error); }
-
-.spr-chip { font-family: var(--font-monospace); font-size: 10px; font-weight: 700;
-	padding: 0 4px; border-radius: 3px; margin: 0 1px; vertical-align: baseline;
-	color: var(--text-on-accent); background: var(--text-accent); }
-.spr-chip-open { background: var(--color-green, #3aa675); color: #fff; }
-.spr-chip-close { background: var(--color-red, #c0435a); color: #fff; }
-
-.spr-table { width: 100%; border-collapse: collapse; font-size: 12px; }
-.spr-table th, .spr-table td { text-align: left; padding: 4px 8px;
-	border-bottom: 1px solid var(--background-modifier-border); vertical-align: top; }
-.spr-table th { color: var(--text-muted); font-weight: 600; }
-.spr-table td:nth-child(2), .spr-table td:nth-child(3), .spr-table td:nth-child(4) {
-	font-family: var(--font-monospace); white-space: nowrap; }
-.spr-cell-text { font-family: var(--font-monospace); color: var(--text-muted);
-	max-width: 460px; word-break: break-word; }
-`;

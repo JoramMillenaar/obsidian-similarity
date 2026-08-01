@@ -23,14 +23,10 @@ export class EmbeddingModel {
 		const webgpuAvailable = (navigator as Navigator & { gpu?: unknown }).gpu != null;
 		this.#device = webgpuAvailable ? 'webgpu' : 'wasm';
 
-		console.log(`[Similarity] Initializing on ${this.#device}`);
-
 		this.#pipeline = await pipeline('feature-extraction', 'Xenova/all-MiniLM-L6-v2', {
 			device: this.#device,
 			dtype: webgpuAvailable ? 'fp32' : 'q8',
 		});
-
-		console.log(`[Similarity] Model ready on ${this.#device}`);
 	}
 
 	countTokens = (text: string): number => {
@@ -43,9 +39,9 @@ export class EmbeddingModel {
 			this.#queue = this.#queue.then(async () => {
 				try {
 					const result = await this.#pipeline!(input, { pooling: 'mean', normalize: true });
-					resolve(result.data as unknown as Float32Array);
+					resolve(result.data);
 				} catch (err) {
-					reject(err);
+					reject(err instanceof Error ? err : new Error(String(err)));
 				}
 			});
 		});
