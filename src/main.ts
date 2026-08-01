@@ -4,7 +4,6 @@ import { initializePlugin } from "./app/initializePlugin";
 import { AppContainer } from "./appContainer";
 import { SimilarNotesListView, VIEW_TYPE_SIMILARITY } from "./ui/SimilarNotesListView";
 import { SettingView } from "./ui/SettingsView";
-import { registerDevCommands } from "./dev/registerDevCommands";
 import { registerObsidianEvents } from "./infra/obsidian/registerObsidianEvents";
 
 export default class RelatedNotes extends Plugin {
@@ -62,9 +61,9 @@ export default class RelatedNotes extends Plugin {
 			void initializePlugin(this.appContainer);
 		});
 
-		if (__DEV__) {
-			registerDevCommands(this, this.appContainer);
-		}
+		// if (__DEV__) {
+		// 	registerDevCommands(this, this.appContainer);
+		// }
 	}
 
 	onunload(): void {
