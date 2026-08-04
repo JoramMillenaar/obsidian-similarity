@@ -1,7 +1,7 @@
 import { IndexedNote, IndexEntryV2, SCHEMA_VERSION } from "../../types";
 import { EmbeddingFileStore, IndexStorage, PluginDataStore } from "../../ports";
 import { DecodedEmbeddings, decodeEmbeddings, encodeEmbeddings } from "../../domain/embeddingCodec";
-import { packIndexedNotesToV2, unpackV2ToIndexedNotes } from "../../domain/indexPacking";
+import { packForStorage, unpackFromStorage } from "../../domain/indexPacking";
 import { checkIndexHealth, SidecarState } from "../../domain/indexHealth";
 
 type SidecarRead = {
@@ -26,11 +26,16 @@ export class ObsidianPluginDataIndexStorage implements IndexStorage {
 		const {decoded} = await this.readSidecar();
 		if (!decoded || decoded.dim !== data.embeddingDim) return [];
 
-		return unpackV2ToIndexedNotes(entries, decoded.embeddings, decoded.dim, decoded.count);
+		return unpackFromStorage({
+			index: entries,
+			embeddings: decoded.embeddings,
+			dim: decoded.dim,
+			chunkCount: decoded.count
+		});
 	}
 
 	async rewrite(index: IndexedNote[]): Promise<void> {
-		const {index: v2, embeddings, dim} = packIndexedNotesToV2(index);
+		const {index: v2, embeddings, dim} = packForStorage(index);
 		const buffer = encodeEmbeddings(embeddings, dim);
 
 		// Binary first, then JSON. Dying in between leaves schemaVersion stale, so a
@@ -76,7 +81,12 @@ export class ObsidianPluginDataIndexStorage implements IndexStorage {
 		);
 
 		const survivors = decoded
-			? unpackV2ToIndexedNotes(health.validEntries, decoded.embeddings, decoded.dim, decoded.count)
+			? unpackFromStorage({
+				index: health.validEntries,
+				embeddings: decoded.embeddings,
+				dim: decoded.dim,
+				chunkCount: decoded.count
+			})
 			: [];
 		await this.rewrite(survivors);
 	}

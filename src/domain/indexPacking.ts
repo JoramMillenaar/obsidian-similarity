@@ -4,23 +4,15 @@ export type PackedIndex = {
 	index: IndexV2;
 	embeddings: Float32Array;
 	dim: number;
+	chunkCount: number;
 };
 
-/**
- * Pure transform: notes with inline chunk embeddings -> slim v2 index entries +
- * one packed Float32Array. Every chunk of every note gets its own row; an entry
- * points at its rows and records the span of prepared text each one covers.
- *
- * Notes are sorted by id before row assignment so this is deterministic:
- * running it twice on the same input produces byte-identical output, which is
- * what makes a rewrite idempotent and safe to re-run after a crash.
- */
-export function packIndexedNotesToV2(notes: IndexedNote[]): PackedIndex {
+export function packForStorage(notes: IndexedNote[]): PackedIndex {
 	const dim = notes.find((note) => note.chunks.length > 0)?.chunks[0].embedding.length ?? 0;
 	const sorted = [...notes].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
 
-	const totalChunks = sorted.reduce((count, note) => count + note.chunks.length, 0);
-	const embeddings = new Float32Array(totalChunks * dim);
+	const chunkCount = sorted.reduce((count, note) => count + note.chunks.length, 0);
+	const embeddings = new Float32Array(chunkCount * dim);
 
 	let row = 0;
 	const index: IndexV2 = sorted.map((note) => {
@@ -46,26 +38,20 @@ export function packIndexedNotesToV2(notes: IndexedNote[]): PackedIndex {
 		return entry;
 	});
 
-	return {index, embeddings, dim};
+	return {index, embeddings, dim, chunkCount};
 }
 
-/** Inverse of packIndexedNotesToV2: zips v2 entries with their row vectors back into IndexedNote[]. */
-export function unpackV2ToIndexedNotes(
-	index: IndexV2,
-	embeddings: Float32Array,
-	dim: number,
-	count: number,
-): IndexedNote[] {
+export function unpackFromStorage(packedIndex: PackedIndex): IndexedNote[] {
 	const notes: IndexedNote[] = [];
 
-	for (const entry of index) {
+	for (const entry of packedIndex.index) {
 		const chunks: NoteChunk[] = [];
 
 		for (const chunk of entry.chunks) {
-			if (chunk.row < 0 || chunk.row >= count) continue;
+			if (chunk.row < 0 || chunk.row >= packedIndex.chunkCount) continue;
 
 			chunks.push({
-				embedding: Array.from(embeddings.subarray(chunk.row * dim, (chunk.row + 1) * dim)),
+				embedding: Array.from(packedIndex.embeddings.subarray(chunk.row * packedIndex.dim, (chunk.row + 1) * packedIndex.dim)),
 				start: chunk.start,
 				end: chunk.end,
 				hash: chunk.hash,
