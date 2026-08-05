@@ -79,21 +79,21 @@ export interface SimilaritySettings {
 /** Bumped when the on-disk index shape changes. 1 = inline float64 JSON embeddings (legacy). 2 = embeddings in the binary sidecar. */
 export const SCHEMA_VERSION = 2;
 
-export type ChunkEntryV2 = {
+export type ChunkMetadata = {
 	row: number;
 	start: number;
 	end: number;
 	hash: string;
 };
 
-export type IndexEntryV2 = {
+export type NoteIndexMetadata = {
 	id: string;
 	contentHash: string;
 	updatedAt: string;
-	chunks: ChunkEntryV2[];
+	chunks: ChunkMetadata[];
 };
 
-export type IndexV2 = IndexEntryV2[];
+export type IndexMetadata = NoteIndexMetadata[];
 
 /**
  * The v1 on-disk shape: embeddings inline as float64 JSON arrays. Frozen, and
@@ -115,5 +115,5 @@ export interface SimilarityPluginData {
 	schemaVersion: number;
 	/** Embedding vector length backing the binary sidecar. 0 until first save. */
 	embeddingDim: number;
-	index: LegacyIndexV1 | IndexV2;
+	index: LegacyIndexV1 | IndexMetadata;
 }

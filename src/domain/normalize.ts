@@ -1,4 +1,4 @@
-import { IndexV2, SCHEMA_VERSION, SimilarityPluginData, SimilaritySettings } from "../types";
+import { IndexMetadata, SCHEMA_VERSION, SimilarityPluginData, SimilaritySettings } from "../types";
 import { DEFAULT_SETTINGS, EMBEDDING_MODELS, MAX_OVERLAP_PERCENT } from "../constants";
 
 export function normalizeSettings(
@@ -36,7 +36,7 @@ export function normalizeSettings(
 export function normalizePluginData(
 	value: Partial<SimilarityPluginData>,
 ): SimilarityPluginData {
-	const index: IndexV2 | SimilarityPluginData["index"] = Array.isArray(value?.index) ? value.index : [];
+	const index: IndexMetadata | SimilarityPluginData["index"] = Array.isArray(value?.index) ? value.index : [];
 	const normalizedSettings = normalizeSettings(value?.settings);
 
 	const schemaVersion = typeof value?.schemaVersion === "number" ? value.schemaVersion : 1;

@@ -1,4 +1,4 @@
-import { ChunkEntryV2, IndexEntryV2, SCHEMA_VERSION } from "../types";
+import { ChunkMetadata, NoteIndexMetadata, SCHEMA_VERSION } from "../types";
 import { isBinaryLayoutValid } from "./embeddingCodec";
 
 export type IndexUnusableReason =
@@ -15,7 +15,7 @@ export type SidecarState =
 
 export type IndexHealth =
 	| {status: "unusable"; reason: IndexUnusableReason}
-	| {status: "checked"; validEntries: IndexEntryV2[]; droppedIds: string[]};
+	| {status: "checked"; validEntries: NoteIndexMetadata[]; droppedIds: string[]};
 
 export function checkIndexHealth(args: {
 	schemaVersion: number;
@@ -49,7 +49,7 @@ export function checkIndexHealth(args: {
 		return {status: "unusable", reason: "layout-invalid"};
 	}
 
-	const validEntries: IndexEntryV2[] = [];
+	const validEntries: NoteIndexMetadata[] = [];
 	const droppedIds: string[] = [];
 	const claimedRows = new Set<number>();
 	const seenIds = new Set<string>();
@@ -74,7 +74,7 @@ function validateEntry(
 	rowCount: number,
 	claimedRows: Set<number>,
 	seenIds: Set<string>,
-): IndexEntryV2 | null {
+): NoteIndexMetadata | null {
 	if (!isRecord(candidate)) return null;
 
 	const {id, contentHash, updatedAt, chunks} = candidate;
@@ -85,7 +85,7 @@ function validateEntry(
 	if (!Array.isArray(chunks) || chunks.length === 0) return null;
 
 	const rowsInEntry = new Set<number>();
-	const validated: ChunkEntryV2[] = [];
+	const validated: ChunkMetadata[] = [];
 
 	for (const chunk of chunks) {
 		const validChunk = validateChunk(chunk, rowCount, claimedRows, rowsInEntry);
@@ -103,7 +103,7 @@ function validateChunk(
 	rowCount: number,
 	claimedRows: Set<number>,
 	rowsInEntry: Set<number>,
-): ChunkEntryV2 | null {
+): ChunkMetadata | null {
 	if (!isRecord(candidate)) return null;
 
 	const {row, start, end, hash} = candidate;

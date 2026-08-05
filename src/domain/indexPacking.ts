@@ -1,7 +1,7 @@
-import { ChunkEntryV2, IndexedNote, IndexEntryV2, IndexV2, NoteChunk } from "../types";
+import { ChunkMetadata, IndexedNote, NoteIndexMetadata, IndexMetadata, NoteChunk } from "../types";
 
 export type PackedIndex = {
-	index: IndexV2;
+	metadata: IndexMetadata;
 	embeddings: Int8Array;
 	dim: number;
 	chunkCount: number;
@@ -14,21 +14,21 @@ export function packForStorage(notes: IndexedNote[], dim: number): PackedIndex {
 	const embeddings = new Int8Array(chunkCount * dim);
 
 	let row = 0;
-	const index: IndexV2 = sorted.map((note) => {
-		const chunks: ChunkEntryV2[] = note.chunks.map((chunk) => {
+	const metadata: IndexMetadata = sorted.map((note) => {
+		const chunks: ChunkMetadata[] = note.chunks.map((chunk) => {
 			if (chunk.embedding.length !== dim) {
 				throw new Error(
-					`packIndexedNotesToV2: embedding for "${note.id}" has length ${chunk.embedding.length}, expected ${dim}`,
+					`packForStorage: embedding for "${note.id}" has length ${chunk.embedding.length}, expected ${dim}`,
 				);
 			}
 			embeddings.set(chunk.embedding, row * dim);
 
-			const entry: ChunkEntryV2 = {row, start: chunk.start, end: chunk.end, hash: chunk.hash};
+			const entry: ChunkMetadata = {row, start: chunk.start, end: chunk.end, hash: chunk.hash};
 			row++;
 			return entry;
 		});
 
-		const entry: IndexEntryV2 = {
+		const entry: NoteIndexMetadata = {
 			id: note.id,
 			contentHash: note.contentHash,
 			updatedAt: note.updatedAt,
@@ -37,13 +37,13 @@ export function packForStorage(notes: IndexedNote[], dim: number): PackedIndex {
 		return entry;
 	});
 
-	return {index, embeddings, dim, chunkCount};
+	return {metadata, embeddings, dim, chunkCount};
 }
 
 export function unpackFromStorage(packedIndex: PackedIndex): IndexedNote[] {
 	const notes: IndexedNote[] = [];
 
-	for (const entry of packedIndex.index) {
+	for (const entry of packedIndex.metadata) {
 		const chunks: NoteChunk[] = [];
 
 		for (const chunk of entry.chunks) {
