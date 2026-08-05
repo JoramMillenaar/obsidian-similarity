@@ -7,8 +7,7 @@ export type PackedIndex = {
 	chunkCount: number;
 };
 
-export function packForStorage(notes: IndexedNote[]): PackedIndex {
-	const dim = notes.find((note) => note.chunks.length > 0)?.chunks[0].embedding.length ?? 0;
+export function packForStorage(notes: IndexedNote[], dim: number): PackedIndex {
 	const sorted = [...notes].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
 
 	const chunkCount = sorted.reduce((count, note) => count + note.chunks.length, 0);

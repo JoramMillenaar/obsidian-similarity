@@ -70,13 +70,13 @@ export class AppContainer {
 		this.markdownTextExtractor = new ObsidianMarkdownTextExtractor(plugin);
 		const storage = new ObsidianPluginDataStore(plugin);
 		const binaryEmbeddingStore = new BinaryEmbeddingFileStore(plugin);
+		this.settingsRepo = new ObsidianSettingsRepository(storage);
 		this.indexStorage = new ThrottledIndexStorage(
-			new ObsidianPluginDataIndexStorage(storage, binaryEmbeddingStore),
+			new ObsidianPluginDataIndexStorage(storage, binaryEmbeddingStore, this.settingsRepo),
 			INDEX_WRITE_THROTTLE_MS,
 		);
 		this.embedder = new ReloadableEmbedder();
 		this.indexRepo = new JsonIndexedNoteRepository(this.indexStorage);
-		this.settingsRepo = new ObsidianSettingsRepository(storage);
 		const activeEditor = new ObsidianActiveEditor(plugin);
 		this.similarityView = new ObsidianSimilarityView(plugin);
 

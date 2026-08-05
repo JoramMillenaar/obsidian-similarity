@@ -1,8 +1,9 @@
 import { IndexedNote, IndexEntryV2, SCHEMA_VERSION } from "../../types";
-import { EmbeddingFileStore, IndexStorage, PluginDataStore } from "../../ports";
+import { EmbeddingFileStore, IndexStorage, PluginDataStore, SettingsRepository } from "../../ports";
 import { DecodedEmbeddings, decodeEmbeddings, encodeEmbeddings } from "../../domain/embeddingCodec";
 import { packForStorage, unpackFromStorage } from "../../domain/indexPacking";
 import { checkIndexHealth, SidecarState } from "../../domain/indexHealth";
+import { EMBEDDING_MODELS } from "../../constants";
 
 type SidecarRead = {
 	state: SidecarState;
@@ -13,6 +14,7 @@ export class ObsidianPluginDataIndexStorage implements IndexStorage {
 	constructor(
 		private readonly store: PluginDataStore,
 		private readonly binaryStore: EmbeddingFileStore,
+		private readonly settingsRepo: SettingsRepository,
 	) {
 	}
 
@@ -35,7 +37,8 @@ export class ObsidianPluginDataIndexStorage implements IndexStorage {
 	}
 
 	async rewrite(index: IndexedNote[]): Promise<void> {
-		const {index: v2, embeddings, dim} = packForStorage(index);
+		const {embeddingModelId} = await this.settingsRepo.get();
+		const {index: v2, embeddings, dim} = packForStorage(index, EMBEDDING_MODELS[embeddingModelId].dim);
 		const buffer = encodeEmbeddings(embeddings, dim);
 
 		// Binary first, then JSON. Dying in between leaves schemaVersion stale, so a
