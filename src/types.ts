@@ -45,6 +45,7 @@ export interface IframeMessage {
 	requestId: number;
 	payload: string;
 	maxOverlapPercent?: number;
+	maxChunkSize?: number;
 }
 
 export type IndexingQueueSnapshot = {

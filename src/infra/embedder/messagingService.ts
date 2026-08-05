@@ -60,14 +60,14 @@ export class IframeMessenger {
         pending.resolve(data);
     };
 
-    async sendMessage(payload: string, maxOverlapPercent: number, retries = 3): Promise<EmbeddedChunk[] | null> {
+    async sendMessage(payload: string, maxOverlapPercent: number, maxChunkSize?: number, retries = 3): Promise<EmbeddedChunk[] | null> {
         if (!this.iframe || !this.iframe.contentWindow) {
             throw new Error("Could not find the Iframe. Is it loaded'?");
         }
 
         for (let attempt = 0; attempt < retries; attempt++) {
             const requestId = this.requestIdCounter++;
-            const message: IframeMessage = { requestId, payload, maxOverlapPercent };
+            const message: IframeMessage = { requestId, payload, maxOverlapPercent, maxChunkSize };
 
             try {
                 return await new Promise<EmbeddedChunk[]>((resolve, reject) => {

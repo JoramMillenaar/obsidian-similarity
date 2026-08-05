@@ -13,7 +13,7 @@ export class EmbeddingProvider implements EmbeddingPort {
 
 	async embed(text: string, options: EmbedOptions): Promise<EmbeddedChunk[] | null> {
 		if (!this.iframeMessenger) throw new Error("EmbeddingProvider.embed called before load()");
-		return await this.iframeMessenger.sendMessage(text, options.maxOverlapPercent);
+		return await this.iframeMessenger.sendMessage(text, options.maxOverlapPercent, options.maxChunkSize);
 	}
 
 	unload(): void {

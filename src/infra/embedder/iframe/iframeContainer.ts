@@ -24,7 +24,7 @@ const model = new EmbeddingModel(window.__EMBEDDING_MODEL_CONFIG__);
 const generateDocumentEmbeddings = makeGenerateDocumentEmbeddings(model);
 
 async function handleMessage(event: MessageEvent<IframeMessage>): Promise<void> {
-	const { requestId, payload, maxOverlapPercent } = event.data;
+	const { requestId, payload, maxOverlapPercent, maxChunkSize } = event.data;
 
 	if (payload === 'ping') {
 		await model.ready;
@@ -36,7 +36,7 @@ async function handleMessage(event: MessageEvent<IframeMessage>): Promise<void> 
 	}
 
 	try {
-		const embeddings = await generateDocumentEmbeddings(payload, maxOverlapPercent);
+		const embeddings = await generateDocumentEmbeddings(payload, maxOverlapPercent, maxChunkSize);
 		(event.source as Window).postMessage({ requestId, data: embeddings }, window.origin);
 	} catch (error) {
 		const message = error instanceof Error ? error.message : String(error);

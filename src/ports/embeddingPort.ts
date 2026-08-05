@@ -2,6 +2,7 @@ import { EmbeddingModelConfig } from "../types";
 
 export interface EmbedOptions {
 	maxOverlapPercent: number;
+	maxChunkSize?: number;
 }
 
 export type EmbeddedChunk = {

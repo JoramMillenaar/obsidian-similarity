@@ -4,7 +4,7 @@ import { hashText } from "../domain/text";
 
 export type { Priority };
 
-export type EmbedTextUseCase = (text: string, priority?: Priority) => Promise<EmbeddedChunk[] | null>;
+export type EmbedTextUseCase = (text: string, priority?: Priority, maxChunkSize?: number) => Promise<EmbeddedChunk[] | null>;
 
 
 export function makeEmbedText(deps: {
@@ -12,9 +12,9 @@ export function makeEmbedText(deps: {
 	settingsRepo: SettingsRepository;
 	queue: EmbeddingQueue;
 }): EmbedTextUseCase {
-	return async function embedText(text: string, priority?: Priority): Promise<EmbeddedChunk[] | null> {
+	return async function embedText(text: string, priority?: Priority, maxChunkSize?: number): Promise<EmbeddedChunk[] | null> {
 		const {maxOverlapPercent} = await deps.settingsRepo.get();
-		const chunks = await deps.queue.submit(hashText(text), () => deps.embedder.embed(text, {maxOverlapPercent}), priority)
+		const chunks = await deps.queue.submit(hashText(text), () => deps.embedder.embed(text, {maxOverlapPercent, maxChunkSize}), priority)
 		if (!chunks || chunks.length === 0) return null;
 		return chunks;
 	};
