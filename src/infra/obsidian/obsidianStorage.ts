@@ -1,4 +1,4 @@
-import { IndexedNote, NoteIndexMetadata, SCHEMA_VERSION } from "../../types";
+import { IndexedNote, SCHEMA_VERSION } from "../../types";
 import { EmbeddingFileStore, IndexStorage, PluginDataStore, SettingsRepository } from "../../ports";
 import { DecodedEmbeddings, decodeEmbeddings, encodeEmbeddings } from "../../domain/embeddingCodec";
 import { packForStorage, unpackFromStorage } from "../../domain/indexPacking";
@@ -22,14 +22,13 @@ export class ObsidianPluginDataIndexStorage implements IndexStorage {
 		const data = await this.store.read();
 		if (data.schemaVersion < SCHEMA_VERSION) return [];
 
-		const entries = data.index as NoteIndexMetadata[];
-		if (entries.length === 0) return [];
+		if (data.index.length === 0) return [];
 
 		const {decoded} = await this.readSidecar();
 		if (!decoded || decoded.dim !== data.embeddingDim) return [];
 
 		return unpackFromStorage({
-			metadata: entries,
+			metadata: data.index,
 			embeddings: decoded.embeddings,
 			dim: decoded.dim,
 			chunkCount: decoded.count

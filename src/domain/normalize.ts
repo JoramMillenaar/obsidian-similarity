@@ -36,7 +36,7 @@ export function normalizeSettings(
 export function normalizePluginData(
 	value: Partial<SimilarityPluginData>,
 ): SimilarityPluginData {
-	const index: IndexMetadata | SimilarityPluginData["index"] = Array.isArray(value?.index) ? value.index : [];
+	const index: IndexMetadata = Array.isArray(value?.index) ? value.index : [];
 	const normalizedSettings = normalizeSettings(value?.settings);
 
 	const schemaVersion = typeof value?.schemaVersion === "number" ? value.schemaVersion : 1;

@@ -41,6 +41,7 @@ export class AppContainer {
 	readonly status: StatusReporter;
 	readonly noteSource: NoteSource;
 	readonly markdownTextExtractor: MarkdownTextExtractor;
+	readonly pluginDataStore: ObsidianPluginDataStore;
 	readonly indexStorage: IndexStorage;
 	readonly embedder: EmbeddingPort;
 	readonly indexRepo: IndexRepository;
@@ -68,11 +69,11 @@ export class AppContainer {
 		this.status = new ObsidianStatusBar(plugin);
 		this.noteSource = new ObsidianNoteSource(plugin);
 		this.markdownTextExtractor = new ObsidianMarkdownTextExtractor(plugin);
-		const storage = new ObsidianPluginDataStore(plugin);
+		this.pluginDataStore = new ObsidianPluginDataStore(plugin);
 		const binaryEmbeddingStore = new BinaryEmbeddingFileStore(plugin);
-		this.settingsRepo = new ObsidianSettingsRepository(storage);
+		this.settingsRepo = new ObsidianSettingsRepository(this.pluginDataStore);
 		this.indexStorage = new ThrottledIndexStorage(
-			new ObsidianPluginDataIndexStorage(storage, binaryEmbeddingStore, this.settingsRepo),
+			new ObsidianPluginDataIndexStorage(this.pluginDataStore, binaryEmbeddingStore, this.settingsRepo),
 			INDEX_WRITE_THROTTLE_MS,
 		);
 		this.embedder = new ReloadableEmbedder();
