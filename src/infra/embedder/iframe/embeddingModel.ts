@@ -1,4 +1,5 @@
 import { env, pipeline, FeatureExtractionPipeline } from '@huggingface/transformers';
+import { EmbeddingModelConfig } from 'src/types';
 
 env.allowLocalModels = false;
 
@@ -7,15 +8,18 @@ export type Device = 'wasm' | 'webgpu';
 /**
  * Owns the on-device feature-extraction model: load lifecycle, device
  * selection, tokenization, and serialized inference. No chunking policy —
- * that's the chunker's job.
+ * that's the chunker's job. The config passed in is the sole source of truth
+ * for which model gets loaded — nothing in this file names a model itself.
  */
 export class EmbeddingModel {
 	#pipeline: FeatureExtractionPipeline | null = null;
 	#device: Device = 'wasm';
 	#queue: Promise<unknown> = Promise.resolve(); // serialize all inference calls
+	readonly config: EmbeddingModelConfig;
 	ready: Promise<void>;
 
-	constructor() {
+	constructor(config: EmbeddingModelConfig) {
+		this.config = config;
 		this.ready = this.#initialize();
 	}
 
@@ -23,7 +27,7 @@ export class EmbeddingModel {
 		const webgpuAvailable = (navigator as Navigator & { gpu?: unknown }).gpu != null;
 		this.#device = webgpuAvailable ? 'webgpu' : 'wasm';
 
-		this.#pipeline = await pipeline('feature-extraction', 'Xenova/all-MiniLM-L6-v2', {
+		this.#pipeline = await pipeline('feature-extraction', this.config.repoId, {
 			device: this.#device,
 			dtype: webgpuAvailable ? 'fp32' : 'q8',
 		});

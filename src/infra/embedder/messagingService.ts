@@ -1,5 +1,5 @@
 import { EmbeddedChunk } from "../../ports";
-import { IframeMessage } from "../../types";
+import { EmbeddingModelConfig, IframeMessage } from "../../types";
 
 const EMBED_TIMEOUT_MS = 30000;
 
@@ -8,7 +8,7 @@ export class IframeMessenger {
     private requestIdCounter = 0;
     private pendingRequests = new Map<number, { resolve: (data: EmbeddedChunk[]) => void; reject: (error: Error) => void; timeoutId: number }>();
 
-    constructor(private iframeId: string, private workerScript: string) {}
+    constructor(private iframeId: string, private workerScript: string, private modelConfig: EmbeddingModelConfig) {}
 
     async initialize(): Promise<void> {
         if (this.iframe) return;
@@ -23,7 +23,7 @@ export class IframeMessenger {
             attr: {
                 id: this.iframeId,
                 style: "display: none;",
-                srcdoc: this.workerScript,
+                srcdoc: this.buildSrcdoc(),
             },
         });
 
@@ -31,6 +31,13 @@ export class IframeMessenger {
         window.addEventListener('message', this.onMessageReceived);
 
         await this.waitForIframeReady();
+    }
+
+    private buildSrcdoc(): string {
+		// `<` is escaped so the config can't terminate the inline <script> tag it's embedded in.
+        const configJson = JSON.stringify(this.modelConfig).replace(/</g, "\\u003c");
+        const configScript = `<script>window.__EMBEDDING_MODEL_CONFIG__ = ${configJson};</script>\n`;
+        return configScript + this.workerScript;
     }
 
     private onMessageReceived = (event: MessageEvent) => {

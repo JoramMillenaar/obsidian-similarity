@@ -1,24 +1,6 @@
 import { ChunkEntryV2, IndexEntryV2, SCHEMA_VERSION } from "../types";
 import { isBinaryLayoutValid } from "./embeddingCodec";
 
-/**
- * Integrity check for the persisted index. The index is split across two files
- * — a slim JSON of entries and a binary sidecar of vectors — so nothing but a
- * check like this enforces that they still agree with each other. Its standing
- * job is to catch any state the current code cannot correctly serve: a schema
- * it predates, a sidecar that can't back the entries pointing into it, or
- * entries whose chunk metadata is self-contradictory.
- *
- * The policy is deliberately asymmetric. A fault that invalidates the whole
- * file pair is UNUSABLE (discard everything and re-index). A fault confined to
- * one entry only costs that entry: it is dropped, and the normal sync plan
- * re-indexes that note, leaving every healthy note's vectors untouched.
- *
- * Anything that fails here is never served. Silently returning a wrong
- * neighbour is worse than paying to recompute one.
- */
-
-/** A fault that invalidates the entire index, not just one entry. */
 export type IndexUnusableReason =
 	| "legacy-schema"
 	| "missing-sidecar"

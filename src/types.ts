@@ -1,5 +1,14 @@
 export type Embedding = number[];
 
+export type EmbeddingModelId = "xenova-all-MiniLM-L6-v2";
+
+export type EmbeddingModelConfig = {
+	id: EmbeddingModelId;
+	repoId: string;
+	dim: number;
+	maxTokens: number;
+};
+
 export type RawNote = {
 	id: string;
 	title: string;

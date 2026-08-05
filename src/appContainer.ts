@@ -34,6 +34,7 @@ import { GetNoteTextUseCase, makeGetNoteText } from "./app/getNoteText";
 import { makeBuildIndexSyncPlan } from "./app/buildIndexSyncPlan";
 import { LiveNoteSync, makeLiveNoteSync } from "./app/liveNoteSync";
 import { EmbeddingQueue } from "./app/embeddingQueue";
+import { DEFAULT_EMBEDDING_MODEL } from "./constants";
 
 const INDEX_WRITE_THROTTLE_MS = 1000;
 
@@ -74,7 +75,7 @@ export class AppContainer {
 			new ObsidianPluginDataIndexStorage(storage, binaryEmbeddingStore),
 			INDEX_WRITE_THROTTLE_MS,
 		);
-		this.embedder = new EmbeddingProvider();
+		this.embedder = new EmbeddingProvider(DEFAULT_EMBEDDING_MODEL);
 		this.indexRepo = new JsonIndexedNoteRepository(this.indexStorage);
 		this.settingsRepo = new ObsidianSettingsRepository(storage);
 		const activeEditor = new ObsidianActiveEditor(plugin);
