@@ -1,5 +1,5 @@
-import { IndexedNote, SCHEMA_VERSION } from "../../types";
-import { EmbeddingFileStore, IndexStorage, PluginDataStore, SettingsRepository } from "../../ports";
+import { EmbeddingModelId, IndexedNote, SCHEMA_VERSION } from "../../types";
+import { EmbeddingFileStore, IndexStorage, ModelIndexMetaStore, SettingsRepository } from "../../ports";
 import { DecodedEmbeddings, decodeEmbeddings, encodeEmbeddings } from "../../domain/embeddingCodec";
 import { packForStorage, unpackFromStorage } from "../../domain/indexPacking";
 import { checkIndexHealth, SidecarState } from "../../domain/indexHealth";
@@ -12,19 +12,18 @@ type SidecarRead = {
 
 export class ObsidianPluginDataIndexStorage implements IndexStorage {
 	constructor(
-		private readonly store: PluginDataStore,
+		private readonly metaStore: ModelIndexMetaStore,
 		private readonly binaryStore: EmbeddingFileStore,
 		private readonly settingsRepo: SettingsRepository,
 	) {
 	}
 
 	async getAll(): Promise<IndexedNote[]> {
-		const data = await this.store.read();
-		if (data.schemaVersion < SCHEMA_VERSION) return [];
+		const {embeddingModelId} = await this.settingsRepo.get();
+		const data = await this.metaStore.read(embeddingModelId);
+		if (!data || data.index.length === 0) return [];
 
-		if (data.index.length === 0) return [];
-
-		const {decoded} = await this.readSidecar();
+		const {decoded} = await this.readSidecar(embeddingModelId);
 		if (!decoded || decoded.dim !== data.embeddingDim) return [];
 
 		return unpackFromStorage({
@@ -42,13 +41,12 @@ export class ObsidianPluginDataIndexStorage implements IndexStorage {
 
 		// Binary first, then JSON. Dying in between leaves schemaVersion stale, so a
 		// re-run deterministically reproduces the identical binary — no temp files needed.
-		await this.binaryStore.write(buffer);
-		await this.store.update((current) => ({
-			...current,
+		await this.binaryStore.write(embeddingModelId, buffer);
+		await this.metaStore.write(embeddingModelId, {
 			schemaVersion: SCHEMA_VERSION,
 			embeddingDim: dim,
 			index: v2,
-		}));
+		});
 	}
 
 	async flush(): Promise<void> {
@@ -60,13 +58,14 @@ export class ObsidianPluginDataIndexStorage implements IndexStorage {
 	}
 
 	async repair(): Promise<void> {
-		const data = await this.store.read();
-		const {state, decoded} = await this.readSidecar();
+		const {embeddingModelId} = await this.settingsRepo.get();
+		const data = await this.metaStore.read(embeddingModelId);
+		const {state, decoded} = await this.readSidecar(embeddingModelId);
 
 		const health = checkIndexHealth({
-			schemaVersion: data.schemaVersion,
-			embeddingDim: data.embeddingDim,
-			entries: data.index,
+			schemaVersion: data?.schemaVersion ?? 1,
+			embeddingDim: data?.embeddingDim ?? 0,
+			entries: data?.index ?? [],
 			sidecar: state,
 		});
 
@@ -93,8 +92,8 @@ export class ObsidianPluginDataIndexStorage implements IndexStorage {
 		await this.rewrite(survivors);
 	}
 
-	private async readSidecar(): Promise<SidecarRead> {
-		const buffer = await this.binaryStore.read();
+	private async readSidecar(modelId: EmbeddingModelId): Promise<SidecarRead> {
+		const buffer = await this.binaryStore.read(modelId);
 		if (!buffer) return {state: {status: "missing"}, decoded: null};
 
 		try {

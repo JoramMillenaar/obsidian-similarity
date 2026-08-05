@@ -1,4 +1,4 @@
-import { IndexMetadata, SCHEMA_VERSION, SimilarityPluginData, SimilaritySettings } from "../types";
+import { IndexMetadata, ModelIndexFile, SCHEMA_VERSION, SimilarityPluginData, SimilaritySettings } from "../types";
 import { DEFAULT_SETTINGS, EMBEDDING_MODELS, MAX_OVERLAP_PERCENT } from "../constants";
 
 export function normalizeSettings(
@@ -34,18 +34,22 @@ export function normalizeSettings(
 }
 
 export function normalizePluginData(
-	value: Partial<SimilarityPluginData>,
+	value: Partial<SimilarityPluginData> | undefined,
 ): SimilarityPluginData {
-	const index: IndexMetadata = Array.isArray(value?.index) ? value.index : [];
-	const normalizedSettings = normalizeSettings(value?.settings);
+	return {settings: normalizeSettings(value?.settings)};
+}
 
+export function normalizeModelIndexFile(
+	value: Partial<ModelIndexFile> | undefined,
+): ModelIndexFile {
+	const rawIndex = value?.index;
+	const index: IndexMetadata = Array.isArray(rawIndex) ? rawIndex : [];
 	const schemaVersion = typeof value?.schemaVersion === "number" ? value.schemaVersion : 1;
 	const embeddingDim = typeof value?.embeddingDim === "number" && value.embeddingDim >= 0
 		? value.embeddingDim
 		: 0;
 
 	return {
-		settings: normalizedSettings,
 		schemaVersion: Math.min(schemaVersion, SCHEMA_VERSION),
 		embeddingDim,
 		index,

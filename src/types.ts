@@ -95,6 +95,9 @@ export type IndexMetadata = NoteIndexMetadata[];
 
 export interface SimilarityPluginData {
 	settings: SimilaritySettings;
+}
+
+export interface ModelIndexFile {
 	schemaVersion: number;
 	embeddingDim: number;
 	index: IndexMetadata;

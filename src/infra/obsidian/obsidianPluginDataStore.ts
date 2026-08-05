@@ -8,8 +8,11 @@ export class ObsidianPluginDataStore implements PluginDataStore {
 	}
 
 	async read(): Promise<SimilarityPluginData> {
-		const raw = (await this.plugin.loadData() as Partial<SimilarityPluginData> | null) ?? {};
-		return normalizePluginData(raw);
+		return normalizePluginData(await this.readRaw() as Partial<SimilarityPluginData>);
+	}
+
+	async readRaw(): Promise<Record<string, unknown>> {
+		return (await this.plugin.loadData() as Record<string, unknown> | null) ?? {};
 	}
 
 	async write(data: SimilarityPluginData): Promise<void> {

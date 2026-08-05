@@ -6,6 +6,8 @@ import { ObsidianMarkdownTextExtractor } from "./infra/obsidian/obsidianMarkdown
 import { ObsidianNoteSource } from "./infra/obsidian/obsidianNoteSource";
 import { ObsidianPluginDataIndexStorage } from "./infra/obsidian/obsidianStorage";
 import { BinaryEmbeddingFileStore } from "./infra/obsidian/binaryEmbeddingFileStore";
+import { ObsidianModelIndexMetaStore } from "./infra/obsidian/obsidianModelIndexMetaStore";
+import { LegacyEmbeddingFileStore } from "./infra/obsidian/legacyEmbeddingFileStore";
 import { ReloadableEmbedder } from "./infra/embedder/reloadableEmbedder";
 import { JsonIndexedNoteRepository } from "./infra/index/jsonIndexedNoteRepository";
 import { IndexNoteUseCase, makeIndexNote } from "./app/indexNote";
@@ -13,10 +15,12 @@ import { GetSimilarNotesUseCase, makeGetSimilarNotes } from "./app/getSimilarNot
 import { InsertWikilinkAtCursorUseCase, makeInsertWikilinkAtCursor } from "./app/insertWikilinkAtCursor";
 import { makeEmbedText } from "./app/embedText";
 import {
+	EmbeddingFileStore,
 	EmbeddingPort,
 	IndexRepository,
 	IndexStorage,
 	MarkdownTextExtractor,
+	ModelIndexMetaStore,
 	NoteSource,
 	SettingsRepository,
 	SimilarityView,
@@ -34,6 +38,7 @@ import { GetNoteTextUseCase, makeGetNoteText } from "./app/getNoteText";
 import { makeBuildIndexSyncPlan } from "./app/buildIndexSyncPlan";
 import { LiveNoteSync, makeLiveNoteSync } from "./app/liveNoteSync";
 import { EmbeddingQueue } from "./app/embeddingQueue";
+import { makeRunLegacyMigrations, RunLegacyMigrationsUseCase } from "./app/legacyMigrations";
 
 const INDEX_WRITE_THROTTLE_MS = 1000;
 
@@ -42,13 +47,19 @@ export class AppContainer {
 	readonly noteSource: NoteSource;
 	readonly markdownTextExtractor: MarkdownTextExtractor;
 	readonly pluginDataStore: ObsidianPluginDataStore;
+	readonly modelIndexMetaStore: ModelIndexMetaStore;
+	readonly embeddingFileStore: EmbeddingFileStore;
+	readonly legacyEmbeddingFileStore: LegacyEmbeddingFileStore;
 	readonly indexStorage: IndexStorage;
 	readonly embedder: EmbeddingPort;
 	readonly indexRepo: IndexRepository;
 	readonly settingsRepo: SettingsRepository;
 	readonly embeddingQueue: EmbeddingQueue;
 	readonly similarityView: SimilarityView;
+	readonly liveNoteSync: LiveNoteSync;
+	readonly upsertDebouncer: KeyedDebouncer<string>;
 
+	readonly runLegacyMigrations: RunLegacyMigrationsUseCase;
 	readonly indexNote: IndexNoteUseCase;
 	readonly getNoteText: GetNoteTextUseCase;
 	readonly getSimilarNotes: GetSimilarNotesUseCase;
@@ -58,9 +69,6 @@ export class AppContainer {
 	readonly getIndexingState: GetIndexingStateUseCase;
 	readonly isIgnoredPath: IsIgnoredPath;
 	readonly updateSettings: UpdateSettingsUseCase;
-	readonly liveNoteSync: LiveNoteSync;
-
-	readonly upsertDebouncer: KeyedDebouncer<string>;
 
 	private readonly unloadEmbeddingQueue: () => void;
 	private readonly disposeIndexingProgress: () => void;
@@ -70,10 +78,12 @@ export class AppContainer {
 		this.noteSource = new ObsidianNoteSource(plugin);
 		this.markdownTextExtractor = new ObsidianMarkdownTextExtractor(plugin);
 		this.pluginDataStore = new ObsidianPluginDataStore(plugin);
-		const binaryEmbeddingStore = new BinaryEmbeddingFileStore(plugin);
+		this.modelIndexMetaStore = new ObsidianModelIndexMetaStore(plugin);
+		this.embeddingFileStore = new BinaryEmbeddingFileStore(plugin);
+		this.legacyEmbeddingFileStore = new LegacyEmbeddingFileStore(plugin);
 		this.settingsRepo = new ObsidianSettingsRepository(this.pluginDataStore);
 		this.indexStorage = new ThrottledIndexStorage(
-			new ObsidianPluginDataIndexStorage(this.pluginDataStore, binaryEmbeddingStore, this.settingsRepo),
+			new ObsidianPluginDataIndexStorage(this.modelIndexMetaStore, this.embeddingFileStore, this.settingsRepo),
 			INDEX_WRITE_THROTTLE_MS,
 		);
 		this.embedder = new ReloadableEmbedder();
@@ -92,6 +102,13 @@ export class AppContainer {
 		this.embeddingQueue.subscribe((event) => {
 			if (event.type === "drained") return this.indexRepo.flush();
 			if (event.type === "stopped") queueState.reportFatalError(event.error);
+		});
+
+		this.runLegacyMigrations = makeRunLegacyMigrations({
+			pluginDataStore: this.pluginDataStore,
+			modelIndexStore: this.modelIndexMetaStore,
+			embeddingFileStore: this.embeddingFileStore,
+			legacyEmbeddingFileStore: this.legacyEmbeddingFileStore,
 		});
 
 		this.isIgnoredPath = makeIsIgnoredPath({

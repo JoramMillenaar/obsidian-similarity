@@ -13,8 +13,6 @@ export const EMBEDDING_MODELS: Record<EmbeddingModelId, EmbeddingModelConfig> = 
 
 export const DEFAULT_EMBEDDING_MODEL_ID: EmbeddingModelId = "xenova-all-MiniLM-L6-v2";
 
-export const DEFAULT_EMBEDDING_MODEL: EmbeddingModelConfig = EMBEDDING_MODELS[DEFAULT_EMBEDDING_MODEL_ID];
-
 export const DEFAULT_SETTINGS: SimilaritySettings = {
 	ignoredPaths: [],
 	advancedOpen: false,
