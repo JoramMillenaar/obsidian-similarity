@@ -1,10 +1,12 @@
 import { AppContainer } from "../appContainer";
+import { EMBEDDING_MODELS } from "../constants";
 
 export async function initializePlugin(app: AppContainer): Promise<void> {
 	app.status.update("Starting…");
 
 	try {
-		await app.embedder.load();
+		const {embeddingModelId} = await app.settingsRepo.get();
+		await app.embedder.load(EMBEDDING_MODELS[embeddingModelId]);
 
 		await app.indexStorage.repair();
 

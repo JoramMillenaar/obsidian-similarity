@@ -72,6 +72,7 @@ export interface SimilaritySettings {
 	maxRawMarkdownChars: number;
 	maxExtractedChars: number;
 	maxOverlapPercent: number;
+	embeddingModelId: EmbeddingModelId;
 }
 
 /** Bumped when the on-disk index shape changes. 1 = inline float64 JSON embeddings (legacy). 2 = embeddings in the binary sidecar. */

@@ -1,3 +1,5 @@
+import { EmbeddingModelConfig } from "../types";
+
 export interface EmbedOptions {
 	maxOverlapPercent: number;
 }
@@ -11,7 +13,7 @@ export type EmbeddedChunk = {
 export interface EmbeddingPort {
 	embed(text: string, options: EmbedOptions): Promise<EmbeddedChunk[] | null>;
 
-	load(): Promise<void>;
+	load(config: EmbeddingModelConfig): Promise<void>;
 
 	unload(): void;
 }

@@ -21,4 +21,5 @@ export const DEFAULT_SETTINGS: SimilaritySettings = {
 	maxRawMarkdownChars: 20000,
 	maxExtractedChars: 4800,
 	maxOverlapPercent: 15,
+	embeddingModelId: DEFAULT_EMBEDDING_MODEL_ID,
 };

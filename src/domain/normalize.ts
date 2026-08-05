@@ -1,5 +1,5 @@
 import { IndexV2, SCHEMA_VERSION, SimilarityPluginData, SimilaritySettings } from "../types";
-import { DEFAULT_SETTINGS, MAX_OVERLAP_PERCENT } from "../constants";
+import { DEFAULT_SETTINGS, EMBEDDING_MODELS, MAX_OVERLAP_PERCENT } from "../constants";
 
 export function normalizeSettings(
 	value: Partial<SimilaritySettings> | undefined,
@@ -9,6 +9,7 @@ export function normalizeSettings(
 	const maxRawMarkdownChars = value?.maxRawMarkdownChars;
 	const maxExtractedChars = value?.maxExtractedChars;
 	const maxOverlapPercent = value?.maxOverlapPercent;
+	const embeddingModelId = value?.embeddingModelId;
 
 	return {
 		ignoredPaths: Array.isArray(ignored)
@@ -26,6 +27,9 @@ export function normalizeSettings(
 		maxOverlapPercent: typeof maxOverlapPercent === "number" && maxOverlapPercent >= 0
 			? Math.min(maxOverlapPercent, MAX_OVERLAP_PERCENT)
 			: DEFAULT_SETTINGS.maxOverlapPercent,
+		embeddingModelId: typeof embeddingModelId === "string" && embeddingModelId in EMBEDDING_MODELS
+			? embeddingModelId
+			: DEFAULT_SETTINGS.embeddingModelId,
 	};
 }
 
