@@ -128,7 +128,14 @@ export class IframeMessenger {
     }
 
     unload(): void {
+        for (const pending of this.pendingRequests.values()) {
+            window.clearTimeout(pending.timeoutId);
+            pending.reject(new Error("Embedding iframe was unloaded"));
+        }
+        this.pendingRequests.clear();
+
         activeDocument.getElementById(this.iframeId)?.remove();
         window.removeEventListener('message', this.onMessageReceived);
+        this.iframe = null;
     }
 }

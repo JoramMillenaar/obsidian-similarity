@@ -1,10 +1,13 @@
 /** Quantized unit-vector embedding: see domain/embedding.ts and domain/embeddingCodec.ts. */
 export type Embedding = Int8Array;
 
-export type EmbeddingModelId = "xenova-all-MiniLM-L6-v2";
+export type EmbeddingModelId =
+	| "xenova-all-MiniLM-L6-v2"
+	| "xenova-paraphrase-multilingual-MiniLM-L12-v2";
 
 export type EmbeddingModelConfig = {
 	id: EmbeddingModelId;
+	label: string;
 	repoId: string;
 	dim: number;
 	maxTokens: number;

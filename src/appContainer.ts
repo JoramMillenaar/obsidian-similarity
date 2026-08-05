@@ -38,6 +38,7 @@ import { GetNoteTextUseCase, makeGetNoteText } from "./app/getNoteText";
 import { makeBuildIndexSyncPlan } from "./app/buildIndexSyncPlan";
 import { LiveNoteSync, makeLiveNoteSync } from "./app/liveNoteSync";
 import { EmbeddingQueue } from "./app/embeddingQueue";
+import { ChangeEmbeddingModelUseCase, makeChangeEmbeddingModel } from "./app/changeEmbeddingModel";
 import { makeRunLegacyMigrations, RunLegacyMigrationsUseCase } from "./app/legacyMigrations";
 
 const INDEX_WRITE_THROTTLE_MS = 1000;
@@ -69,6 +70,7 @@ export class AppContainer {
 	readonly getIndexingState: GetIndexingStateUseCase;
 	readonly isIgnoredPath: IsIgnoredPath;
 	readonly updateSettings: UpdateSettingsUseCase;
+	readonly changeEmbeddingModel: ChangeEmbeddingModelUseCase;
 
 	private readonly unloadEmbeddingQueue: () => void;
 	private readonly disposeIndexingProgress: () => void;
@@ -169,6 +171,15 @@ export class AppContainer {
 			settingsRepo: this.settingsRepo,
 			indexStorage: this.indexStorage,
 			synchronizeIndex: this.synchronizeIndex,
+		});
+
+		this.changeEmbeddingModel = makeChangeEmbeddingModel({
+			embedder: this.embedder,
+			settingsRepo: this.settingsRepo,
+			indexStorage: this.indexStorage,
+			queue: this.embeddingQueue,
+			synchronizeIndex: this.synchronizeIndex,
+			status: this.status,
 		});
 	}
 
