@@ -61,5 +61,7 @@ export function dotProductSimilarity(a: Embedding, b: Embedding): number {
 		dot += a[i] * b[i];
 	}
 
-	return dot / (QUANT_SCALE * QUANT_SCALE);
+	const raw = dot / (QUANT_SCALE * QUANT_SCALE);
+	// Int8 quantization rounding can push near-duplicate vectors slightly past 1 (e.g. 1.01); clamp back to the valid similarity domain.
+	return raw > 1 ? 1 : raw < 0 ? 0 : raw;
 }
