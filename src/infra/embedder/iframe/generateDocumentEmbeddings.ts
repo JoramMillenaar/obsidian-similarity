@@ -23,7 +23,7 @@ export function makeGenerateDocumentEmbeddings(model: EmbeddingModel): GenerateD
 		for (const chunk of chunks) {
 			const data = await model.embed(chunk.text);
 			if (data && data.length) {
-				embedded.push({ embedding: Array.from(data), start: chunk.start, end: chunk.end });
+				embedded.push({ embedding: data, start: chunk.start, end: chunk.end });
 			}
 		}
 		return embedded;

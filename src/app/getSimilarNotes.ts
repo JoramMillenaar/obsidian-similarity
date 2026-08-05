@@ -1,4 +1,4 @@
-import { RelatedNote } from "../types";
+import { Embedding, RelatedNote } from "../types";
 import { IndexRepository } from "../ports";
 import { maxPairwiseSimilarity, normalizeEmbedding } from "../domain/embedding";
 import { EmbedTextUseCase } from "./embedText";
@@ -26,7 +26,7 @@ export function makeGetSimilarNotes(deps: {
 		} = args;
 
 		// Prefer using existing embeddings if we have a noteId in the index.
-		let queryChunks: number[][] | undefined;
+		let queryChunks: Embedding[] | undefined;
 
 		if (noteId) {
 			const existing = await deps.indexRepo.findById(noteId);

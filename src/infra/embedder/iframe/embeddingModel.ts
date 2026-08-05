@@ -39,7 +39,7 @@ export class EmbeddingModel {
 	};
 
 	// Serialized single-text inference — each call waits for the previous.
-	embed(input: string): Promise<Float32Array | number[] | null> {
+	embed(input: string): Promise<Float32Array | null> {
 		return new Promise((resolve, reject) => {
 			this.#queue = this.#queue.then(async () => {
 				try {

@@ -12,7 +12,7 @@ export function normalizeEmbedding(embedding: Embedding): Embedding {
 	if (sumSq === 0) return v.slice();
 
 	const invNorm = 1 / Math.sqrt(sumSq);
-	const out = new Array<number>(v.length);
+	const out = new Float32Array(v.length);
 	for (let i = 0; i < v.length; i++) {
 		out[i] = v[i] * invNorm;
 	}
@@ -38,7 +38,7 @@ export function maxPairwiseSimilarity(a: Embedding[], b: Embedding[]): number {
 	return Number.isFinite(best) ? best : 0;
 }
 
-export function cosineSimilarity(a: number[], b: number[]): number {
+export function cosineSimilarity(a: Embedding, b: Embedding): number {
 	if (a.length !== b.length) {
 		throw new Error(`cosineSimilarity: length mismatch (${a.length} vs ${b.length})`);
 	}

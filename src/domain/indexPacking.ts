@@ -50,7 +50,7 @@ export function unpackFromStorage(packedIndex: PackedIndex): IndexedNote[] {
 			if (chunk.row < 0 || chunk.row >= packedIndex.chunkCount) continue;
 
 			chunks.push({
-				embedding: Array.from(packedIndex.embeddings.subarray(chunk.row * packedIndex.dim, (chunk.row + 1) * packedIndex.dim)),
+				embedding: packedIndex.embeddings.subarray(chunk.row * packedIndex.dim, (chunk.row + 1) * packedIndex.dim),
 				start: chunk.start,
 				end: chunk.end,
 				hash: chunk.hash,

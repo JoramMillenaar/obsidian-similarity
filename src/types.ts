@@ -1,4 +1,4 @@
-export type Embedding = number[];
+export type Embedding = Float32Array;
 
 export type EmbeddingModelId = "xenova-all-MiniLM-L6-v2";
 
@@ -22,7 +22,7 @@ export type NoteIndexCandidate = {
 };
 
 export type NoteChunk = {
-	embedding: number[];
+	embedding: Embedding;
 	start: number;
 	end: number;
 	hash: string;

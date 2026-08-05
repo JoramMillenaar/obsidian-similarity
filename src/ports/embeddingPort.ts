@@ -5,7 +5,7 @@ export interface EmbedOptions {
 }
 
 export type EmbeddedChunk = {
-	embedding: number[];
+	embedding: Float32Array;
 	start: number;
 	end: number;
 };
