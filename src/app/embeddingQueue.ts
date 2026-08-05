@@ -61,19 +61,28 @@ export class EmbeddingQueue {
 		};
 	}
 
+	reset = () => {
+		if (this.isUnloaded) return;
+		this.rejectPending("Embedding queue was reset");
+	};
+
 	unload = () => {
 		this.isUnloaded = true;
 		this.processingPromise = null;
+		this.rejectPending("Embedding queue is unloaded");
+		this.observers.clear();
+	};
+
+	private rejectPending(message: string) {
 		this.queue.clear();
 
 		for (const job of this.jobs.values()) {
-			job.reject(new Error("Embedding queue is unloaded"));
+			job.reject(new Error(message));
 		}
 		this.jobs.clear();
 
 		void this.notify({type: "cleared"});
-		this.observers.clear();
-	};
+	}
 
 	private ensureProcessing() {
 		if (this.isUnloaded || this.processingPromise || this.queue.isEmpty) return;

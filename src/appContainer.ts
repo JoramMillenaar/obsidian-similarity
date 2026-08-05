@@ -6,7 +6,7 @@ import { ObsidianMarkdownTextExtractor } from "./infra/obsidian/obsidianMarkdown
 import { ObsidianNoteSource } from "./infra/obsidian/obsidianNoteSource";
 import { ObsidianPluginDataIndexStorage } from "./infra/obsidian/obsidianStorage";
 import { BinaryEmbeddingFileStore } from "./infra/obsidian/binaryEmbeddingFileStore";
-import { EmbeddingProvider } from "./infra/embedder/embeddingProvider";
+import { ReloadableEmbedder } from "./infra/embedder/reloadableEmbedder";
 import { JsonIndexedNoteRepository } from "./infra/index/jsonIndexedNoteRepository";
 import { IndexNoteUseCase, makeIndexNote } from "./app/indexNote";
 import { GetSimilarNotesUseCase, makeGetSimilarNotes } from "./app/getSimilarNotes";
@@ -75,7 +75,7 @@ export class AppContainer {
 			new ObsidianPluginDataIndexStorage(storage, binaryEmbeddingStore),
 			INDEX_WRITE_THROTTLE_MS,
 		);
-		this.embedder = new EmbeddingProvider(DEFAULT_EMBEDDING_MODEL);
+		this.embedder = new ReloadableEmbedder(DEFAULT_EMBEDDING_MODEL);
 		this.indexRepo = new JsonIndexedNoteRepository(this.indexStorage);
 		this.settingsRepo = new ObsidianSettingsRepository(storage);
 		const activeEditor = new ObsidianActiveEditor(plugin);
