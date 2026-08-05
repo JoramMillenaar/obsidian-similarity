@@ -2,7 +2,7 @@ import { ChunkEntryV2, IndexedNote, IndexEntryV2, IndexV2, NoteChunk } from "../
 
 export type PackedIndex = {
 	index: IndexV2;
-	embeddings: Float32Array;
+	embeddings: Int8Array;
 	dim: number;
 	chunkCount: number;
 };
@@ -11,7 +11,7 @@ export function packForStorage(notes: IndexedNote[], dim: number): PackedIndex {
 	const sorted = [...notes].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
 
 	const chunkCount = sorted.reduce((count, note) => count + note.chunks.length, 0);
-	const embeddings = new Float32Array(chunkCount * dim);
+	const embeddings = new Int8Array(chunkCount * dim);
 
 	let row = 0;
 	const index: IndexV2 = sorted.map((note) => {

@@ -1,4 +1,5 @@
-export type Embedding = Float32Array;
+/** Quantized unit-vector embedding: see domain/embedding.ts and domain/embeddingCodec.ts. */
+export type Embedding = Int8Array;
 
 export type EmbeddingModelId = "xenova-all-MiniLM-L6-v2";
 
