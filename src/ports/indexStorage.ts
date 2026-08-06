@@ -5,8 +5,6 @@ export interface IndexStorage {
 
 	rewrite(index: IndexedNote[]): Promise<void>;
 
-	flush(): Promise<void>;
-
 	isEmpty(): Promise<boolean>;
 
 	repair(): Promise<void>;

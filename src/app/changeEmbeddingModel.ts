@@ -1,15 +1,16 @@
 import { EmbeddingModelId } from "../types";
-import { EmbeddingPort, IndexStorage, SettingsRepository, StatusReporter } from "../ports";
+import { EmbeddingPort, SettingsRepository, StatusReporter } from "../ports";
 import { EMBEDDING_MODELS } from "../constants";
 import { EmbeddingQueue } from "./embeddingQueue";
 import { SynchronizeIndexUseCase } from "./synchronizeIndex";
+import { ThrottledIndexStorage } from "../domain/throttledIndexStorage";
 
 export type ChangeEmbeddingModelUseCase = (modelId: EmbeddingModelId) => Promise<void>;
 
 type ChangeEmbeddingModelDeps = {
 	embedder: EmbeddingPort;
 	settingsRepo: SettingsRepository;
-	indexStorage: IndexStorage;
+	indexStorage: ThrottledIndexStorage;
 	queue: EmbeddingQueue;
 	synchronizeIndex: SynchronizeIndexUseCase;
 	status: StatusReporter;

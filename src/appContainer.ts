@@ -4,7 +4,7 @@ import { ThrottledIndexStorage } from "./domain/throttledIndexStorage";
 import { ObsidianStatusBar } from "./infra/obsidian/obsidianStatusBar";
 import { ObsidianMarkdownTextExtractor } from "./infra/obsidian/obsidianMarkdownTextExtractor";
 import { ObsidianNoteSource } from "./infra/obsidian/obsidianNoteSource";
-import { ObsidianPluginDataIndexStorage } from "./infra/obsidian/obsidianStorage";
+import { ObsidianIndexStorage } from "./infra/obsidian/obsidianIndexStorage";
 import { BinaryEmbeddingFileStore } from "./infra/obsidian/binaryEmbeddingFileStore";
 import { ObsidianModelIndexMetaStore } from "./infra/obsidian/obsidianModelIndexMetaStore";
 import { LegacyEmbeddingFileStore } from "./infra/obsidian/legacyEmbeddingFileStore";
@@ -18,7 +18,6 @@ import {
 	EmbeddingFileStore,
 	EmbeddingPort,
 	IndexRepository,
-	IndexStorage,
 	MarkdownTextExtractor,
 	ModelIndexMetaStore,
 	NoteSource,
@@ -51,7 +50,7 @@ export class AppContainer {
 	readonly modelIndexMetaStore: ModelIndexMetaStore;
 	readonly embeddingFileStore: EmbeddingFileStore;
 	readonly legacyEmbeddingFileStore: LegacyEmbeddingFileStore;
-	readonly indexStorage: IndexStorage;
+	readonly indexStorage: ThrottledIndexStorage;
 	readonly embedder: EmbeddingPort;
 	readonly indexRepo: IndexRepository;
 	readonly settingsRepo: SettingsRepository;
@@ -85,7 +84,7 @@ export class AppContainer {
 		this.legacyEmbeddingFileStore = new LegacyEmbeddingFileStore(plugin);
 		this.settingsRepo = new ObsidianSettingsRepository(this.pluginDataStore);
 		this.indexStorage = new ThrottledIndexStorage(
-			new ObsidianPluginDataIndexStorage(this.modelIndexMetaStore, this.embeddingFileStore, this.settingsRepo),
+			new ObsidianIndexStorage(this.modelIndexMetaStore, this.embeddingFileStore, this.settingsRepo),
 			INDEX_WRITE_THROTTLE_MS,
 		);
 		this.embedder = new ReloadableEmbedder();
@@ -102,7 +101,7 @@ export class AppContainer {
 		})
 
 		this.embeddingQueue.subscribe((event) => {
-			if (event.type === "drained") return this.indexRepo.flush();
+			if (event.type === "drained") return this.indexStorage.flush();
 			if (event.type === "stopped") queueState.reportFatalError(event.error);
 		});
 

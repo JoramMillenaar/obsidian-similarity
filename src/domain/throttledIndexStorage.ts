@@ -1,15 +1,7 @@
 import { IndexedNote } from "../types";
 import { IndexStorage } from "../ports";
 
-/**
- * Wraps an IndexStorage so that rapid rewrite() calls coalesce into at most
- * one underlying disk write per intervalMs. Throttles rather than debounces:
- * a pending timer is not reset by later calls, so continuous writes still
- * flush at a steady cadence instead of being starved indefinitely.
- *
- * getAll()/isEmpty() serve the latest unflushed index from memory so callers
- * never observe stale data during the throttle window.
- */
+
 export class ThrottledIndexStorage implements IndexStorage {
 	private pending: IndexedNote[] | null = null;
 	private timer: number | null = null;

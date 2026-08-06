@@ -10,7 +10,7 @@ type SidecarRead = {
 	decoded: DecodedEmbeddings | null;
 };
 
-export class ObsidianPluginDataIndexStorage implements IndexStorage {
+export class ObsidianIndexStorage implements IndexStorage {
 	constructor(
 		private readonly metaStore: ModelIndexMetaStore,
 		private readonly binaryStore: EmbeddingFileStore,
@@ -47,10 +47,6 @@ export class ObsidianPluginDataIndexStorage implements IndexStorage {
 			embeddingDim: dim,
 			index: v2,
 		});
-	}
-
-	async flush(): Promise<void> {
-		// rewrite() already writes synchronously — nothing to flush.
 	}
 
 	async isEmpty(): Promise<boolean> {

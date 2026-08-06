@@ -16,6 +16,4 @@ export interface IndexRepository {
 	clear(): Promise<void>;
 
 	rename(oldId: string, newId: string): Promise<void>;
-
-	flush(): Promise<void>;
 }
