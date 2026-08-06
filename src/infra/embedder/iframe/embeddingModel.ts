@@ -5,12 +5,6 @@ env.allowLocalModels = false;
 
 export type Device = 'wasm' | 'webgpu';
 
-/**
- * Owns the on-device feature-extraction model: load lifecycle, device
- * selection, tokenization, and serialized inference. No chunking policy —
- * that's the chunker's job. The config passed in is the sole source of truth
- * for which model gets loaded — nothing in this file names a model itself.
- */
 export class EmbeddingModel {
 	#pipeline: FeatureExtractionPipeline | null = null;
 	#device: Device = 'wasm';
