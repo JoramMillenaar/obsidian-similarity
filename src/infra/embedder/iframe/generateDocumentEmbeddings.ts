@@ -1,4 +1,5 @@
 import { chunkText } from 'src/domain/textChunking';
+import { normalizeEmbedding, quantizeEmbedding } from 'src/domain/embedding';
 import { EmbeddedChunk } from 'src/ports/embeddingPort';
 import { EmbeddingModel } from './embeddingModel';
 
@@ -27,7 +28,7 @@ export function makeGenerateDocumentEmbeddings(model: EmbeddingModel): GenerateD
 		for (const chunk of chunks) {
 			const data = await model.embed(chunk.text);
 			if (data && data.length) {
-				embedded.push({ embedding: data, start: chunk.start, end: chunk.end });
+				embedded.push({ embedding: quantizeEmbedding(normalizeEmbedding(data)), start: chunk.start, end: chunk.end });
 			}
 		}
 		return embedded;

@@ -1,4 +1,4 @@
-import { EmbeddingModelConfig } from "../types";
+import { Embedding, EmbeddingModelConfig } from "../types";
 
 export interface EmbedOptions {
 	maxOverlapPercent: number;
@@ -6,7 +6,7 @@ export interface EmbedOptions {
 }
 
 export type EmbeddedChunk = {
-	embedding: Float32Array;
+	embedding: Embedding;
 	start: number;
 	end: number;
 };

@@ -1,5 +1,4 @@
 import { hashText } from "../domain/text";
-import { normalizeEmbedding, quantizeEmbedding } from "../domain/embedding";
 import { isMarkdownPath } from "../domain/markdownPath";
 import { EmbeddedChunk, IndexRepository } from "../ports";
 import { NoteChunk } from "../types";
@@ -74,7 +73,7 @@ export function makeIndexNote(deps: IndexNoteDeps): IndexNoteUseCase {
 
 function toNoteChunks(embedded: EmbeddedChunk[], preparedText: string): NoteChunk[] {
 	return embedded.map((chunk) => ({
-		embedding: quantizeEmbedding(normalizeEmbedding(chunk.embedding)),
+		embedding: chunk.embedding,
 		start: chunk.start,
 		end: chunk.end,
 		hash: hashText(preparedText.slice(chunk.start, chunk.end)),

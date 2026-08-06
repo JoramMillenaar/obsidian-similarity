@@ -1,6 +1,6 @@
 import { Embedding, RelatedNote } from "../types";
 import { IndexRepository } from "../ports";
-import { maxPairwiseSimilarity, normalizeEmbedding, quantizeEmbedding } from "../domain/embedding";
+import { maxPairwiseSimilarity } from "../domain/embedding";
 import { EmbedTextUseCase } from "./embedText";
 import { GetNoteTextUseCase } from "./getNoteText";
 
@@ -45,14 +45,14 @@ export function makeGetSimilarNotes(deps: {
 
 				const embedded = await deps.embedText(text, "high").catch(() => null);
 				if (!embedded?.length) return [];
-				queryChunks = embedded.map((chunk) => quantizeEmbedding(normalizeEmbedding(chunk.embedding)));
+				queryChunks = embedded.map((chunk) => chunk.embedding);
 			} else {
 				if (!text) {
 					throw new Error("getRelatedNotes: need either noteId present in index, or text to embed.");
 				}
 				const embedded = await deps.embedText(text, "high");
 				if (!embedded?.length) throw new Error("getRelatedNotes: could not embed text");
-				queryChunks = embedded.map((chunk) => quantizeEmbedding(normalizeEmbedding(chunk.embedding)));
+				queryChunks = embedded.map((chunk) => chunk.embedding);
 			}
 		}
 
