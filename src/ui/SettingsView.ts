@@ -1,15 +1,21 @@
-import { App, AnySettingDefinition, Notice, PluginSettingTab, Setting } from "obsidian";
+import { App, AnySettingDefinition, Notice, PluginSettingTab, Setting, DropdownComponent } from "obsidian";
 import RelatedNotes from "../main";
 import { parseIgnoredPaths } from "../domain/ignoreRules";
-import { DEFAULT_SETTINGS, MAX_OVERLAP_PERCENT } from "../constants";
-import { SimilaritySettings } from "../types";
+import { DEFAULT_SETTINGS, EMBEDDING_MODELS, MAX_OVERLAP_PERCENT } from "../constants";
+import { EmbeddingModelId, SimilaritySettings } from "../types";
 import { SettingsRepository } from "../ports";
 import { UpdateSettingsUseCase } from "../app/updateSettings";
+import { ChangeEmbeddingModelUseCase } from "../app/changeEmbeddingModel";
 
 export type SettingsViewDeps = {
 	settingsRepo: SettingsRepository,
 	updateSettings: UpdateSettingsUseCase,
+	changeEmbeddingModel: ChangeEmbeddingModelUseCase,
 }
+
+const EMBEDDING_MODEL_OPTIONS: Record<string, string> = Object.fromEntries(
+	Object.values(EMBEDDING_MODELS).map((model) => [model.id, model.label]),
+);
 
 type IndexingDraft = {
 	maxRawMarkdownChars: number;
@@ -25,7 +31,9 @@ export class SettingView extends PluginSettingTab {
 		maxExtractedChars: DEFAULT_SETTINGS.maxExtractedChars,
 		maxOverlapPercent: DEFAULT_SETTINGS.maxOverlapPercent,
 	};
+	private embeddingModelDraft: EmbeddingModelId = DEFAULT_SETTINGS.embeddingModelId;
 	private loaded = false;
+	private saving = false;
 
 	constructor(
 		app: App,
@@ -46,6 +54,7 @@ export class SettingView extends PluginSettingTab {
 	private applySettings(settings: SimilaritySettings) {
 		this.cachedSettings = settings;
 		this.ignoredPathsDraft = settings.ignoredPaths.join("\n");
+		this.embeddingModelDraft = settings.embeddingModelId;
 		this.indexingDraft = {
 			maxRawMarkdownChars: settings.maxRawMarkdownChars,
 			maxExtractedChars: settings.maxExtractedChars,
@@ -56,6 +65,16 @@ export class SettingView extends PluginSettingTab {
 	// Obsidian 1.13.0+: declarative settings. Bypasses `display()` below.
 	getSettingDefinitions(): AnySettingDefinition[] {
 		return [
+			{
+				name: "Language",
+				desc: "Determine which language to support. Changing this option may start an optimization process in the background.",
+				control: {
+					type: "dropdown",
+					key: "embeddingModelId",
+					options: EMBEDDING_MODEL_OPTIONS,
+					disabled: () => !this.loaded || this.saving,
+				},
+			},
 			{
 				name: "Ignored paths/folders",
 				desc: "One entry per line. Folder paths ignore everything under that folder. Append .md to a filename to ignore a specific note.",
@@ -132,11 +151,11 @@ export class SettingView extends PluginSettingTab {
 									return;
 								}
 
-								await this.deps.updateSettings({
+								await this.save({
 									ignoredPaths: draftIgnored,
-									...this.indexingDraft,
+									indexing: this.indexingDraft,
+									modelId: this.embeddingModelDraft,
 								});
-								new Notice("Settings saved.");
 							} finally {
 								button.setDisabled(false);
 							}
@@ -154,6 +173,9 @@ export class SettingView extends PluginSettingTab {
 		if (key === "advancedOpen") {
 			return this.cachedSettings.advancedOpen;
 		}
+		if (key === "embeddingModelId") {
+			return this.embeddingModelDraft;
+		}
 		return this.indexingDraft[key as keyof IndexingDraft];
 	}
 
@@ -168,7 +190,47 @@ export class SettingView extends PluginSettingTab {
 			this.refreshDomState?.();
 			return;
 		}
+		if (key === "embeddingModelId") {
+			this.embeddingModelDraft = value as EmbeddingModelId;
+			return;
+		}
 		this.indexingDraft = {...this.indexingDraft, [key]: value as number};
+	}
+
+	private async save(draft: {
+		ignoredPaths: string[];
+		indexing: IndexingDraft;
+		modelId: EmbeddingModelId;
+	}): Promise<void> {
+		const modelChanged = draft.modelId !== this.cachedSettings.embeddingModelId;
+
+		if (!modelChanged) {
+			await this.deps.updateSettings({ignoredPaths: draft.ignoredPaths, ...draft.indexing});
+			this.applySettings(await this.deps.settingsRepo.get());
+			new Notice("Settings saved.");
+			return;
+		}
+
+		this.saving = true;
+		this.refreshDomState?.();
+
+		try {
+			await this.deps.settingsRepo.updatePartial({
+				ignoredPaths: draft.ignoredPaths,
+				...draft.indexing,
+			});
+			await this.deps.changeEmbeddingModel(draft.modelId);
+			new Notice(
+				`Settings saved. Switched to ${EMBEDDING_MODELS[draft.modelId].label}; reindexing in the background.`,
+			);
+		} catch (error) {
+			const message = error instanceof Error ? error.message : String(error);
+			new Notice(`Could not switch embedding model: ${message}`);
+		} finally {
+			this.applySettings(await this.deps.settingsRepo.get());
+			this.saving = false;
+			this.update?.();
+		}
 	}
 
 	// Legacy fallback for Obsidian < 1.13.0, where `getSettingDefinitions` doesn't exist.
@@ -184,7 +246,23 @@ export class SettingView extends PluginSettingTab {
 		this.applySettings(settings);
 		let draftIgnored = settings.ignoredPaths;
 		let advancedOpen = settings.advancedOpen;
+		let draftModelId = settings.embeddingModelId;
 		const draftIndexing = {...this.indexingDraft};
+		let modelDropdown: DropdownComponent | null = null;
+
+		new Setting(containerEl)
+			.setName("Language")
+			.setDesc("Determine which language to support. Changing this option may start an optimization process in the background.")
+			.addDropdown((dropdown) => {
+				modelDropdown = dropdown;
+				for (const model of Object.values(EMBEDDING_MODELS)) {
+					dropdown.addOption(model.id, model.label);
+				}
+				dropdown.setValue(draftModelId);
+				dropdown.onChange((value) => {
+					draftModelId = value as EmbeddingModelId;
+				});
+			});
 
 		new Setting(containerEl)
 			.setName("Ignored paths/folders")
@@ -274,11 +352,15 @@ export class SettingView extends PluginSettingTab {
 							return;
 						}
 
-						await this.deps.updateSettings({
+						await this.save({
 							ignoredPaths: draftIgnored,
-							...draftIndexing,
+							indexing: draftIndexing,
+							modelId: draftModelId,
 						});
-						new Notice("Settings saved.");
+						// save() re-reads stored settings, so this reflects what
+						// actually landed if the switch failed part-way.
+						draftModelId = this.cachedSettings.embeddingModelId;
+						modelDropdown?.setValue(draftModelId);
 					} finally {
 						button.setDisabled(false);
 					}
