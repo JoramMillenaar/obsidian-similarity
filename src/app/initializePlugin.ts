@@ -8,6 +8,7 @@ export async function initializePlugin(app: AppContainer): Promise<void> {
 		await app.runLegacyMigrations();
 
 		const {embeddingModelId} = await app.settingsRepo.get();
+		app.modelSession.hydrate(embeddingModelId);
 		await app.embedder.load(EMBEDDING_MODELS[embeddingModelId]);
 
 		await app.indexStorage.repair(embeddingModelId);

@@ -1,6 +1,7 @@
 import { Plugin } from "obsidian";
 import { KeyedDebouncer } from "./domain/debouncer";
 import { ThrottledIndexStorage } from "./domain/throttledIndexStorage";
+import { ModelSession } from "./domain/modelSession";
 import { ObsidianStatusBar } from "./infra/obsidian/obsidianStatusBar";
 import { ObsidianMarkdownTextExtractor } from "./infra/obsidian/obsidianMarkdownTextExtractor";
 import { ObsidianNoteSource } from "./infra/obsidian/obsidianNoteSource";
@@ -39,6 +40,7 @@ import { LiveNoteSync, makeLiveNoteSync } from "./app/liveNoteSync";
 import { JobQueue } from "./app/jobQueue";
 import { ChangeEmbeddingModelUseCase, makeChangeEmbeddingModel } from "./app/changeEmbeddingModel";
 import { makeRunLegacyMigrations, RunLegacyMigrationsUseCase } from "./app/legacyMigrations";
+import { DEFAULT_EMBEDDING_MODEL_ID } from "./constants";
 
 const INDEX_WRITE_THROTTLE_MS = 1000;
 
@@ -52,6 +54,7 @@ export class AppContainer {
 	readonly legacyEmbeddingFileStore: LegacyEmbeddingFileStore;
 	readonly indexStorage: ThrottledIndexStorage;
 	readonly embedder: EmbeddingPort;
+	readonly modelSession: ModelSession;
 	readonly indexRepo: IndexRepository;
 	readonly settingsRepo: SettingsRepository;
 	readonly jobQueue: JobQueue;
@@ -88,7 +91,8 @@ export class AppContainer {
 			INDEX_WRITE_THROTTLE_MS,
 		);
 		this.embedder = new ReloadableEmbedder();
-		this.indexRepo = new MonolithicIndexRepository(this.indexStorage, this.settingsRepo);
+		this.modelSession = new ModelSession(DEFAULT_EMBEDDING_MODEL_ID);
+		this.indexRepo = new MonolithicIndexRepository(this.indexStorage, this.modelSession);
 		const activeEditor = new ObsidianActiveEditor(plugin);
 		this.similarityView = new ObsidianSimilarityView(plugin);
 
@@ -170,6 +174,7 @@ export class AppContainer {
 			settingsRepo: this.settingsRepo,
 			indexStorage: this.indexStorage,
 			synchronizeIndex: this.synchronizeIndex,
+			modelSession: this.modelSession,
 		});
 
 		this.changeEmbeddingModel = makeChangeEmbeddingModel({
@@ -179,6 +184,7 @@ export class AppContainer {
 			queue: this.jobQueue,
 			synchronizeIndex: this.synchronizeIndex,
 			status: this.status,
+			modelSession: this.modelSession,
 		});
 	}
 

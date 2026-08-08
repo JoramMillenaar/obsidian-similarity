@@ -4,6 +4,7 @@ import { EMBEDDING_MODELS } from "../constants";
 import { JobQueue } from "./jobQueue";
 import { SynchronizeIndexUseCase } from "./synchronizeIndex";
 import { ThrottledIndexStorage } from "../domain/throttledIndexStorage";
+import { ModelSession } from "../domain/modelSession";
 
 export type ChangeEmbeddingModelUseCase = (modelId: EmbeddingModelId) => Promise<void>;
 
@@ -14,29 +15,41 @@ type ChangeEmbeddingModelDeps = {
 	queue: JobQueue;
 	synchronizeIndex: SynchronizeIndexUseCase;
 	status: StatusReporter;
+	modelSession: ModelSession;
 };
 
 export function makeChangeEmbeddingModel(deps: ChangeEmbeddingModelDeps): ChangeEmbeddingModelUseCase {
 	let inFlight: Promise<void> | null = null;
 
 	async function run(modelId: EmbeddingModelId): Promise<void> {
-		const settings = await deps.settingsRepo.get();
-		if (settings.embeddingModelId === modelId) return;
+		const previousModelId = deps.modelSession.current();
+		if (previousModelId === modelId) return;
 
 		const config = EMBEDDING_MODELS[modelId];
 
-		deps.queue.reset();
+		deps.modelSession.beginSwitch(modelId);
 
-		deps.embedder.unload();
+		try {
+			deps.queue.reset();
 
-		await deps.indexStorage.flush();
+			deps.embedder.unload();
 
-		await deps.settingsRepo.updatePartial({embeddingModelId: modelId});
+			await deps.indexStorage.flush();
 
-		deps.status.update(`Loading ${config.label} model…`);
-		await deps.embedder.load(config);
+			await deps.settingsRepo.updatePartial({embeddingModelId: modelId});
 
-		await deps.indexStorage.repair(modelId);
+			deps.status.update(`Loading ${config.label} model…`);
+			await deps.embedder.load(config);
+
+			await deps.indexStorage.repair(modelId);
+
+			deps.modelSession.completeSwitch();
+		} catch (error) {
+			deps.modelSession.abortSwitch();
+			await deps.settingsRepo.updatePartial({embeddingModelId: previousModelId}).catch(() => undefined);
+			deps.status.update(`Failed to switch to ${config.label}.`, 4000);
+			throw error;
+		}
 
 		deps.status.update(`Switched to ${config.label}.`, 4000);
 

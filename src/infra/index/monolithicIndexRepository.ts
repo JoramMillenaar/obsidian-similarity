@@ -1,16 +1,16 @@
 import { EmbeddingModelId, IndexedNote } from "../../types";
-import { IndexRepository, IndexStorage, SettingsRepository } from "../../ports";
+import { IndexRepository, IndexStorage } from "../../ports";
+import { ModelSession } from "../../domain/modelSession";
 
 export class MonolithicIndexRepository implements IndexRepository {
 	constructor(
 		private readonly storage: IndexStorage,
-		private readonly settingsRepo: SettingsRepository,
+		private readonly modelSession: ModelSession,
 	) {
 	}
 
 	async findById(noteId: string): Promise<IndexedNote | null> {
-		const {embeddingModelId} = await this.settingsRepo.get();
-		const index = await this.storage.getAll(embeddingModelId);
+		const index = await this.storage.getAll(this.modelSession.current());
 		return index.find(n => n.id === noteId) ?? null;
 	}
 
@@ -34,31 +34,29 @@ export class MonolithicIndexRepository implements IndexRepository {
 	}
 
 	async listAll(): Promise<IndexedNote[]> {
-		const {embeddingModelId} = await this.settingsRepo.get();
-		return await this.storage.getAll(embeddingModelId);
+		return await this.storage.getAll(this.modelSession.current());
 	}
 
 	async isEmpty(): Promise<boolean> {
-		const {embeddingModelId} = await this.settingsRepo.get();
-		return await this.storage.isEmpty(embeddingModelId);
+		return await this.storage.isEmpty(this.modelSession.current());
 	}
 
 	async remove(noteId: string) {
-		const {embeddingModelId} = await this.settingsRepo.get();
+		const embeddingModelId = this.modelSession.current();
 		const index = await this.storage.getAll(embeddingModelId);
 		const next = index.filter(n => n.id !== noteId);
 		await this.storage.rewrite(embeddingModelId, next);
 	}
 
 	async clear() {
-		const {embeddingModelId} = await this.settingsRepo.get();
+		const embeddingModelId = this.modelSession.current();
 		await this.storage.rewrite(embeddingModelId, []);
 	}
 
 	async rename(oldId: string, newId: string) {
 		if (oldId === newId) return;
 
-		const {embeddingModelId} = await this.settingsRepo.get();
+		const embeddingModelId = this.modelSession.current();
 		const index = await this.storage.getAll(embeddingModelId);
 
 		const existing = index.find(n => n.id === oldId);
