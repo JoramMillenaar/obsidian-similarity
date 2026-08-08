@@ -1,5 +1,5 @@
 import { EmbeddingModelId, IndexedNote, SCHEMA_VERSION } from "../../types";
-import { EmbeddingFileStore, IndexStorage, ModelIndexMetaStore, SettingsRepository } from "../../ports";
+import { EmbeddingFileStore, IndexStorage, ModelIndexMetaStore } from "../../ports";
 import { DecodedEmbeddings, decodeEmbeddings, encodeEmbeddings } from "../../domain/embeddingCodec";
 import { packForStorage, unpackFromStorage } from "../../domain/indexPacking";
 import { checkIndexHealth, SidecarState } from "../../domain/indexHealth";
@@ -14,12 +14,10 @@ export class ObsidianIndexStorage implements IndexStorage {
 	constructor(
 		private readonly metaStore: ModelIndexMetaStore,
 		private readonly binaryStore: EmbeddingFileStore,
-		private readonly settingsRepo: SettingsRepository,
 	) {
 	}
 
-	async getAll(): Promise<IndexedNote[]> {
-		const {embeddingModelId} = await this.settingsRepo.get();
+	async getAll(embeddingModelId: EmbeddingModelId): Promise<IndexedNote[]> {
 		const data = await this.metaStore.read(embeddingModelId);
 		if (!data || data.index.length === 0) return [];
 
@@ -34,8 +32,7 @@ export class ObsidianIndexStorage implements IndexStorage {
 		});
 	}
 
-	async rewrite(index: IndexedNote[]): Promise<void> {
-		const {embeddingModelId} = await this.settingsRepo.get();
+	async rewrite(embeddingModelId: EmbeddingModelId, index: IndexedNote[]): Promise<void> {
 		const {metadata: v2, embeddings, dim} = packForStorage(index, EMBEDDING_MODELS[embeddingModelId].dim);
 		const buffer = encodeEmbeddings(embeddings, dim);
 
@@ -49,12 +46,11 @@ export class ObsidianIndexStorage implements IndexStorage {
 		});
 	}
 
-	async isEmpty(): Promise<boolean> {
-		return (await this.getAll()).length === 0;
+	async isEmpty(embeddingModelId: EmbeddingModelId): Promise<boolean> {
+		return (await this.getAll(embeddingModelId)).length === 0;
 	}
 
-	async repair(): Promise<void> {
-		const {embeddingModelId} = await this.settingsRepo.get();
+	async repair(embeddingModelId: EmbeddingModelId): Promise<void> {
 		const data = await this.metaStore.read(embeddingModelId);
 		const {state, decoded} = await this.readSidecar(embeddingModelId);
 
@@ -67,7 +63,7 @@ export class ObsidianIndexStorage implements IndexStorage {
 
 		if (health.status === "unusable") {
 			console.warn(`[Similarity] Index discarded (${health.reason}) — rebuilding from scratch.`);
-			await this.rewrite([]);
+			await this.rewrite(embeddingModelId, []);
 			return;
 		}
 
@@ -85,7 +81,7 @@ export class ObsidianIndexStorage implements IndexStorage {
 				chunkCount: decoded.count
 			})
 			: [];
-		await this.rewrite(survivors);
+		await this.rewrite(embeddingModelId, survivors);
 	}
 
 	private async readSidecar(modelId: EmbeddingModelId): Promise<SidecarRead> {

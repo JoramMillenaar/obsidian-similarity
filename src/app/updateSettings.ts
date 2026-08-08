@@ -15,7 +15,8 @@ export function makeUpdateSettings(deps: {
 		await deps.settingsRepo.updatePartial(patch);
 
 		// Now we need to make sure the index reflects the updated settings.
-		await deps.indexStorage.repair();
+		const {embeddingModelId} = await deps.settingsRepo.get();
+		await deps.indexStorage.repair(embeddingModelId);
 		await deps.synchronizeIndex();
 	};
 }

@@ -36,7 +36,7 @@ export function makeChangeEmbeddingModel(deps: ChangeEmbeddingModelDeps): Change
 		deps.status.update(`Loading ${config.label} model…`);
 		await deps.embedder.load(config);
 
-		await deps.indexStorage.repair();
+		await deps.indexStorage.repair(modelId);
 
 		deps.status.update(`Switched to ${config.label}.`, 4000);
 

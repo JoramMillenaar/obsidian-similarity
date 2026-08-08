@@ -9,7 +9,7 @@ import { BinaryEmbeddingFileStore } from "./infra/obsidian/binaryEmbeddingFileSt
 import { ObsidianModelIndexMetaStore } from "./infra/obsidian/obsidianModelIndexMetaStore";
 import { LegacyEmbeddingFileStore } from "./infra/obsidian/legacyEmbeddingFileStore";
 import { ReloadableEmbedder } from "./infra/embedder/reloadableEmbedder";
-import { JsonIndexedNoteRepository } from "./infra/index/jsonIndexedNoteRepository";
+import { MonolithicIndexRepository } from "./infra/index/monolithicIndexRepository";
 import { IndexNoteUseCase, makeIndexNote } from "./app/indexNote";
 import { GetSimilarNotesUseCase, makeGetSimilarNotes } from "./app/getSimilarNotes";
 import { InsertWikilinkAtCursorUseCase, makeInsertWikilinkAtCursor } from "./app/insertWikilinkAtCursor";
@@ -84,11 +84,11 @@ export class AppContainer {
 		this.legacyEmbeddingFileStore = new LegacyEmbeddingFileStore(plugin);
 		this.settingsRepo = new ObsidianSettingsRepository(this.pluginDataStore);
 		this.indexStorage = new ThrottledIndexStorage(
-			new ObsidianIndexStorage(this.modelIndexMetaStore, this.embeddingFileStore, this.settingsRepo),
+			new ObsidianIndexStorage(this.modelIndexMetaStore, this.embeddingFileStore),
 			INDEX_WRITE_THROTTLE_MS,
 		);
 		this.embedder = new ReloadableEmbedder();
-		this.indexRepo = new JsonIndexedNoteRepository(this.indexStorage);
+		this.indexRepo = new MonolithicIndexRepository(this.indexStorage, this.settingsRepo);
 		const activeEditor = new ObsidianActiveEditor(plugin);
 		this.similarityView = new ObsidianSimilarityView(plugin);
 

@@ -1,9 +1,13 @@
-import { IndexedNote } from "../types";
+import { EmbeddingModelId, IndexedNote } from "../types";
 import { IndexStorage } from "../ports";
 
+type PendingWrite = {
+	embeddingModelId: EmbeddingModelId;
+	index: IndexedNote[];
+};
 
 export class ThrottledIndexStorage implements IndexStorage {
-	private pending: IndexedNote[] | null = null;
+	private pending: PendingWrite | null = null;
 	private timer: number | null = null;
 	private flushing: Promise<void> = Promise.resolve();
 
@@ -13,24 +17,24 @@ export class ThrottledIndexStorage implements IndexStorage {
 	) {
 	}
 
-	async getAll(): Promise<IndexedNote[]> {
-		if (this.pending != null) return this.pending;
-		return await this.underlying.getAll();
+	async getAll(embeddingModelId: EmbeddingModelId): Promise<IndexedNote[]> {
+		if (this.pending != null && this.pending.embeddingModelId === embeddingModelId) return this.pending.index;
+		return await this.underlying.getAll(embeddingModelId);
 	}
 
-	async rewrite(index: IndexedNote[]): Promise<void> {
-		this.pending = index;
+	async rewrite(embeddingModelId: EmbeddingModelId, index: IndexedNote[]): Promise<void> {
+		this.pending = {embeddingModelId, index};
 		this.scheduleFlush();
 	}
 
-	async isEmpty(): Promise<boolean> {
-		if (this.pending != null) return this.pending.length === 0;
-		return await this.underlying.isEmpty();
+	async isEmpty(embeddingModelId: EmbeddingModelId): Promise<boolean> {
+		if (this.pending != null && this.pending.embeddingModelId === embeddingModelId) return this.pending.index.length === 0;
+		return await this.underlying.isEmpty(embeddingModelId);
 	}
 
-	async repair(): Promise<void> {
+	async repair(embeddingModelId: EmbeddingModelId): Promise<void> {
 		await this.flush();
-		await this.underlying.repair();
+		await this.underlying.repair(embeddingModelId);
 	}
 
 	async flush(): Promise<void> {
@@ -55,7 +59,7 @@ export class ThrottledIndexStorage implements IndexStorage {
 			const snapshot = this.pending;
 			if (snapshot == null) return;
 
-			await this.underlying.rewrite(snapshot);
+			await this.underlying.rewrite(snapshot.embeddingModelId, snapshot.index);
 
 			if (this.pending === snapshot) {
 				this.pending = null;

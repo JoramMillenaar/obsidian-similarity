@@ -10,7 +10,7 @@ export async function initializePlugin(app: AppContainer): Promise<void> {
 		const {embeddingModelId} = await app.settingsRepo.get();
 		await app.embedder.load(EMBEDDING_MODELS[embeddingModelId]);
 
-		await app.indexStorage.repair();
+		await app.indexStorage.repair(embeddingModelId);
 
 		app.status.update("Optimizing experience...");
 		void app.synchronizeIndex().catch((error) => {
