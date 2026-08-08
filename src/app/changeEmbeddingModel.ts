@@ -1,7 +1,7 @@
 import { EmbeddingModelId } from "../types";
 import { EmbeddingPort, SettingsRepository, StatusReporter } from "../ports";
 import { EMBEDDING_MODELS } from "../constants";
-import { EmbeddingQueue } from "./embeddingQueue";
+import { JobQueue } from "./jobQueue";
 import { SynchronizeIndexUseCase } from "./synchronizeIndex";
 import { ThrottledIndexStorage } from "../domain/throttledIndexStorage";
 
@@ -11,7 +11,7 @@ type ChangeEmbeddingModelDeps = {
 	embedder: EmbeddingPort;
 	settingsRepo: SettingsRepository;
 	indexStorage: ThrottledIndexStorage;
-	queue: EmbeddingQueue;
+	queue: JobQueue;
 	synchronizeIndex: SynchronizeIndexUseCase;
 	status: StatusReporter;
 };

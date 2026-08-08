@@ -36,7 +36,7 @@ import { makeSynchronizeIndex, SynchronizeIndexUseCase } from "./app/synchronize
 import { GetNoteTextUseCase, makeGetNoteText } from "./app/getNoteText";
 import { makeBuildIndexSyncPlan } from "./app/buildIndexSyncPlan";
 import { LiveNoteSync, makeLiveNoteSync } from "./app/liveNoteSync";
-import { EmbeddingQueue } from "./app/embeddingQueue";
+import { JobQueue } from "./app/jobQueue";
 import { ChangeEmbeddingModelUseCase, makeChangeEmbeddingModel } from "./app/changeEmbeddingModel";
 import { makeRunLegacyMigrations, RunLegacyMigrationsUseCase } from "./app/legacyMigrations";
 
@@ -54,7 +54,7 @@ export class AppContainer {
 	readonly embedder: EmbeddingPort;
 	readonly indexRepo: IndexRepository;
 	readonly settingsRepo: SettingsRepository;
-	readonly embeddingQueue: EmbeddingQueue;
+	readonly jobQueue: JobQueue;
 	readonly similarityView: SimilarityView;
 	readonly liveNoteSync: LiveNoteSync;
 	readonly upsertDebouncer: KeyedDebouncer<string>;
@@ -71,7 +71,7 @@ export class AppContainer {
 	readonly updateSettings: UpdateSettingsUseCase;
 	readonly changeEmbeddingModel: ChangeEmbeddingModelUseCase;
 
-	private readonly unloadEmbeddingQueue: () => void;
+	private readonly unloadJobQueue: () => void;
 	private readonly disposeIndexingProgress: () => void;
 
 	constructor(plugin: Plugin) {
@@ -92,15 +92,15 @@ export class AppContainer {
 		const activeEditor = new ObsidianActiveEditor(plugin);
 		this.similarityView = new ObsidianSimilarityView(plugin);
 
-		this.embeddingQueue = new EmbeddingQueue();
+		this.jobQueue = new JobQueue();
 		const queueState = new IndexingProgress();
 		const embedText = makeEmbedText({
 			embedder: this.embedder,
 			settingsRepo: this.settingsRepo,
-			queue: this.embeddingQueue
+			queue: this.jobQueue
 		})
 
-		this.embeddingQueue.subscribe((event) => {
+		this.jobQueue.subscribe((event) => {
 			if (event.type === "drained") return this.indexStorage.flush();
 			if (event.type === "stopped") queueState.reportFatalError(event.error);
 		});
@@ -155,7 +155,7 @@ export class AppContainer {
 
 		this.subscribeIndexingState = queueState.subscribeIndexingState;
 		this.getIndexingState = queueState.getSnapshot;
-		this.unloadEmbeddingQueue = this.embeddingQueue.unload;
+		this.unloadJobQueue = this.jobQueue.unload;
 		this.disposeIndexingProgress = queueState.dispose;
 
 		this.upsertDebouncer = new KeyedDebouncer<string>(1100);
@@ -176,14 +176,14 @@ export class AppContainer {
 			embedder: this.embedder,
 			settingsRepo: this.settingsRepo,
 			indexStorage: this.indexStorage,
-			queue: this.embeddingQueue,
+			queue: this.jobQueue,
 			synchronizeIndex: this.synchronizeIndex,
 			status: this.status,
 		});
 	}
 
 	async shutdown(): Promise<void> {
-		this.unloadEmbeddingQueue();
+		this.unloadJobQueue();
 		this.disposeIndexingProgress();
 		this.upsertDebouncer.cancel();
 		await this.indexStorage.flush().catch((error) => {

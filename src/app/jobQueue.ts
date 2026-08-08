@@ -2,35 +2,35 @@ import { PriorityQueue, Priority } from "../domain/priorityQueue";
 
 export type { Priority };
 
-export type EmbeddingJob<T> = () => Promise<T>;
+export type Job<T> = () => Promise<T>;
 
-export type EmbeddingQueueEvent =
+export type JobQueueEvent =
 	| { type: "started"; key: string }
 	| { type: "settled"; key: string; error?: unknown }
 	| { type: "drained" }
 	| { type: "stopped"; error: unknown }
 	| { type: "cleared" };
 
-export type EmbeddingQueueObserver = (event: EmbeddingQueueEvent) => void | Promise<void>;
+export type JobQueueObserver = (event: JobQueueEvent) => void | Promise<void>;
 
 type PendingJob = {
-	run: EmbeddingJob<unknown>;
+	run: Job<unknown>;
 	resolve: (value: unknown) => void;
 	reject: (error: unknown) => void;
 	promise: Promise<unknown>;
 };
 
-export class EmbeddingQueue {
+export class JobQueue {
 	private readonly queue = new PriorityQueue();
 	private readonly jobs = new Map<string, PendingJob>();
-	private readonly observers = new Set<EmbeddingQueueObserver>();
+	private readonly observers = new Set<JobQueueObserver>();
 
 	private isUnloaded = false;
 	private processingPromise: Promise<void> | null = null;
 
-	submit<T>(key: string, run: EmbeddingJob<T>, priority: Priority = "low"): Promise<T> {
+	submit<T>(key: string, run: Job<T>, priority: Priority = "low"): Promise<T> {
 		if (this.isUnloaded) {
-			return Promise.reject(new Error("Embedding queue is unloaded"));
+			return Promise.reject(new Error("Job queue is unloaded"));
 		}
 
 		const existing = this.jobs.get(key);
@@ -54,7 +54,7 @@ export class EmbeddingQueue {
 		return promise as Promise<T>;
 	}
 
-	subscribe(observer: EmbeddingQueueObserver): () => void {
+	subscribe(observer: JobQueueObserver): () => void {
 		this.observers.add(observer);
 		return () => {
 			this.observers.delete(observer);
@@ -63,13 +63,13 @@ export class EmbeddingQueue {
 
 	reset = () => {
 		if (this.isUnloaded) return;
-		this.rejectPending("Embedding queue was reset");
+		this.rejectPending("Job queue was reset");
 	};
 
 	unload = () => {
 		this.isUnloaded = true;
 		this.processingPromise = null;
-		this.rejectPending("Embedding queue is unloaded");
+		this.rejectPending("Job queue is unloaded");
 		this.observers.clear();
 	};
 
@@ -110,7 +110,7 @@ export class EmbeddingQueue {
 		} catch (error) {
 			if (this.isUnloaded) return;
 			await this.notify({type: "stopped", error});
-			console.error("[Similarity] Embedding queue stopped:", error);
+			console.error("[Similarity] Job queue stopped:", error);
 		}
 	}
 
@@ -127,11 +127,11 @@ export class EmbeddingQueue {
 		} catch (error) {
 			job.reject(error);
 			await this.notify({type: "settled", key, error});
-			console.error(`[Similarity] Embedding job failed for ${key}:`, error);
+			console.error(`[Similarity] Job failed for ${key}:`, error);
 		}
 	}
 
-	private notify(event: EmbeddingQueueEvent): Promise<void> | void {
+	private notify(event: JobQueueEvent): Promise<void> | void {
 		const pending: Promise<void>[] = [];
 		for (const observer of this.observers) {
 			const result = observer(event);

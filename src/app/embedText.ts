@@ -1,5 +1,5 @@
 import { EmbeddingPort, EmbeddingResult, SettingsRepository } from "../ports";
-import { EmbeddingQueue, Priority } from "./embeddingQueue";
+import { JobQueue, Priority } from "./jobQueue";
 import { hashText } from "../domain/text";
 
 export type { Priority };
@@ -10,7 +10,7 @@ export type EmbedTextUseCase = (text: string, priority?: Priority, maxChunkSize?
 export function makeEmbedText(deps: {
 	embedder: EmbeddingPort;
 	settingsRepo: SettingsRepository;
-	queue: EmbeddingQueue;
+	queue: JobQueue;
 }): EmbedTextUseCase {
 	return async function embedText(text: string, priority?: Priority, maxChunkSize?: number): Promise<EmbeddingResult | null> {
 		const {maxOverlapPercent} = await deps.settingsRepo.get();
