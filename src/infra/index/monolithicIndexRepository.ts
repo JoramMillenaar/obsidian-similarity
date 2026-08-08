@@ -1,4 +1,4 @@
-import { IndexedNote } from "../../types";
+import { EmbeddingModelId, IndexedNote } from "../../types";
 import { IndexRepository, IndexStorage, SettingsRepository } from "../../ports";
 
 export class MonolithicIndexRepository implements IndexRepository {
@@ -14,14 +14,12 @@ export class MonolithicIndexRepository implements IndexRepository {
 		return index.find(n => n.id === noteId) ?? null;
 	}
 
-	async upsert(note: IndexedNote) {
-		await this.upsertMany([note]);
+	async upsert(note: IndexedNote, embeddingModelId: EmbeddingModelId) {
+		await this.upsertMany([note], embeddingModelId);
 	}
 
-	async upsertMany(notes: IndexedNote[]) {
+	async upsertMany(notes: IndexedNote[], embeddingModelId: EmbeddingModelId) {
 		if (notes.length === 0) return;
-
-		const {embeddingModelId} = await this.settingsRepo.get();
 
 		// TODO: this should technically be atomic
 		const index = await this.storage.getAll(embeddingModelId);

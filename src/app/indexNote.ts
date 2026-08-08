@@ -66,7 +66,7 @@ export function makeIndexNote(deps: IndexNoteDeps): IndexNoteUseCase {
 			updatedAt: new Date().toISOString(),
 		};
 
-		await deps.indexRepo.upsert(indexedNote);
+		await deps.indexRepo.upsert(indexedNote, embedded.metadata.embeddingModelId);
 		return "indexed";
 	}
 }
