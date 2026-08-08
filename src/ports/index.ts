@@ -1,5 +1,5 @@
 export type { ActiveEditor } from "./activeEditor";
-export type { EmbeddingPort, EmbedOptions, EmbeddedChunk } from "./embeddingPort";
+export type { EmbeddingPort, EmbedOptions, EmbeddedChunk, EmbeddingMetadata, EmbeddingResult } from "./embeddingPort";
 export type { EmbeddingFileStore } from "./embeddingFileStore";
 export type { ModelIndexMetaStore } from "./modelIndexMetaStore";
 export type { IndexRepository } from "./indexRepository";

@@ -1,4 +1,4 @@
-import { EmbeddedChunk, EmbeddingPort, EmbedOptions } from "../../ports";
+import { EmbeddingPort, EmbedOptions, EmbeddingResult } from "../../ports";
 import { EmbeddingModelConfig } from "../../types";
 import { EmbeddingProvider } from "./embeddingProvider";
 
@@ -10,7 +10,7 @@ export class ReloadableEmbedder implements EmbeddingPort {
 		await this.reload(config);
 	}
 
-	async embed(text: string, options: EmbedOptions): Promise<EmbeddedChunk[] | null> {
+	async embed(text: string, options: EmbedOptions): Promise<EmbeddingResult | null> {
 		if (!this.current) throw new Error("ReloadableEmbedder.embed called before load()");
 		return await this.current.embed(text, options);
 	}

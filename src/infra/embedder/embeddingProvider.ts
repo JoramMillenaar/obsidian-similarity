@@ -1,5 +1,5 @@
 import { IframeMessenger } from "src/infra/embedder/messagingService";
-import { EmbeddedChunk, EmbeddingPort, EmbedOptions } from "../../ports";
+import { EmbeddingPort, EmbedOptions, EmbeddingResult } from "../../ports";
 import { EmbeddingModelConfig } from "../../types";
 
 /** One-shot: construct, `load(config)` once, `unload()` when done. Never reused across models. */
@@ -11,7 +11,7 @@ export class EmbeddingProvider implements EmbeddingPort {
 		await this.iframeMessenger.initialize();
 	}
 
-	async embed(text: string, options: EmbedOptions): Promise<EmbeddedChunk[] | null> {
+	async embed(text: string, options: EmbedOptions): Promise<EmbeddingResult | null> {
 		if (!this.iframeMessenger) throw new Error("EmbeddingProvider.embed called before load()");
 		return await this.iframeMessenger.sendMessage(text, options.maxOverlapPercent, options.maxChunkSize);
 	}

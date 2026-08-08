@@ -17,7 +17,11 @@ async function handleMessage(event: MessageEvent<IframeMessage>): Promise<void> 
 	if (payload === 'ping') {
 		await model.ready;
 		(event.source as Window).postMessage(
-			{ requestId, data: [], device: model.getDevice() },
+			{
+				requestId,
+				data: { chunks: [], metadata: { embeddingModelId: model.config.id, maxOverlapPercent: 0 } },
+				device: model.getDevice(),
+			},
 			window.origin
 		);
 		return;

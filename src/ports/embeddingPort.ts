@@ -1,4 +1,4 @@
-import { Embedding, EmbeddingModelConfig } from "../types";
+import { Embedding, EmbeddingModelConfig, EmbeddingModelId } from "../types";
 
 export interface EmbedOptions {
 	maxOverlapPercent: number;
@@ -11,8 +11,19 @@ export type EmbeddedChunk = {
 	end: number;
 };
 
+export type EmbeddingMetadata = {
+	embeddingModelId: EmbeddingModelId;
+	maxOverlapPercent: number;
+	maxChunkSize?: number;
+};
+
+export type EmbeddingResult = {
+	chunks: EmbeddedChunk[];
+	metadata: EmbeddingMetadata;
+};
+
 export interface EmbeddingPort {
-	embed(text: string, options: EmbedOptions): Promise<EmbeddedChunk[] | null>;
+	embed(text: string, options: EmbedOptions): Promise<EmbeddingResult | null>;
 
 	load(config: EmbeddingModelConfig): Promise<void>;
 

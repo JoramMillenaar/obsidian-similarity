@@ -1,6 +1,6 @@
 import { hashText } from "../domain/text";
 import { isMarkdownPath } from "../domain/markdownPath";
-import { EmbeddedChunk, IndexRepository } from "../ports";
+import { EmbeddedChunk, EmbeddingResult, IndexRepository } from "../ports";
 import { NoteChunk } from "../types";
 import { EmbedTextUseCase, Priority } from "./embedText";
 import { IsIgnoredPath } from "./isIgnoredPath";
@@ -47,21 +47,21 @@ export function makeIndexNote(deps: IndexNoteDeps): IndexNoteUseCase {
 			return "unchanged";
 		}
 
-		let embedded: EmbeddedChunk[] | null;
+		let embedded: EmbeddingResult | null;
 		try {
 			embedded = await deps.embedText(text, priority);
 		} catch (error) {
 			await deps.indexRepo.remove(noteId);
 			throw error;
 		}
-		if (!embedded?.length) {
+		if (!embedded?.chunks.length) {
 			await deps.indexRepo.remove(noteId);
 			return "removed";
 		}
 
 		const indexedNote = {
 			id: noteId,
-			chunks: toNoteChunks(embedded, text),
+			chunks: toNoteChunks(embedded.chunks, text),
 			contentHash,
 			updatedAt: new Date().toISOString(),
 		};
