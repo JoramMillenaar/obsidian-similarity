@@ -27,6 +27,7 @@ export class JobQueue {
 
 	private isUnloaded = false;
 	private processingPromise: Promise<void> | null = null;
+	private currentJob: Promise<void> | null = null;
 
 	submit<T>(key: string, run: Job<T>, priority: Priority = "low"): Promise<T> {
 		if (this.isUnloaded) {
@@ -61,9 +62,10 @@ export class JobQueue {
 		};
 	}
 
-	reset = () => {
+	reset = async () => {
 		if (this.isUnloaded) return;
 		this.rejectPending("Job queue was reset");
+		await this.currentJob;
 	};
 
 	unload = () => {
@@ -121,13 +123,18 @@ export class JobQueue {
 		this.jobs.delete(key);
 		await this.notify({type: "started", key});
 
+		const run = job.run();
+		this.currentJob = run.then(() => undefined, () => undefined);
+
 		try {
-			job.resolve(await job.run());
+			job.resolve(await run);
 			await this.notify({type: "settled", key});
 		} catch (error) {
 			job.reject(error);
 			await this.notify({type: "settled", key, error});
 			console.error(`[Similarity] Job failed for ${key}:`, error);
+		} finally {
+			this.currentJob = null;
 		}
 	}
 

@@ -30,7 +30,7 @@ export function makeChangeEmbeddingModel(deps: ChangeEmbeddingModelDeps): Change
 		deps.modelSession.beginSwitch(modelId);
 
 		try {
-			deps.queue.reset();
+			await deps.queue.reset();
 
 			deps.embedder.unload();
 
