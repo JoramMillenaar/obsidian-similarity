@@ -1,6 +1,7 @@
 import { IndexRepository } from "../ports";
 import { IndexNoteUseCase } from "./indexNote";
 import { BuildIndexSyncPlanUseCase, IndexSyncPlan } from "./buildIndexSyncPlan";
+import { IndexingProgress } from "./indexingProgress";
 
 export type SynchronizeIndexUseCase = () => Promise<void>;
 
@@ -8,10 +9,7 @@ type SynchronizeIndexDeps = {
 	indexRepo: IndexRepository;
 	indexNote: IndexNoteUseCase;
 	buildIndexSyncPlan: BuildIndexSyncPlanUseCase;
-	progress: {
-		watchAll(keys: string[]): void;
-		track<T>(key: string, run: () => Promise<T>): Promise<T>;
-	};
+	progress: IndexingProgress
 };
 
 export function makeSynchronizeIndex(deps: SynchronizeIndexDeps): SynchronizeIndexUseCase {
@@ -32,9 +30,10 @@ export function makeSynchronizeIndex(deps: SynchronizeIndexDeps): SynchronizeInd
 		}
 
 		deps.progress.watchAll(plan.idsToSeed);
-		for (const noteId of plan.idsToSeed) {
-			await deps.progress.track(noteId, () => deps.indexNote(noteId, "low"));
-		}
+		const jobs = plan.idsToSeed.map((noteId) =>
+			deps.progress.track(noteId, () => deps.indexNote(noteId, "low")),
+		);
+		await Promise.allSettled(jobs);
 	}
 
 	return async function synchronizeIndex() {
