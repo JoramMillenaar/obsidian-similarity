@@ -5,4 +5,5 @@ export interface ActivateOptions {
 
 export interface SimilarityView {
 	activate(options?: ActivateOptions): Promise<void>;
+	refreshResults(): void;
 }

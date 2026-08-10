@@ -1,6 +1,5 @@
 import { Plugin, TFile } from "obsidian";
 import { AppContainer } from "../../appContainer";
-import { SimilarNotesListView, VIEW_TYPE_SIMILARITY } from "../../ui/SimilarNotesListView";
 
 export function registerObsidianEvents(plugin: Plugin, container: AppContainer): void {
 	plugin.registerEvent(
@@ -38,10 +37,7 @@ export function registerObsidianEvents(plugin: Plugin, container: AppContainer):
 				container.liveNoteSync.view(file.path);
 			}
 
-			const leaf = plugin.app.workspace.getLeavesOfType(VIEW_TYPE_SIMILARITY).first();
-			if (leaf && leaf.view instanceof SimilarNotesListView) {
-				void leaf.view.refresh();
-			}
+			container.similarityView.refreshResults();
 		}),
 	);
 }

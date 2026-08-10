@@ -168,6 +168,7 @@ export class AppContainer {
 			indexRepo: this.indexRepo,
 			indexNote: this.indexNote,
 			updateDebouncer: this.upsertDebouncer,
+			onNoteUpdated: () => this.similarityView.refreshResults(),
 		});
 
 		this.updateSettings = makeUpdateSettings({

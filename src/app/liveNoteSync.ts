@@ -14,6 +14,7 @@ export type LiveNoteSyncDeps = {
 	indexRepo: IndexRepository;
 	indexNote: IndexNoteUseCase;
 	updateDebouncer: KeyedDebouncer<string>;
+	onNoteUpdated?: (noteId: string) => void;
 };
 
 export function makeLiveNoteSync(deps: LiveNoteSyncDeps): LiveNoteSync {
@@ -26,12 +27,14 @@ export function makeLiveNoteSync(deps: LiveNoteSyncDeps): LiveNoteSync {
 		update(noteId) {
 			deps.updateDebouncer.schedule(noteId, async () => {
 				await deps.indexNote(noteId, "medium");
+				deps.onNoteUpdated?.(noteId);
 			});
 		},
 
 		async delete(noteId) {
 			try {
 				await deps.indexRepo.remove(noteId);
+				deps.onNoteUpdated?.(noteId);
 			} catch (error) {
 				console.error("[Similarity] Delete from index failed", error);
 			}
@@ -40,6 +43,7 @@ export function makeLiveNoteSync(deps: LiveNoteSyncDeps): LiveNoteSync {
 		async rename(oldId, newId) {
 			try {
 				await deps.indexRepo.rename(oldId, newId);
+				deps.onNoteUpdated?.(oldId);
 			} catch (error) {
 				console.error("[Similarity] Rename note failed", error);
 			}
