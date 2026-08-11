@@ -38,6 +38,7 @@ import { GetNoteTextUseCase, makeGetNoteText } from "./app/getNoteText";
 import { makeBuildIndexSyncPlan } from "./app/buildIndexSyncPlan";
 import { LiveNoteSync, makeLiveNoteSync } from "./app/liveNoteSync";
 import { JobQueue } from "./app/jobQueue";
+import { EmbeddingService } from "./app/embeddingService";
 import { ChangeEmbeddingModelUseCase, makeChangeEmbeddingModel } from "./app/changeEmbeddingModel";
 import { makeRunLegacyMigrations, RunLegacyMigrationsUseCase } from "./app/legacyMigrations";
 import { DEFAULT_EMBEDDING_MODEL_ID } from "./constants";
@@ -58,6 +59,7 @@ export class AppContainer {
 	readonly indexRepo: IndexRepository;
 	readonly settingsRepo: SettingsRepository;
 	readonly jobQueue: JobQueue;
+	readonly embeddingService: EmbeddingService;
 	readonly similarityView: SimilarityView;
 	readonly liveNoteSync: LiveNoteSync;
 	readonly upsertDebouncer: KeyedDebouncer<string>;
@@ -74,7 +76,6 @@ export class AppContainer {
 	readonly updateSettings: UpdateSettingsUseCase;
 	readonly changeEmbeddingModel: ChangeEmbeddingModelUseCase;
 
-	private readonly unloadJobQueue: () => void;
 	private readonly disposeIndexingProgress: () => void;
 
 	constructor(plugin: Plugin) {
@@ -97,15 +98,16 @@ export class AppContainer {
 		this.similarityView = new ObsidianSimilarityView(plugin);
 
 		this.jobQueue = new JobQueue();
+		this.embeddingService = new EmbeddingService(this.embedder, this.jobQueue);
 		const queueState = new IndexingProgress();
 		const embedText = makeEmbedText({
-			embedder: this.embedder,
+			embeddingService: this.embeddingService,
 			settingsRepo: this.settingsRepo,
-			queue: this.jobQueue
 		})
 
-		this.jobQueue.subscribe((event) => {
+		this.embeddingService.subscribe((event) => {
 			if (event.type === "drained") return this.indexStorage.flush();
+			if (event.type === "cleared") return this.indexStorage.flush();
 			if (event.type === "stopped") queueState.reportFatalError(event.error);
 		});
 
@@ -159,7 +161,6 @@ export class AppContainer {
 
 		this.subscribeIndexingState = queueState.subscribeIndexingState;
 		this.getIndexingState = queueState.getSnapshot;
-		this.unloadJobQueue = this.jobQueue.unload;
 		this.disposeIndexingProgress = queueState.dispose;
 
 		this.upsertDebouncer = new KeyedDebouncer<string>(1100);
@@ -179,10 +180,9 @@ export class AppContainer {
 		});
 
 		this.changeEmbeddingModel = makeChangeEmbeddingModel({
-			embedder: this.embedder,
+			embeddingService: this.embeddingService,
 			settingsRepo: this.settingsRepo,
 			indexStorage: this.indexStorage,
-			queue: this.jobQueue,
 			synchronizeIndex: this.synchronizeIndex,
 			status: this.status,
 			modelSession: this.modelSession,
@@ -190,13 +190,12 @@ export class AppContainer {
 	}
 
 	async shutdown(): Promise<void> {
-		this.unloadJobQueue();
+		this.embeddingService.unload();
 		this.disposeIndexingProgress();
 		this.upsertDebouncer.cancel();
 		await this.indexStorage.flush().catch((error) => {
 			console.error("[Similarity] Failed to flush index on shutdown:", error);
 		});
-		this.embedder.unload();
 		this.status.clear();
 	}
 }

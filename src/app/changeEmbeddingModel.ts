@@ -1,7 +1,7 @@
 import { EmbeddingModelId } from "../types";
-import { EmbeddingPort, SettingsRepository, StatusReporter } from "../ports";
+import { SettingsRepository, StatusReporter } from "../ports";
 import { EMBEDDING_MODELS } from "../constants";
-import { JobQueue } from "./jobQueue";
+import { EmbeddingService } from "./embeddingService";
 import { SynchronizeIndexUseCase } from "./synchronizeIndex";
 import { ThrottledIndexStorage } from "../domain/throttledIndexStorage";
 import { ModelSession } from "../domain/modelSession";
@@ -9,10 +9,9 @@ import { ModelSession } from "../domain/modelSession";
 export type ChangeEmbeddingModelUseCase = (modelId: EmbeddingModelId) => Promise<void>;
 
 type ChangeEmbeddingModelDeps = {
-	embedder: EmbeddingPort;
+	embeddingService: EmbeddingService;
 	settingsRepo: SettingsRepository;
 	indexStorage: ThrottledIndexStorage;
-	queue: JobQueue;
 	synchronizeIndex: SynchronizeIndexUseCase;
 	status: StatusReporter;
 	modelSession: ModelSession;
@@ -30,16 +29,10 @@ export function makeChangeEmbeddingModel(deps: ChangeEmbeddingModelDeps): Change
 		deps.modelSession.beginSwitch(modelId);
 
 		try {
-			await deps.queue.reset();
-
-			deps.embedder.unload();
-
-			await deps.indexStorage.flush();
-
 			await deps.settingsRepo.updatePartial({embeddingModelId: modelId});
-
 			deps.status.update(`Loading ${config.label} model…`);
-			await deps.embedder.load(config);
+
+			await deps.embeddingService.swap(config);
 
 			await deps.indexStorage.repair(modelId);
 
