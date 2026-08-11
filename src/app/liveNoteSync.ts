@@ -14,15 +14,26 @@ export type LiveNoteSync = {
 export type LiveNoteSyncDeps = {
 	indexRepo: IndexRepository;
 	requestIndex: (noteId: string, priority: Priority) => Promise<IndexTaskOutcome>;
+	promoteIndex: (noteId: string, priority: Priority) => Promise<IndexTaskOutcome> | null;
 	updateDebouncer: KeyedDebouncer<string>;
 	onNoteUpdated?: (noteId: string) => void;
 };
 
 export function makeLiveNoteSync(deps: LiveNoteSyncDeps): LiveNoteSync {
+	async function handleView(noteId: string): Promise<void> {
+		const promoted = deps.promoteIndex(noteId, "medium");
+		if (promoted) {
+			await promoted;
+			return;
+		}
+
+		if (await deps.indexRepo.findById(noteId)) return;
+		await deps.requestIndex(noteId, "medium");
+	}
+
 	return {
 		view(noteId) {
-			// TODO: too expensive, just check whether it's in pending to be indexed, if so, bump it up.
-			void deps.requestIndex(noteId, "medium").catch((error) => {
+			void handleView(noteId).catch((error) => {
 				console.error("[Similarity] Indexing viewed note failed", error);
 			});
 		},

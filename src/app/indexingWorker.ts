@@ -72,6 +72,12 @@ export class IndexingWorker {
 		return promise;
 	}
 
+	promote(noteId: string, priority: Priority): Promise<IndexTaskOutcome> | null {
+		if (this.isUnloaded) return null;
+		if (!this.pendingNotes.has(noteId) && !this.backlogRemaining.has(noteId)) return null;
+		return this.submitNote(noteId, priority);
+	}
+
 	submitEmbed<T>(run: () => Promise<T>): Promise<T> {
 		if (this.isUnloaded) return Promise.reject(new Error("Indexing worker is unloaded"));
 
@@ -207,9 +213,9 @@ export class IndexingWorker {
 			if (this.backlogRemaining.delete(noteId)) return noteId;
 		}
 
-		// TODO: race condition between read and write??
 		this.backlogOrder = [];
 		this.backlogCursor = 0;
+		this.backlogRemaining.clear();
 		return null;
 	}
 
@@ -245,7 +251,7 @@ export class IndexingWorker {
 	}
 
 	private hasWork(): boolean {
-		return this.urgent.length > 0 || !this.foreground.isEmpty || this.backlogRemaining.size > 0;
+		return this.urgent.length > 0 || !this.foreground.isEmpty || this.backlogCursor < this.backlogOrder.length;
 	}
 
 	private isIdle(): boolean {

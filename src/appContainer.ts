@@ -38,7 +38,6 @@ import { GetNoteTextUseCase, makeGetNoteText } from "./app/getNoteText";
 import { makeBuildIndexSyncPlan } from "./app/buildIndexSyncPlan";
 import { LiveNoteSync, makeLiveNoteSync } from "./app/liveNoteSync";
 import { IndexingWorker } from "./app/indexingWorker";
-import { EmbeddingService } from "./app/embeddingService";
 import { ChangeEmbeddingModelUseCase, makeChangeEmbeddingModel } from "./app/changeEmbeddingModel";
 import { makeRunLegacyMigrations, RunLegacyMigrationsUseCase } from "./app/legacyMigrations";
 import { DEFAULT_EMBEDDING_MODEL_ID } from "./constants";
@@ -59,7 +58,6 @@ export class AppContainer {
 	readonly indexRepo: IndexRepository;
 	readonly settingsRepo: SettingsRepository;
 	readonly indexingWorker: IndexingWorker;
-	readonly embeddingService: EmbeddingService;
 	readonly similarityView: SimilarityView;
 	readonly liveNoteSync: LiveNoteSync;
 	readonly upsertDebouncer: KeyedDebouncer<string>;
@@ -97,10 +95,9 @@ export class AppContainer {
 		const activeEditor = new ObsidianActiveEditor(plugin);
 		this.similarityView = new ObsidianSimilarityView(plugin);
 
-		this.embeddingService = new EmbeddingService(this.embedder);
 		const queueState = new IndexingProgress();
 		const embedText = makeEmbedText({
-			embeddingService: this.embeddingService,
+			embedder: this.embedder,
 			settingsRepo: this.settingsRepo,
 		})
 
@@ -169,6 +166,7 @@ export class AppContainer {
 		this.liveNoteSync = makeLiveNoteSync({
 			indexRepo: this.indexRepo,
 			requestIndex: (noteId, priority) => this.indexingWorker.submitNote(noteId, priority),
+			promoteIndex: (noteId, priority) => this.indexingWorker.promote(noteId, priority),
 			updateDebouncer: this.upsertDebouncer,
 			onNoteUpdated: () => this.similarityView.refreshResults(),
 		});
@@ -181,7 +179,7 @@ export class AppContainer {
 		});
 
 		this.changeEmbeddingModel = makeChangeEmbeddingModel({
-			embeddingService: this.embeddingService,
+			embedder: this.embedder,
 			worker: this.indexingWorker,
 			settingsRepo: this.settingsRepo,
 			indexStorage: this.indexStorage,
@@ -193,7 +191,7 @@ export class AppContainer {
 
 	async shutdown(): Promise<void> {
 		this.indexingWorker.unload();
-		this.embeddingService.unload();
+		this.embedder.unload();
 		this.disposeIndexingProgress();
 		this.upsertDebouncer.cancel();
 		await this.indexStorage.flush().catch((error) => {
