@@ -130,6 +130,9 @@ export class AppContainer {
 		this.indexingWorker.subscribe((event) => {
 			if (event.type === "drained" || event.type === "cleared") return this.indexStorage.flush();
 		});
+		this.indexingWorker.subscribe((event) => {
+			if (event.type === "seeded") return this.similarityView.refreshResults();
+		})
 
 		const embedQuery: EmbedTextUseCase = (text, maxChunkSize) =>
 			this.indexingWorker.submitEmbed(() => embedText(text, maxChunkSize));

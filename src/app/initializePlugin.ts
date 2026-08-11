@@ -25,4 +25,6 @@ export async function initializePlugin(app: AppContainer): Promise<void> {
 	}
 
 	await app.similarityView.activate({reveal: false, focus: false});
+
+	app.similarityView.refreshResults();
 }

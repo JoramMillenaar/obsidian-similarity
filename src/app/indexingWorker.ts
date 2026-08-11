@@ -133,7 +133,6 @@ export class IndexingWorker {
 		this.ensureRunning();
 	}
 
-	/** Drop all queued work. Queued notes resolve `"cancelled"`; they never reject. */
 	reset = async (): Promise<void> => {
 		if (this.isUnloaded) return;
 		this.clearQueues("Indexing worker was reset");
