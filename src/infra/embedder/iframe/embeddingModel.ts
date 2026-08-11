@@ -23,7 +23,7 @@ export class EmbeddingModel {
 
 		this.#pipeline = await pipeline('feature-extraction', this.config.repoId, {
 			device: this.#device,
-			dtype: webgpuAvailable ? 'fp32' : 'q8',
+			dtype: webgpuAvailable ? 'fp16' : 'q8',
 		});
 	}
 
