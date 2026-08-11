@@ -39,7 +39,7 @@ export class EmbeddingModel {
 				try {
 					if (!this.#pipeline) return reject(new Error("pipeline not yet initialized"));
 					const result: { data: Float32Array } = await this.#pipeline(input, {
-						pooling: 'mean',
+						pooling: this.config.pooling,
 						normalize: true
 					});
 					resolve(result.data);

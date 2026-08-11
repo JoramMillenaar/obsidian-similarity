@@ -95,7 +95,7 @@ export class AppContainer {
 		const activeEditor = new ObsidianActiveEditor(plugin);
 		this.similarityView = new ObsidianSimilarityView(plugin);
 
-		const queueState = new IndexingProgress();
+		const indexingProgress = new IndexingProgress();
 		const embedText = makeEmbedText({
 			embedder: this.embedder,
 			settingsRepo: this.settingsRepo,
@@ -126,7 +126,7 @@ export class AppContainer {
 		});
 
 		this.indexingWorker = new IndexingWorker(this.indexNote);
-		this.indexingWorker.subscribe(queueState.observe);
+		this.indexingWorker.subscribe(indexingProgress.observe);
 		this.indexingWorker.subscribe((event) => {
 			if (event.type === "drained" || event.type === "cleared") return this.indexStorage.flush();
 		});
@@ -160,9 +160,9 @@ export class AppContainer {
 			worker: this.indexingWorker,
 		});
 
-		this.subscribeIndexingState = queueState.subscribeIndexingState;
-		this.getIndexingState = queueState.getSnapshot;
-		this.disposeIndexingProgress = queueState.dispose;
+		this.subscribeIndexingState = indexingProgress.subscribeIndexingState;
+		this.getIndexingState = indexingProgress.getSnapshot;
+		this.disposeIndexingProgress = indexingProgress.dispose;
 
 		this.upsertDebouncer = new KeyedDebouncer<string>(1100);
 

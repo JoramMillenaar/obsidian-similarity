@@ -9,6 +9,7 @@ export const EMBEDDING_MODELS: Record<EmbeddingModelId, EmbeddingModelConfig> = 
 		repoId: "Xenova/all-MiniLM-L6-v2",
 		dim: 384,
 		maxTokens: 256,
+		pooling: "mean",
 	},
 	"xenova-paraphrase-multilingual-MiniLM-L12-v2": {
 		id: "xenova-paraphrase-multilingual-MiniLM-L12-v2",
@@ -16,6 +17,15 @@ export const EMBEDDING_MODELS: Record<EmbeddingModelId, EmbeddingModelConfig> = 
 		repoId: "Xenova/paraphrase-multilingual-MiniLM-L12-v2",
 		dim: 384,
 		maxTokens: 128,
+		pooling: "mean",
+	},
+	"xenova-bge-small-zh-v1.5": {
+		id: "xenova-bge-small-zh-v1.5",
+		label: "Chinese only",
+		repoId: "Xenova/bge-small-zh-v1.5",
+		dim: 512,
+		maxTokens: 512,
+		pooling: "cls",
 	},
 };
 
