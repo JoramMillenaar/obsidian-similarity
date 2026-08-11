@@ -1,4 +1,5 @@
 import { IndexingQueueSnapshot } from "../types";
+import { IndexingWorkerObserver } from "./indexingWorker";
 
 export type HasPendingIndexUseCase = (noteId: string) => boolean;
 
@@ -20,28 +21,34 @@ export class IndexingProgress {
 	private fatalError: string | undefined;
 	private emitScheduled = false;
 
-	watchAll(keys: string[]): void {
-		for (const key of keys) this.watch(key);
-		this.scheduleEmit();
-	}
-
-	track<T>(key: string, run: () => Promise<T>): Promise<T> {
-		this.watch(key);
-		this.pending.delete(key);
-		this.running.add(key);
-		this.scheduleEmit();
-
-		return run().then(
-			(value) => {
-				this.settle(key);
-				return value;
-			},
-			(error) => {
-				this.settle(key, error);
-				throw error;
-			},
-		);
-	}
+	observe: IndexingWorkerObserver = (event) => {
+		switch (event.type) {
+			case "seeded":
+				for (const key of event.keys) this.watch(key);
+				this.scheduleEmit();
+				break;
+			case "enqueued":
+				this.watch(event.key);
+				this.scheduleEmit();
+				break;
+			case "started":
+				this.start(event.key);
+				break;
+			case "settled":
+				this.settle(event.key, event.error);
+				break;
+			case "cleared":
+				// The note in flight still settles on its own; only drop what was queued.
+				this.pending.clear();
+				this.scheduleEmit();
+				break;
+			case "stopped":
+				this.reportFatalError(event.error);
+				break;
+			case "drained":
+				break;
+		}
+	};
 
 	has: HasPendingIndexUseCase = (key) => this.pending.has(key) || this.running.has(key);
 
@@ -85,6 +92,13 @@ export class IndexingProgress {
 			this.processed--;
 		}
 		if (!this.running.has(key)) this.pending.add(key);
+	}
+
+	private start(key: string) {
+		this.watch(key);
+		this.pending.delete(key);
+		this.running.add(key);
+		this.scheduleEmit();
 	}
 
 	private settle(key: string, error?: unknown) {

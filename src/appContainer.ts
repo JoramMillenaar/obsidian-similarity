@@ -14,7 +14,7 @@ import { MonolithicIndexRepository } from "./infra/index/monolithicIndexReposito
 import { IndexNoteUseCase, makeIndexNote } from "./app/indexNote";
 import { GetSimilarNotesUseCase, makeGetSimilarNotes } from "./app/getSimilarNotes";
 import { InsertWikilinkAtCursorUseCase, makeInsertWikilinkAtCursor } from "./app/insertWikilinkAtCursor";
-import { makeEmbedText } from "./app/embedText";
+import { EmbedTextUseCase, makeEmbedText } from "./app/embedText";
 import {
 	EmbeddingFileStore,
 	EmbeddingPort,
@@ -37,7 +37,7 @@ import { makeSynchronizeIndex, SynchronizeIndexUseCase } from "./app/synchronize
 import { GetNoteTextUseCase, makeGetNoteText } from "./app/getNoteText";
 import { makeBuildIndexSyncPlan } from "./app/buildIndexSyncPlan";
 import { LiveNoteSync, makeLiveNoteSync } from "./app/liveNoteSync";
-import { JobQueue } from "./app/jobQueue";
+import { IndexingWorker } from "./app/indexingWorker";
 import { EmbeddingService } from "./app/embeddingService";
 import { ChangeEmbeddingModelUseCase, makeChangeEmbeddingModel } from "./app/changeEmbeddingModel";
 import { makeRunLegacyMigrations, RunLegacyMigrationsUseCase } from "./app/legacyMigrations";
@@ -58,7 +58,7 @@ export class AppContainer {
 	readonly modelSession: ModelSession;
 	readonly indexRepo: IndexRepository;
 	readonly settingsRepo: SettingsRepository;
-	readonly jobQueue: JobQueue;
+	readonly indexingWorker: IndexingWorker;
 	readonly embeddingService: EmbeddingService;
 	readonly similarityView: SimilarityView;
 	readonly liveNoteSync: LiveNoteSync;
@@ -97,19 +97,12 @@ export class AppContainer {
 		const activeEditor = new ObsidianActiveEditor(plugin);
 		this.similarityView = new ObsidianSimilarityView(plugin);
 
-		this.jobQueue = new JobQueue();
-		this.embeddingService = new EmbeddingService(this.embedder, this.jobQueue);
+		this.embeddingService = new EmbeddingService(this.embedder);
 		const queueState = new IndexingProgress();
 		const embedText = makeEmbedText({
 			embeddingService: this.embeddingService,
 			settingsRepo: this.settingsRepo,
 		})
-
-		this.embeddingService.subscribe((event) => {
-			if (event.type === "drained") return this.indexStorage.flush();
-			if (event.type === "cleared") return this.indexStorage.flush();
-			if (event.type === "stopped") queueState.reportFatalError(event.error);
-		});
 
 		this.runLegacyMigrations = makeRunLegacyMigrations({
 			pluginDataStore: this.pluginDataStore,
@@ -135,9 +128,18 @@ export class AppContainer {
 			embedText
 		});
 
+		this.indexingWorker = new IndexingWorker(this.indexNote);
+		this.indexingWorker.subscribe(queueState.observe);
+		this.indexingWorker.subscribe((event) => {
+			if (event.type === "drained" || event.type === "cleared") return this.indexStorage.flush();
+		});
+
+		const embedQuery: EmbedTextUseCase = (text, maxChunkSize) =>
+			this.indexingWorker.submitEmbed(() => embedText(text, maxChunkSize));
+
 		this.getSimilarNotes = makeGetSimilarNotes({
 			indexRepo: this.indexRepo,
-			embedText,
+			embedText: embedQuery,
 			getNoteText: this.getNoteText,
 		});
 
@@ -154,9 +156,8 @@ export class AppContainer {
 
 		this.synchronizeIndex = makeSynchronizeIndex({
 			indexRepo: this.indexRepo,
-			indexNote: this.indexNote,
 			buildIndexSyncPlan,
-			progress: queueState,
+			worker: this.indexingWorker,
 		});
 
 		this.subscribeIndexingState = queueState.subscribeIndexingState;
@@ -167,7 +168,7 @@ export class AppContainer {
 
 		this.liveNoteSync = makeLiveNoteSync({
 			indexRepo: this.indexRepo,
-			indexNote: this.indexNote,
+			requestIndex: (noteId, priority) => this.indexingWorker.submitNote(noteId, priority),
 			updateDebouncer: this.upsertDebouncer,
 			onNoteUpdated: () => this.similarityView.refreshResults(),
 		});
@@ -181,6 +182,7 @@ export class AppContainer {
 
 		this.changeEmbeddingModel = makeChangeEmbeddingModel({
 			embeddingService: this.embeddingService,
+			worker: this.indexingWorker,
 			settingsRepo: this.settingsRepo,
 			indexStorage: this.indexStorage,
 			synchronizeIndex: this.synchronizeIndex,
@@ -190,6 +192,7 @@ export class AppContainer {
 	}
 
 	async shutdown(): Promise<void> {
+		this.indexingWorker.unload();
 		this.embeddingService.unload();
 		this.disposeIndexingProgress();
 		this.upsertDebouncer.cancel();

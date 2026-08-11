@@ -43,14 +43,14 @@ export function makeGetSimilarNotes(deps: {
 					return [];
 				}
 
-				const embedded = await deps.embedText(text, "high").catch(() => null);
+				const embedded = await deps.embedText(text).catch(() => null);
 				if (!embedded?.chunks.length) return [];
 				queryChunks = embedded.chunks.map((chunk) => chunk.embedding);
 			} else {
 				if (!text) {
 					throw new Error("getRelatedNotes: need either noteId present in index, or text to embed.");
 				}
-				const embedded = await deps.embedText(text, "high");
+				const embedded = await deps.embedText(text);
 				if (!embedded?.chunks.length) throw new Error("getRelatedNotes: could not embed text");
 				queryChunks = embedded.chunks.map((chunk) => chunk.embedding);
 			}

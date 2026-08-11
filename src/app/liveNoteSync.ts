@@ -1,6 +1,7 @@
 import { KeyedDebouncer } from "../domain/debouncer";
+import { Priority } from "../domain/priorityQueue";
 import { IndexRepository } from "../ports";
-import { IndexNoteUseCase } from "./indexNote";
+import { IndexTaskOutcome } from "./indexingWorker";
 
 
 export type LiveNoteSync = {
@@ -12,7 +13,7 @@ export type LiveNoteSync = {
 
 export type LiveNoteSyncDeps = {
 	indexRepo: IndexRepository;
-	indexNote: IndexNoteUseCase;
+	requestIndex: (noteId: string, priority: Priority) => Promise<IndexTaskOutcome>;
 	updateDebouncer: KeyedDebouncer<string>;
 	onNoteUpdated?: (noteId: string) => void;
 };
@@ -20,13 +21,20 @@ export type LiveNoteSyncDeps = {
 export function makeLiveNoteSync(deps: LiveNoteSyncDeps): LiveNoteSync {
 	return {
 		view(noteId) {
-			// TODO: too expensive just do a queue check instead if you can.
-			void deps.indexNote(noteId, "medium");
+			// TODO: too expensive, just check whether it's in pending to be indexed, if so, bump it up.
+			void deps.requestIndex(noteId, "medium").catch((error) => {
+				console.error("[Similarity] Indexing viewed note failed", error);
+			});
 		},
 
 		update(noteId) {
 			deps.updateDebouncer.schedule(noteId, async () => {
-				await deps.indexNote(noteId, "medium");
+				try {
+					await deps.requestIndex(noteId, "medium");
+				} catch (error) {
+					console.error("[Similarity] Indexing edited note failed", error);
+					return;
+				}
 				deps.onNoteUpdated?.(noteId);
 			});
 		},
