@@ -13,15 +13,19 @@ type SynchronizeIndexDeps = {
 };
 
 export function makeSynchronizeIndex(deps: SynchronizeIndexDeps): SynchronizeIndexUseCase {
-	let inFlight: Promise<void> | null = null;
+	let running: Promise<void> | null = null;
+	let restartRequested = false;
 
 	async function run(): Promise<void> {
-		try {
-			const plan = await deps.buildIndexSyncPlan()
-			await applyPlan(plan);
-		} catch (error) {
-			console.error("[Similarity] Failed to refresh indexing queue:", error);
-		}
+		do {
+			restartRequested = false;
+			try {
+				const plan = await deps.buildIndexSyncPlan()
+				await applyPlan(plan);
+			} catch (error) {
+				console.error("[Similarity] Failed to refresh indexing queue:", error);
+			}
+		} while (restartRequested);
 	}
 
 	async function applyPlan(plan: IndexSyncPlan) {
@@ -36,12 +40,14 @@ export function makeSynchronizeIndex(deps: SynchronizeIndexDeps): SynchronizeInd
 		await Promise.allSettled(jobs);
 	}
 
-	return async function synchronizeIndex() {
-		if (inFlight) return await inFlight;
-
-		inFlight = run().finally(() => {
-			inFlight = null;
+	return function synchronizeIndex(): Promise<void> {
+		if (running) {
+			restartRequested = true;
+			return running;
+		}
+		running = run().finally(() => {
+			running = null;
 		});
-		return await inFlight;
+		return running;
 	};
 }

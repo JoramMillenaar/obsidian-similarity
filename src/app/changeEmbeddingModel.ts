@@ -17,15 +17,6 @@ type ChangeEmbeddingModelDeps = {
 };
 
 export function makeChangeEmbeddingModel(deps: ChangeEmbeddingModelDeps): ChangeEmbeddingModelUseCase {
-	async function rebuild(): Promise<void> {
-		try {
-			await deps.synchronizeIndex().catch(() => undefined);
-			await deps.synchronizeIndex();
-		} catch (error) {
-			console.error("[Similarity] Reindex after model change failed:", error);
-		}
-	}
-
 	return async function changeEmbeddingModel(modelId: EmbeddingModelId): Promise<void> {
 		if (deps.modelSession.current() === modelId) return;
 
@@ -46,6 +37,6 @@ export function makeChangeEmbeddingModel(deps: ChangeEmbeddingModelDeps): Change
 
 		deps.status.update(`Switched to ${modelId}.`, 4000);
 
-		void rebuild();
+		void deps.synchronizeIndex();
 	}
 }
