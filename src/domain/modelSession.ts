@@ -42,4 +42,16 @@ export class ModelSession {
 		if (this.state.status !== "switching") return;
 		this.state = {status: "ready", modelId: this.state.from};
 	}
+
+	async transition<T>(to: EmbeddingModelId, work: () => Promise<T>): Promise<T> {
+		this.beginSwitch(to);
+		try {
+			const result = await work();
+			this.completeSwitch();
+			return result;
+		} catch (error) {
+			this.abortSwitch();
+			throw error;
+		}
+	}
 }

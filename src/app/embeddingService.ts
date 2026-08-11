@@ -1,5 +1,6 @@
 import { EmbeddingPort, EmbedOptions, EmbeddingResult } from "../ports";
-import { EmbeddingModelConfig } from "../types";
+import { EmbeddingModelId } from "../types";
+import { EMBEDDING_MODELS } from "../constants";
 import { JobQueue, JobQueueObserver, Priority } from "./jobQueue";
 import { hashText } from "../domain/text";
 
@@ -15,10 +16,10 @@ export class EmbeddingService {
 		return this.queue.subscribe(observer);
 	}
 
-	async swap(config: EmbeddingModelConfig): Promise<void> {
+	async swap(modelId: EmbeddingModelId): Promise<void> {
 		await this.queue.reset();
 		this.embedder.unload();
-		await this.embedder.load(config);
+		await this.embedder.load(EMBEDDING_MODELS[modelId]);
 	}
 
 	unload(): void {
