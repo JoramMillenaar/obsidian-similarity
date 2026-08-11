@@ -4,7 +4,8 @@ export type Embedding = Int8Array;
 export type EmbeddingModelId =
 	| "xenova-all-MiniLM-L6-v2"
 	| "xenova-paraphrase-multilingual-MiniLM-L12-v2"
-	| "xenova-bge-small-zh-v1.5";
+	| "xenova-bge-small-zh-v1.5"
+	| "xenova-multilingual-e5-small";
 
 export type PoolingStrategy = "mean" | "cls";
 
@@ -15,6 +16,7 @@ export type EmbeddingModelConfig = {
 	dim: number;
 	maxTokens: number;
 	pooling: PoolingStrategy;
+	prefix?: string;
 };
 
 export type RawNote = {

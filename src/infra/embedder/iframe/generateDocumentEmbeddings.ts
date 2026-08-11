@@ -3,18 +3,14 @@ import { normalizeEmbedding, quantizeEmbedding } from 'src/domain/embedding';
 import { EmbeddedChunk, EmbeddingResult } from 'src/ports/embeddingPort';
 import { EmbeddingModel } from './embeddingModel';
 
-// Reserve two tokens for the [CLS]/[SEP] specials the tokenizer adds on top
-// of the model's max sequence length.
-const SPECIAL_TOKEN_RESERVE = 2;
-
 export type GenerateDocumentEmbeddings = (text: string, maxOverlapPercent?: number, maxChunkSize?: number) => Promise<EmbeddingResult>;
 
 /** Orchestrates the domain chunker against the model adapter — the iframe's use case. */
 export function makeGenerateDocumentEmbeddings(model: EmbeddingModel): GenerateDocumentEmbeddings {
-	const chunkTokenBudget = model.config.maxTokens - SPECIAL_TOKEN_RESERVE;
-
 	return async function generateDocumentEmbeddings(text, maxOverlapPercent, maxChunkSize) {
 		await model.ready;
+
+		const chunkTokenBudget = model.getChunkTokenBudget();
 
 		const metadata = {
 			embeddingModelId: model.config.id,

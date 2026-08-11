@@ -27,6 +27,15 @@ export const EMBEDDING_MODELS: Record<EmbeddingModelId, EmbeddingModelConfig> = 
 		maxTokens: 512,
 		pooling: "cls",
 	},
+	"xenova-multilingual-e5-small": {
+		id: "xenova-multilingual-e5-small",
+		label: "Multilingual (best quality)",
+		repoId: "Xenova/multilingual-e5-small",
+		dim: 384,
+		maxTokens: 512,
+		pooling: "mean",
+		prefix: "query: ",
+	},
 };
 
 export const DEFAULT_EMBEDDING_MODEL_ID: EmbeddingModelId = "xenova-all-MiniLM-L6-v2";
