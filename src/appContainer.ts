@@ -38,7 +38,7 @@ import { GetNoteTextUseCase, makeGetNoteText } from "./app/getNoteText";
 import { makeBuildIndexSyncPlan } from "./app/buildIndexSyncPlan";
 import { LiveNoteSync, makeLiveNoteSync } from "./app/liveNoteSync";
 import { IndexingWorker } from "./app/indexingWorker";
-import { ChangeEmbeddingModelUseCase, makeChangeEmbeddingModel } from "./app/changeEmbeddingModel";
+import { makeChangeEmbeddingModel } from "./app/changeEmbeddingModel";
 import { makeRunLegacyMigrations, RunLegacyMigrationsUseCase } from "./app/legacyMigrations";
 import { DEFAULT_EMBEDDING_MODEL_ID } from "./constants";
 
@@ -72,7 +72,6 @@ export class AppContainer {
 	readonly getIndexingState: GetIndexingStateUseCase;
 	readonly isIgnoredPath: IsIgnoredPath;
 	readonly updateSettings: UpdateSettingsUseCase;
-	readonly changeEmbeddingModel: ChangeEmbeddingModelUseCase;
 
 	private readonly disposeIndexingProgress: () => void;
 
@@ -174,14 +173,7 @@ export class AppContainer {
 			onNoteUpdated: () => this.similarityView.refreshResults(),
 		});
 
-		this.updateSettings = makeUpdateSettings({
-			settingsRepo: this.settingsRepo,
-			indexStorage: this.indexStorage,
-			synchronizeIndex: this.synchronizeIndex,
-			modelSession: this.modelSession,
-		});
-
-		this.changeEmbeddingModel = makeChangeEmbeddingModel({
+		const changeEmbeddingModel = makeChangeEmbeddingModel({
 			embedder: this.embedder,
 			worker: this.indexingWorker,
 			settingsRepo: this.settingsRepo,
@@ -189,6 +181,14 @@ export class AppContainer {
 			synchronizeIndex: this.synchronizeIndex,
 			status: this.status,
 			modelSession: this.modelSession,
+		});
+
+		this.updateSettings = makeUpdateSettings({
+			settingsRepo: this.settingsRepo,
+			indexStorage: this.indexStorage,
+			synchronizeIndex: this.synchronizeIndex,
+			modelSession: this.modelSession,
+			changeEmbeddingModel,
 		});
 	}
 

@@ -16,7 +16,6 @@ export default class RelatedNotes extends Plugin {
 		this.addSettingTab(new SettingView(this.app, this, {
 			settingsRepo: this.appContainer.settingsRepo,
 			updateSettings: this.appContainer.updateSettings,
-			changeEmbeddingModel: this.appContainer.changeEmbeddingModel
 		}));
 
 		this.registerView(

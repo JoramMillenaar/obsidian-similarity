@@ -5,12 +5,10 @@ import { DEFAULT_SETTINGS, EMBEDDING_MODELS, MAX_OVERLAP_PERCENT } from "../cons
 import { EmbeddingModelId, SimilaritySettings } from "../types";
 import { SettingsRepository } from "../ports";
 import { UpdateSettingsUseCase } from "../app/updateSettings";
-import { ChangeEmbeddingModelUseCase } from "../app/changeEmbeddingModel";
 
 export type SettingsViewDeps = {
 	settingsRepo: SettingsRepository,
 	updateSettings: UpdateSettingsUseCase,
-	changeEmbeddingModel: ChangeEmbeddingModelUseCase,
 }
 
 const EMBEDDING_MODEL_OPTIONS: Record<string, string> = Object.fromEntries(
@@ -204,28 +202,27 @@ export class SettingView extends PluginSettingTab {
 	}): Promise<void> {
 		const modelChanged = draft.modelId !== this.cachedSettings.embeddingModelId;
 
-		if (!modelChanged) {
-			await this.deps.updateSettings({ignoredPaths: draft.ignoredPaths, ...draft.indexing});
-			this.applySettings(await this.deps.settingsRepo.get());
-			new Notice("Settings saved.");
-			return;
+		if (modelChanged) {
+			this.saving = true;
+			this.refreshDomState?.();
 		}
 
-		this.saving = true;
-		this.refreshDomState?.();
-
 		try {
-			await this.deps.settingsRepo.updatePartial({
+			await this.deps.updateSettings({
 				ignoredPaths: draft.ignoredPaths,
 				...draft.indexing,
+				...(modelChanged ? {embeddingModelId: draft.modelId} : {}),
 			});
-			await this.deps.changeEmbeddingModel(draft.modelId);
 			new Notice(
-				`Settings saved. Switched to ${EMBEDDING_MODELS[draft.modelId].label}; reindexing in the background.`,
+				modelChanged
+					? `Settings saved. Switched to ${EMBEDDING_MODELS[draft.modelId].label}; reindexing in the background.`
+					: "Settings saved. Reindexing in the background.",
 			);
 		} catch (error) {
 			const message = error instanceof Error ? error.message : String(error);
-			new Notice(`Could not switch embedding model: ${message}`);
+			new Notice(
+				modelChanged ? `Could not switch embedding model: ${message}` : `Could not save settings: ${message}`,
+			);
 		} finally {
 			this.applySettings(await this.deps.settingsRepo.get());
 			this.saving = false;
