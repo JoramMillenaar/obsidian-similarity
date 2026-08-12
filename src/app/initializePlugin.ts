@@ -10,7 +10,9 @@ export async function initializePlugin(app: AppContainer): Promise<void> {
 		const {embeddingModelId} = await app.settingsRepo.get();
 		app.modelSession.hydrate(embeddingModelId);
 		const config = EMBEDDING_MODELS[embeddingModelId];
+		const loadStartedAt = Date.now();
 		await app.embedder.load(config, (progress) => {
+			if (Date.now() - loadStartedAt < 1000) return;
 			app.status.update(`Downloading ${config.label} model… ${Math.round(progress.progress)}%`);
 		});
 

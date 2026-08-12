@@ -30,7 +30,9 @@ export function makeChangeEmbeddingModel(deps: ChangeEmbeddingModelDeps): Change
 				deps.status.update(`Loading ${modelId} model…`);
 
 				deps.embedder.unload();
+				const loadStartedAt = Date.now();
 				await deps.embedder.load(EMBEDDING_MODELS[modelId], (progress) => {
+					if (Date.now() - loadStartedAt < 1000) return;
 					deps.status.update(`Downloading ${modelId} model… ${Math.round(progress.progress)}%`);
 				});
 
