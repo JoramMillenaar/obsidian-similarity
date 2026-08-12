@@ -267,10 +267,6 @@ export class SearchModal extends SuggestModal<RelatedNote> {
 					value: String(Math.min(banner.processed, banner.total)),
 				},
 			});
-			progressRow.createSpan({
-				cls: "similarity-index-banner-label",
-				text: banner.progressLabel ?? "",
-			});
 		}
 	}
 

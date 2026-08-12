@@ -138,10 +138,6 @@ export class SimilarNotesListView extends ItemView {
 					value: String(Math.min(banner.processed, banner.total)),
 				},
 			});
-			progressRow.createSpan({
-				cls: "similarity-index-banner-label",
-				text: banner.progressLabel ?? "",
-			});
 		}
 	}
 
