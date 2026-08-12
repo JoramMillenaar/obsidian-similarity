@@ -30,7 +30,9 @@ export function makeChangeEmbeddingModel(deps: ChangeEmbeddingModelDeps): Change
 				deps.status.update(`Loading ${modelId} model…`);
 
 				deps.embedder.unload();
-				await deps.embedder.load(EMBEDDING_MODELS[modelId]);
+				await deps.embedder.load(EMBEDDING_MODELS[modelId], (progress) => {
+					deps.status.update(`Downloading ${modelId} model… ${Math.round(progress.progress)}%`);
+				});
 
 				await deps.indexStorage.repair(modelId);
 			});

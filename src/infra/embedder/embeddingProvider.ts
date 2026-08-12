@@ -1,13 +1,13 @@
 import { IframeMessenger } from "src/infra/embedder/messagingService";
-import { EmbeddingPort, EmbedOptions, EmbeddingResult } from "../../ports";
+import { EmbeddingPort, EmbedOptions, EmbeddingResult, ModelLoadProgress } from "../../ports";
 import { EmbeddingModelConfig } from "../../types";
 
 /** One-shot: construct, `load(config)` once, `unload()` when done. Never reused across models. */
 export class EmbeddingProvider implements EmbeddingPort {
 	private iframeMessenger: IframeMessenger | null = null;
 
-	async load(config: EmbeddingModelConfig): Promise<void> {
-		this.iframeMessenger = new IframeMessenger('related-text-iframe', __IFRAME_CONTENTS_PLACEHOLDER__, config);
+	async load(config: EmbeddingModelConfig, onProgress?: (progress: ModelLoadProgress) => void): Promise<void> {
+		this.iframeMessenger = new IframeMessenger('related-text-iframe', __IFRAME_CONTENTS_PLACEHOLDER__, config, onProgress);
 		await this.iframeMessenger.initialize();
 	}
 

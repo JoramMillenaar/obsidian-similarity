@@ -1,4 +1,4 @@
-import { EmbeddingResult } from "../../ports";
+import { EmbeddingResult, ModelLoadProgress } from "../../ports";
 import { EmbeddingModelConfig, IframeMessage } from "../../types";
 
 const EMBED_TIMEOUT_MS = 30000;
@@ -8,7 +8,12 @@ export class IframeMessenger {
     private requestIdCounter = 0;
     private pendingRequests = new Map<number, { resolve: (data: EmbeddingResult) => void; reject: (error: Error) => void; timeoutId: number }>();
 
-    constructor(private iframeId: string, private workerScript: string, private modelConfig: EmbeddingModelConfig) {}
+    constructor(
+        private iframeId: string,
+        private workerScript: string,
+        private modelConfig: EmbeddingModelConfig,
+        private onProgress?: (progress: ModelLoadProgress) => void,
+    ) {}
 
     async initialize(): Promise<void> {
         if (this.iframe) return;
@@ -43,6 +48,11 @@ export class IframeMessenger {
     private onMessageReceived = (event: MessageEvent) => {
         if (event.origin !== window.location.origin) return;
         if (event.source !== this.iframe?.contentWindow) return;
+
+        if (event.data?.type === 'model-load-progress') {
+            this.onProgress?.({ progress: event.data.progress, file: event.data.file });
+            return;
+        }
 
         const { requestId, data, error } = event.data as { requestId: number; data: EmbeddingResult; error?: string };
         const pending = this.pendingRequests.get(requestId);

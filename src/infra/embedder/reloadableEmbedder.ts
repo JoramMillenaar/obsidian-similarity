@@ -1,4 +1,4 @@
-import { EmbeddingPort, EmbedOptions, EmbeddingResult } from "../../ports";
+import { EmbeddingPort, EmbedOptions, EmbeddingResult, ModelLoadProgress } from "../../ports";
 import { EmbeddingModelConfig } from "../../types";
 import { EmbeddingProvider } from "./embeddingProvider";
 
@@ -6,8 +6,8 @@ import { EmbeddingProvider } from "./embeddingProvider";
 export class ReloadableEmbedder implements EmbeddingPort {
 	private current: EmbeddingProvider | null = null;
 
-	async load(config: EmbeddingModelConfig): Promise<void> {
-		await this.reload(config);
+	async load(config: EmbeddingModelConfig, onProgress?: (progress: ModelLoadProgress) => void): Promise<void> {
+		await this.reload(config, onProgress);
 	}
 
 	async embed(text: string, options: EmbedOptions): Promise<EmbeddingResult | null> {
@@ -20,9 +20,9 @@ export class ReloadableEmbedder implements EmbeddingPort {
 		this.current = null;
 	}
 
-	async reload(config: EmbeddingModelConfig): Promise<void> {
+	async reload(config: EmbeddingModelConfig, onProgress?: (progress: ModelLoadProgress) => void): Promise<void> {
 		this.current?.unload();
 		this.current = new EmbeddingProvider();
-		await this.current.load(config);
+		await this.current.load(config, onProgress);
 	}
 }

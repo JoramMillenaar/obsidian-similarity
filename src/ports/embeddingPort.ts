@@ -22,10 +22,15 @@ export type EmbeddingResult = {
 	metadata: EmbeddingMetadata;
 };
 
+export type ModelLoadProgress = {
+	progress: number;
+	file: string;
+};
+
 export interface EmbeddingPort {
 	embed(text: string, options: EmbedOptions): Promise<EmbeddingResult | null>;
 
-	load(config: EmbeddingModelConfig): Promise<void>;
+	load(config: EmbeddingModelConfig, onProgress?: (progress: ModelLoadProgress) => void): Promise<void>;
 
 	unload(): void;
 }

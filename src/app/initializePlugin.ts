@@ -9,7 +9,10 @@ export async function initializePlugin(app: AppContainer): Promise<void> {
 
 		const {embeddingModelId} = await app.settingsRepo.get();
 		app.modelSession.hydrate(embeddingModelId);
-		await app.embedder.load(EMBEDDING_MODELS[embeddingModelId]);
+		const config = EMBEDDING_MODELS[embeddingModelId];
+		await app.embedder.load(config, (progress) => {
+			app.status.update(`Downloading ${config.label} model… ${Math.round(progress.progress)}%`);
+		});
 
 		await app.indexStorage.repair(embeddingModelId);
 

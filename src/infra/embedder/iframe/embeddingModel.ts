@@ -1,9 +1,11 @@
-import { env, pipeline, FeatureExtractionPipeline } from '@huggingface/transformers';
+import { env, pipeline, FeatureExtractionPipeline, ProgressInfo } from '@huggingface/transformers';
 import { EmbeddingModelConfig } from 'src/types';
 
 env.allowLocalModels = false;
 
 export type Device = 'wasm' | 'webgpu';
+export type ModelLoadProgress = { progress: number; file: string };
+export type ModelLoadProgressCallback = (progress: ModelLoadProgress) => void;
 
 export class EmbeddingModel {
 	#pipeline: FeatureExtractionPipeline | null = null;
@@ -12,18 +14,21 @@ export class EmbeddingModel {
 	readonly config: EmbeddingModelConfig;
 	ready: Promise<void>;
 
-	constructor(config: EmbeddingModelConfig) {
+	constructor(config: EmbeddingModelConfig, onProgress?: ModelLoadProgressCallback) {
 		this.config = config;
-		this.ready = this.#initialize();
+		this.ready = this.#initialize(onProgress);
 	}
 
-	async #initialize(): Promise<void> {
+	async #initialize(onProgress?: ModelLoadProgressCallback): Promise<void> {
 		const webgpuAvailable = (navigator as Navigator & { gpu?: unknown }).gpu != null;
 		this.#device = webgpuAvailable ? 'webgpu' : 'wasm';
 
 		this.#pipeline = await pipeline('feature-extraction', this.config.repoId, {
 			device: this.#device,
 			dtype: webgpuAvailable ? 'fp16' : 'q8',
+			progress_callback: onProgress ? (info: ProgressInfo) => {
+				if (info.status === 'progress') onProgress({ progress: info.progress, file: info.file });
+			} : undefined,
 		});
 	}
 
