@@ -19,7 +19,7 @@ export function makeRunLegacyMigrations(deps: LegacyMigrationsDeps): RunLegacyMi
 		if (!("schemaVersion" in raw) && !("embeddingDim" in raw) && !("index" in raw)) return;
 
 		const legacySchemaVersion = typeof raw.schemaVersion === "number" ? raw.schemaVersion : 1;
-		const legacyIndex: IndexMetadata = Array.isArray(raw.index) ? raw.index : [];
+		const legacyIndex: IndexMetadata = Array.isArray(raw.index) ? raw.index as IndexMetadata : [];
 		const legacyDim = typeof raw.embeddingDim === "number" ? raw.embeddingDim : 0;
 		const settings = normalizeSettings(raw.settings as Partial<SimilaritySettings> | undefined);
 

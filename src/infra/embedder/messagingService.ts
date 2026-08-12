@@ -3,6 +3,13 @@ import { EmbeddingModelConfig, IframeMessage } from "../../types";
 
 const EMBED_TIMEOUT_MS = 30000;
 
+type ProgressMessage = { type: 'model-load-progress'; progress: number; file: string };
+type ResultMessage = { requestId: number; data: EmbeddingResult; error?: string };
+
+function isProgressMessage(message: ProgressMessage | ResultMessage): message is ProgressMessage {
+    return 'type' in message && message.type === 'model-load-progress';
+}
+
 export class IframeMessenger {
     private iframe: HTMLIFrameElement | null = null;
     private requestIdCounter = 0;
@@ -49,12 +56,14 @@ export class IframeMessenger {
         if (event.origin !== window.location.origin) return;
         if (event.source !== this.iframe?.contentWindow) return;
 
-        if (event.data?.type === 'model-load-progress') {
-            this.onProgress?.({ progress: event.data.progress, file: event.data.file });
+        const message = event.data as ProgressMessage | ResultMessage;
+
+        if (isProgressMessage(message)) {
+            this.onProgress?.({ progress: message.progress, file: message.file });
             return;
         }
 
-        const { requestId, data, error } = event.data as { requestId: number; data: EmbeddingResult; error?: string };
+        const { requestId, data, error } = message;
         const pending = this.pendingRequests.get(requestId);
 
         if (!pending) return;

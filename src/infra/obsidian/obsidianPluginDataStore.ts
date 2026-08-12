@@ -8,7 +8,7 @@ export class ObsidianPluginDataStore implements PluginDataStore {
 	}
 
 	async read(): Promise<SimilarityPluginData> {
-		return normalizePluginData(await this.readRaw() as Partial<SimilarityPluginData>);
+		return normalizePluginData(await this.readRaw());
 	}
 
 	async readRaw(): Promise<Record<string, unknown>> {
