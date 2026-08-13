@@ -31,15 +31,19 @@ export type DecodedEmbeddings = {
 	dtype: number;
 	dim: number;
 	count: number;
-	embeddings: Float32Array;
+	embeddings: Int8Array;
 };
 
 export function isBinaryLayoutValid(byteLength: number, dim: number, count: number): boolean {
 	return byteLength - HEADER_SIZE === count * dim;
 }
 
-/** Allocates exactly HEADER_SIZE + count*dim bytes and returns that exact-sized buffer. */
-export function encodeEmbeddings(embeddings: Float32Array, dim: number): ArrayBuffer {
+/**
+ * Allocates exactly HEADER_SIZE + count*dim bytes and returns that exact-sized buffer.
+ * Takes already-quantized int8 (see domain/embedding.ts#quantizeEmbedding) — this is a
+ * byte copy into the framed layout, not a quantization step.
+ */
+export function encodeEmbeddings(embeddings: Int8Array, dim: number): ArrayBuffer {
 	if (embeddings.length === 0) {
 		const buffer = new ArrayBuffer(HEADER_SIZE);
 		writeHeader(buffer, dim, 0);
@@ -56,17 +60,12 @@ export function encodeEmbeddings(embeddings: Float32Array, dim: number): ArrayBu
 	const buffer = new ArrayBuffer(HEADER_SIZE + count * dim);
 	writeHeader(buffer, dim, count);
 
-	// Manual clamp: Int8Array assignment wraps (128 -> -128) instead of
-	// saturating, so a value that rounds past +127 must be pinned first.
 	const body = new Int8Array(buffer, HEADER_SIZE);
-	for (let i = 0; i < embeddings.length; i++) {
-		const q = Math.round(embeddings[i] * QUANT_SCALE);
-		body[i] = q > 127 ? 127 : q < -127 ? -127 : q;
-	}
+	body.set(embeddings);
 	return buffer;
 }
 
-/** Dequantizes int8 body back into a fresh Float32Array (not zero-copy — int8 storage requires a scale-up). */
+/** Returns a zero-copy int8 view over the body — no dequantization. Similarity math is done directly on int8, see domain/embedding.ts. */
 export function decodeEmbeddings(buffer: ArrayBuffer): DecodedEmbeddings {
 	if (buffer.byteLength < HEADER_SIZE) {
 		throw new Error("decodeEmbeddings: buffer too small for header");
@@ -91,11 +90,7 @@ export function decodeEmbeddings(buffer: ArrayBuffer): DecodedEmbeddings {
 		throw new Error("decodeEmbeddings: layout size mismatch");
 	}
 
-	const body = new Int8Array(buffer, HEADER_SIZE, dim * count);
-	const embeddings = new Float32Array(body.length);
-	for (let i = 0; i < body.length; i++) {
-		embeddings[i] = body[i] / QUANT_SCALE;
-	}
+	const embeddings = new Int8Array(buffer, HEADER_SIZE, dim * count);
 	return {version, dtype, dim, count, embeddings};
 }
 

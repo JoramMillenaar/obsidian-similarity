@@ -1,6 +1,6 @@
-import { RelatedNote } from "../types";
+import { Embedding, RelatedNote } from "../types";
 import { IndexRepository } from "../ports";
-import { maxPairwiseSimilarity, normalizeEmbedding } from "../domain/embedding";
+import { maxPairwiseSimilarity } from "../domain/embedding";
 import { EmbedTextUseCase } from "./embedText";
 import { GetNoteTextUseCase } from "./getNoteText";
 
@@ -26,7 +26,7 @@ export function makeGetSimilarNotes(deps: {
 		} = args;
 
 		// Prefer using existing embeddings if we have a noteId in the index.
-		let queryChunks: number[][] | undefined;
+		let queryChunks: Embedding[] | undefined;
 
 		if (noteId) {
 			const existing = await deps.indexRepo.findById(noteId);
@@ -43,16 +43,16 @@ export function makeGetSimilarNotes(deps: {
 					return [];
 				}
 
-				const embedded = await deps.embedText(text, "high").catch(() => null);
-				if (!embedded?.length) return [];
-				queryChunks = embedded.map((chunk) => normalizeEmbedding(chunk.embedding));
+				const embedded = await deps.embedText(text).catch(() => null);
+				if (!embedded?.chunks.length) return [];
+				queryChunks = embedded.chunks.map((chunk) => chunk.embedding);
 			} else {
 				if (!text) {
 					throw new Error("getRelatedNotes: need either noteId present in index, or text to embed.");
 				}
-				const embedded = await deps.embedText(text, "high");
-				if (!embedded?.length) throw new Error("getRelatedNotes: could not embed text");
-				queryChunks = embedded.map((chunk) => normalizeEmbedding(chunk.embedding));
+				const embedded = await deps.embedText(text);
+				if (!embedded?.chunks.length) throw new Error("getRelatedNotes: could not embed text");
+				queryChunks = embedded.chunks.map((chunk) => chunk.embedding);
 			}
 		}
 

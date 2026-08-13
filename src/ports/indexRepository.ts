@@ -1,4 +1,4 @@
-import { IndexedNote } from "../types";
+import { EmbeddingModelId, IndexedNote } from "../types";
 
 export interface IndexRepository {
 	findById(noteId: string): Promise<IndexedNote | null>;
@@ -7,15 +7,13 @@ export interface IndexRepository {
 
 	isEmpty(): Promise<boolean>;
 
-	upsert(note: IndexedNote): Promise<void>;
+	upsert(note: IndexedNote, embeddingModelId: EmbeddingModelId): Promise<void>;
 
-	upsertMany(notes: IndexedNote[]): Promise<void>;
+	upsertMany(notes: IndexedNote[], embeddingModelId: EmbeddingModelId): Promise<void>;
 
 	remove(noteId: string): Promise<void>;
 
 	clear(): Promise<void>;
 
 	rename(oldId: string, newId: string): Promise<void>;
-
-	flush(): Promise<void>;
 }

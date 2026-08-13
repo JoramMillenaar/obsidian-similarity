@@ -1,5 +1,5 @@
 import { Notice, Plugin, WorkspaceLeaf } from "obsidian";
-import { VIEW_TYPE_SIMILARITY } from "../../ui/SimilarNotesListView";
+import { SimilarNotesListView, VIEW_TYPE_SIMILARITY } from "../../ui/SimilarNotesListView";
 import { ActivateOptions, SimilarityView } from "../../ports";
 
 export class ObsidianSimilarityView implements SimilarityView {
@@ -31,6 +31,13 @@ export class ObsidianSimilarityView implements SimilarityView {
 
 		if (focus) {
 			workspace.setActiveLeaf(leaf, {focus: true});
+		}
+	}
+
+	refreshResults(): void {
+		const leaf = this.plugin.app.workspace.getLeavesOfType(VIEW_TYPE_SIMILARITY).first();
+		if (leaf && leaf.view instanceof SimilarNotesListView) {
+			void leaf.view.refresh();
 		}
 	}
 }

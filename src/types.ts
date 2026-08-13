@@ -1,4 +1,21 @@
-export type Embedding = number[];
+/** Quantized unit-vector embedding: see domain/embedding.ts and domain/embeddingCodec.ts. */
+export type Embedding = Int8Array;
+
+export type EmbeddingModelId =
+	| "xenova-all-MiniLM-L6-v2"
+	| "xenova-paraphrase-multilingual-MiniLM-L12-v2"
+	| "xenova-bge-small-zh-v1.5";
+
+export type PoolingStrategy = "mean" | "cls";
+
+export type EmbeddingModelConfig = {
+	id: EmbeddingModelId;
+	label: string;
+	repoId: string;
+	dim: number;
+	maxTokens: number;
+	pooling: PoolingStrategy;
+};
 
 export type RawNote = {
 	id: string;
@@ -13,7 +30,7 @@ export type NoteIndexCandidate = {
 };
 
 export type NoteChunk = {
-	embedding: number[];
+	embedding: Embedding;
 	start: number;
 	end: number;
 	hash: string;
@@ -35,6 +52,7 @@ export interface IframeMessage {
 	requestId: number;
 	payload: string;
 	maxOverlapPercent?: number;
+	maxChunkSize?: number;
 }
 
 export type IndexingQueueSnapshot = {
@@ -63,46 +81,32 @@ export interface SimilaritySettings {
 	maxRawMarkdownChars: number;
 	maxExtractedChars: number;
 	maxOverlapPercent: number;
+	embeddingModelId: EmbeddingModelId;
 }
-
-/** Bumped when the on-disk index shape changes. 1 = inline float64 JSON embeddings (legacy). 2 = embeddings in the binary sidecar. */
 export const SCHEMA_VERSION = 2;
 
-export type ChunkEntryV2 = {
+export type ChunkMetadata = {
 	row: number;
 	start: number;
 	end: number;
 	hash: string;
 };
 
-export type IndexEntryV2 = {
+export type NoteIndexMetadata = {
 	id: string;
 	contentHash: string;
 	updatedAt: string;
-	chunks: ChunkEntryV2[];
+	chunks: ChunkMetadata[];
 };
 
-export type IndexV2 = IndexEntryV2[];
-
-/**
- * The v1 on-disk shape: embeddings inline as float64 JSON arrays. Frozen, and
- * deliberately decoupled from IndexedNote so the live type can evolve freely.
- * v1 vectors are never migrated forward — the health check detects them and
- * discards the index so it rebuilds under the current representation.
- */
-export type LegacyNoteV1 = {
-	id: string;
-	embedding: number[];
-	contentHash: string;
-	updatedAt: string;
-};
-
-export type LegacyIndexV1 = LegacyNoteV1[];
+export type IndexMetadata = NoteIndexMetadata[];
 
 export interface SimilarityPluginData {
 	settings: SimilaritySettings;
+}
+
+export interface ModelIndexFile {
 	schemaVersion: number;
-	/** Embedding vector length backing the binary sidecar. 0 until first save. */
 	embeddingDim: number;
-	index: LegacyIndexV1 | IndexV2;
+	index: IndexMetadata;
 }

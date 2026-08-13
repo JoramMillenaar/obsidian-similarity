@@ -1,29 +1,36 @@
-import { IframeMessage } from 'src/types';
+import { EmbeddingModelConfig, IframeMessage } from 'src/types';
 import { EmbeddingModel } from './embeddingModel';
 import { makeGenerateDocumentEmbeddings } from './generateDocumentEmbeddings';
 
-/**
- * Composition root for the iframe bundle (see esbuild.config.mjs — this file
- * is the entrypoint). Wires the model adapter to the embedding use case and
- * speaks the postMessage transport protocol to the host page.
- */
-const model = new EmbeddingModel();
+declare global {
+	interface Window {
+		__EMBEDDING_MODEL_CONFIG__: EmbeddingModelConfig;
+	}
+}
+
+const model = new EmbeddingModel(window.__EMBEDDING_MODEL_CONFIG__, (progress) => {
+	window.parent.postMessage({ type: 'model-load-progress', progress: progress.progress, file: progress.file }, window.origin);
+});
 const generateDocumentEmbeddings = makeGenerateDocumentEmbeddings(model);
 
 async function handleMessage(event: MessageEvent<IframeMessage>): Promise<void> {
-	const { requestId, payload, maxOverlapPercent } = event.data;
+	const { requestId, payload, maxOverlapPercent, maxChunkSize } = event.data;
 
 	if (payload === 'ping') {
 		await model.ready;
 		(event.source as Window).postMessage(
-			{ requestId, data: [], device: model.getDevice() },
+			{
+				requestId,
+				data: { chunks: [], metadata: { embeddingModelId: model.config.id, maxOverlapPercent: 0 } },
+				device: model.getDevice(),
+			},
 			window.origin
 		);
 		return;
 	}
 
 	try {
-		const embeddings = await generateDocumentEmbeddings(payload, maxOverlapPercent);
+		const embeddings = await generateDocumentEmbeddings(payload, maxOverlapPercent, maxChunkSize);
 		(event.source as Window).postMessage({ requestId, data: embeddings }, window.origin);
 	} catch (error) {
 		const message = error instanceof Error ? error.message : String(error);

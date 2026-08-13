@@ -1,17 +1,13 @@
-import { IndexedNote } from "../types";
+import { EmbeddingModelId, IndexedNote } from "../types";
 import { IndexStorage } from "../ports";
 
-/**
- * Wraps an IndexStorage so that rapid rewrite() calls coalesce into at most
- * one underlying disk write per intervalMs. Throttles rather than debounces:
- * a pending timer is not reset by later calls, so continuous writes still
- * flush at a steady cadence instead of being starved indefinitely.
- *
- * getAll()/isEmpty() serve the latest unflushed index from memory so callers
- * never observe stale data during the throttle window.
- */
+type PendingWrite = {
+	embeddingModelId: EmbeddingModelId;
+	index: IndexedNote[];
+};
+
 export class ThrottledIndexStorage implements IndexStorage {
-	private pending: IndexedNote[] | null = null;
+	private pending: PendingWrite | null = null;
 	private timer: number | null = null;
 	private flushing: Promise<void> = Promise.resolve();
 
@@ -21,24 +17,24 @@ export class ThrottledIndexStorage implements IndexStorage {
 	) {
 	}
 
-	async getAll(): Promise<IndexedNote[]> {
-		if (this.pending != null) return this.pending;
-		return await this.underlying.getAll();
+	async getAll(embeddingModelId: EmbeddingModelId): Promise<IndexedNote[]> {
+		if (this.pending != null && this.pending.embeddingModelId === embeddingModelId) return this.pending.index;
+		return await this.underlying.getAll(embeddingModelId);
 	}
 
-	async rewrite(index: IndexedNote[]): Promise<void> {
-		this.pending = index;
+	async rewrite(embeddingModelId: EmbeddingModelId, index: IndexedNote[]): Promise<void> {
+		this.pending = {embeddingModelId, index};
 		this.scheduleFlush();
 	}
 
-	async isEmpty(): Promise<boolean> {
-		if (this.pending != null) return this.pending.length === 0;
-		return await this.underlying.isEmpty();
+	async isEmpty(embeddingModelId: EmbeddingModelId): Promise<boolean> {
+		if (this.pending != null && this.pending.embeddingModelId === embeddingModelId) return this.pending.index.length === 0;
+		return await this.underlying.isEmpty(embeddingModelId);
 	}
 
-	async repair(): Promise<void> {
+	async repair(embeddingModelId: EmbeddingModelId): Promise<void> {
 		await this.flush();
-		await this.underlying.repair();
+		await this.underlying.repair(embeddingModelId);
 	}
 
 	async flush(): Promise<void> {
@@ -54,16 +50,18 @@ export class ThrottledIndexStorage implements IndexStorage {
 
 		this.timer = window.setTimeout(() => {
 			this.timer = null;
-			void this.runFlush();
+			void this.runFlush().catch((error) => {
+				console.error("[Similarity] Failed to write the index:", error);
+			});
 		}, this.intervalMs);
 	}
 
 	private runFlush(): Promise<void> {
-		this.flushing = this.flushing.then(async () => {
+		const done = this.flushing.then(async () => {
 			const snapshot = this.pending;
 			if (snapshot == null) return;
 
-			await this.underlying.rewrite(snapshot);
+			await this.underlying.rewrite(snapshot.embeddingModelId, snapshot.index);
 
 			if (this.pending === snapshot) {
 				this.pending = null;
@@ -72,6 +70,9 @@ export class ThrottledIndexStorage implements IndexStorage {
 				this.scheduleFlush();
 			}
 		});
-		return this.flushing;
+
+		this.flushing = done.catch(() => undefined);
+
+		return done;
 	}
 }

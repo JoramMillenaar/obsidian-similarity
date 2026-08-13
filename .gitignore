@@ -24,7 +24,8 @@ src/dev/
 
 # obsidian
 data.json
-embeddings.bin
+embeddings*.bin
+index*.json
 # ...but keep committed migration test fixtures (frozen golden vaults)
 !test/fixtures/**/data.json
 

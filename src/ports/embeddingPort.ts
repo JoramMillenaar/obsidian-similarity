@@ -1,17 +1,36 @@
+import { Embedding, EmbeddingModelConfig, EmbeddingModelId } from "../types";
+
 export interface EmbedOptions {
 	maxOverlapPercent: number;
+	maxChunkSize?: number;
 }
 
 export type EmbeddedChunk = {
-	embedding: number[];
+	embedding: Embedding;
 	start: number;
 	end: number;
 };
 
-export interface EmbeddingPort {
-	embed(text: string, options: EmbedOptions): Promise<EmbeddedChunk[] | null>;
+export type EmbeddingMetadata = {
+	embeddingModelId: EmbeddingModelId;
+	maxOverlapPercent: number;
+	maxChunkSize?: number;
+};
 
-	load(): Promise<void>;
+export type EmbeddingResult = {
+	chunks: EmbeddedChunk[];
+	metadata: EmbeddingMetadata;
+};
+
+export type ModelLoadProgress = {
+	progress: number;
+	file: string;
+};
+
+export interface EmbeddingPort {
+	embed(text: string, options: EmbedOptions): Promise<EmbeddingResult | null>;
+
+	load(config: EmbeddingModelConfig, onProgress?: (progress: ModelLoadProgress) => void): Promise<void>;
 
 	unload(): void;
 }

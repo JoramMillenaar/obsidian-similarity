@@ -1,13 +1,11 @@
-import { IndexedNote } from "../types";
+import { EmbeddingModelId, IndexedNote } from "../types";
 
 export interface IndexStorage {
-	getAll(): Promise<IndexedNote[]>;
+	getAll(embeddingModelId: EmbeddingModelId): Promise<IndexedNote[]>;
 
-	rewrite(index: IndexedNote[]): Promise<void>;
+	rewrite(embeddingModelId: EmbeddingModelId, index: IndexedNote[]): Promise<void>;
 
-	flush(): Promise<void>;
+	isEmpty(embeddingModelId: EmbeddingModelId): Promise<boolean>;
 
-	isEmpty(): Promise<boolean>;
-
-	repair(): Promise<void>;
+	repair(embeddingModelId: EmbeddingModelId): Promise<void>;
 }

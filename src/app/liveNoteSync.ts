@@ -1,6 +1,7 @@
 import { KeyedDebouncer } from "../domain/debouncer";
+import { Priority } from "../domain/priorityQueue";
 import { IndexRepository } from "../ports";
-import { IndexNoteUseCase } from "./indexNote";
+import { IndexTaskOutcome } from "./indexingWorker";
 
 
 export type LiveNoteSync = {
@@ -12,26 +13,47 @@ export type LiveNoteSync = {
 
 export type LiveNoteSyncDeps = {
 	indexRepo: IndexRepository;
-	indexNote: IndexNoteUseCase;
+	requestIndex: (noteId: string, priority: Priority) => Promise<IndexTaskOutcome>;
+	promoteIndex: (noteId: string, priority: Priority) => Promise<IndexTaskOutcome> | null;
 	updateDebouncer: KeyedDebouncer<string>;
+	onNoteUpdated?: (noteId: string) => void;
 };
 
 export function makeLiveNoteSync(deps: LiveNoteSyncDeps): LiveNoteSync {
+	async function handleView(noteId: string): Promise<void> {
+		const promoted = deps.promoteIndex(noteId, "medium");
+		if (promoted) {
+			await promoted;
+			return;
+		}
+
+		if (await deps.indexRepo.findById(noteId)) return;
+		await deps.requestIndex(noteId, "medium");
+	}
+
 	return {
 		view(noteId) {
-			// TODO: too expensive just do a queue check instead if you can.
-			void deps.indexNote(noteId, "medium");
+			void handleView(noteId).catch((error) => {
+				console.error("[Similarity] Indexing viewed note failed", error);
+			});
 		},
 
 		update(noteId) {
 			deps.updateDebouncer.schedule(noteId, async () => {
-				await deps.indexNote(noteId, "medium");
+				try {
+					await deps.requestIndex(noteId, "medium");
+				} catch (error) {
+					console.error("[Similarity] Indexing edited note failed", error);
+					return;
+				}
+				deps.onNoteUpdated?.(noteId);
 			});
 		},
 
 		async delete(noteId) {
 			try {
 				await deps.indexRepo.remove(noteId);
+				deps.onNoteUpdated?.(noteId);
 			} catch (error) {
 				console.error("[Similarity] Delete from index failed", error);
 			}
@@ -40,6 +62,7 @@ export function makeLiveNoteSync(deps: LiveNoteSyncDeps): LiveNoteSync {
 		async rename(oldId, newId) {
 			try {
 				await deps.indexRepo.rename(oldId, newId);
+				deps.onNoteUpdated?.(oldId);
 			} catch (error) {
 				console.error("[Similarity] Rename note failed", error);
 			}

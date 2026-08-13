@@ -1,12 +1,22 @@
 import { AppContainer } from "../appContainer";
+import { EMBEDDING_MODELS } from "../constants";
 
 export async function initializePlugin(app: AppContainer): Promise<void> {
 	app.status.update("Starting…");
 
 	try {
-		await app.embedder.load();
+		await app.runLegacyMigrations();
 
-		await app.indexStorage.repair();
+		const {embeddingModelId} = await app.settingsRepo.get();
+		app.modelSession.hydrate(embeddingModelId);
+		const config = EMBEDDING_MODELS[embeddingModelId];
+		const loadStartedAt = Date.now();
+		await app.embedder.load(config, (progress) => {
+			if (Date.now() - loadStartedAt < 1000) return;
+			app.status.update(`Downloading ${config.label} model… ${Math.round(progress.progress)}%`);
+		});
+
+		await app.indexStorage.repair(embeddingModelId);
 
 		app.status.update("Optimizing experience...");
 		void app.synchronizeIndex().catch((error) => {
@@ -20,4 +30,6 @@ export async function initializePlugin(app: AppContainer): Promise<void> {
 	}
 
 	await app.similarityView.activate({reveal: false, focus: false});
+
+	app.similarityView.refreshResults();
 }

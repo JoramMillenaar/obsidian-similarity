@@ -29,10 +29,6 @@ export function makeBuildIndexSyncPlan(deps: {
 			.map((entry) => entry.id)
 			.filter((id) => !candidateIds.has(id));
 
-		// A candidate needs (re-)seeding when it has no index entry yet, or its
-		// file was modified after it was last indexed. `indexNote`'s content-hash
-		// check is the backstop if mtime is wrong or imprecise — worst case a
-		// note is re-seeded and turns out unchanged, which is cheap.
 		const staleCandidates = candidates.filter((candidate) => {
 			const indexed = indexedById.get(candidate.id);
 			if (!indexed) return true;
