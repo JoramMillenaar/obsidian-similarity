@@ -50,12 +50,14 @@ export class ThrottledIndexStorage implements IndexStorage {
 
 		this.timer = window.setTimeout(() => {
 			this.timer = null;
-			void this.runFlush();
+			void this.runFlush().catch((error) => {
+				console.error("[Similarity] Failed to write the index:", error);
+			});
 		}, this.intervalMs);
 	}
 
 	private runFlush(): Promise<void> {
-		this.flushing = this.flushing.then(async () => {
+		const done = this.flushing.then(async () => {
 			const snapshot = this.pending;
 			if (snapshot == null) return;
 
@@ -68,6 +70,9 @@ export class ThrottledIndexStorage implements IndexStorage {
 				this.scheduleFlush();
 			}
 		});
-		return this.flushing;
+
+		this.flushing = done.catch(() => undefined);
+
+		return done;
 	}
 }

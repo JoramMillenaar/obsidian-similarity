@@ -2,6 +2,8 @@ import { EmbeddingResult, ModelLoadProgress } from "../../ports";
 import { EmbeddingModelConfig, IframeMessage } from "../../types";
 
 const EMBED_TIMEOUT_MS = 30000;
+const READY_PING_TIMEOUT_MS = 3000;
+const READY_STALL_TIMEOUT_MS = 120000;
 
 type ProgressMessage = { type: 'model-load-progress'; progress: number; file: string };
 type ResultMessage = { requestId: number; data: EmbeddingResult; error?: string };
@@ -13,6 +15,7 @@ function isProgressMessage(message: ProgressMessage | ResultMessage): message is
 export class IframeMessenger {
     private iframe: HTMLIFrameElement | null = null;
     private requestIdCounter = 0;
+    private lastIframeActivityAt = 0;
     private pendingRequests = new Map<number, { resolve: (data: EmbeddingResult) => void; reject: (error: Error) => void; timeoutId: number }>();
 
     constructor(
@@ -57,6 +60,7 @@ export class IframeMessenger {
         if (event.source !== this.iframe?.contentWindow) return;
 
         const message = event.data as ProgressMessage | ResultMessage;
+        this.lastIframeActivityAt = Date.now();
 
         if (isProgressMessage(message)) {
             this.onProgress?.({ progress: message.progress, file: message.file });
@@ -109,17 +113,23 @@ export class IframeMessenger {
     }
 
     private async waitForIframeReady(): Promise<void> {
-        for (let attempt = 0; attempt < 5; attempt++) {
+        this.lastIframeActivityAt = Date.now();
+
+        for (let attempt = 0; ; attempt++) {
             try {
                 await this.ping();
                 return;
             } catch {
+                const silentFor = Date.now() - this.lastIframeActivityAt;
+                if (silentFor > READY_STALL_TIMEOUT_MS) {
+                    throw new Error(
+                        `Iframe is not responsive: the embedding model did not load, and the iframe has been silent for ${Math.round(silentFor / 1000)}s`,
+                    );
+                }
 				if (attempt) console.warn(`Iframe ping attempt ${attempt + 1} failed. Retrying...`);
                 await new Promise((resolve) => window.setTimeout(resolve, 1000));
             }
         }
-
-        throw new Error("Iframe is not responsive after multiple attempts");
     }
 
     private ping(): Promise<void> {
@@ -134,7 +144,7 @@ export class IframeMessenger {
             const timeoutId = window.setTimeout(() => {
                 this.pendingRequests.delete(requestId);
                 reject(new Error("Ping timed out"));
-            }, 3000);
+            }, READY_PING_TIMEOUT_MS);
 
             this.pendingRequests.set(requestId, {
                 resolve: () => resolve(),

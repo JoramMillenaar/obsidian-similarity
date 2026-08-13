@@ -190,7 +190,6 @@ export class IndexingWorker {
 				const noteId = this.takeNextNoteId();
 				if (!noteId) {
 					await this.notify({type: "drained"});
-					this.releaseDrainedWaiters();
 					return;
 				}
 
@@ -200,6 +199,8 @@ export class IndexingWorker {
 			if (this.isUnloaded) return;
 			await this.notify({type: "stopped", error});
 			console.error("[Similarity] Indexing worker stopped:", error);
+		} finally {
+			if (!this.hasWork()) this.releaseDrainedWaiters();
 		}
 	}
 
@@ -266,9 +267,17 @@ export class IndexingWorker {
 	private notify(event: IndexingWorkerEvent): Promise<void> | void {
 		const pending: Promise<void>[] = [];
 		for (const observer of this.observers) {
-			const result = observer(event);
-			if (result) pending.push(result);
+			try {
+				const result = observer(event);
+				if (result) pending.push(result.catch((error) => this.reportObserverFailure(event, error)));
+			} catch (error) {
+				this.reportObserverFailure(event, error);
+			}
 		}
 		if (pending.length > 0) return Promise.all(pending).then(() => undefined);
+	}
+
+	private reportObserverFailure(event: IndexingWorkerEvent, error: unknown): void {
+		console.error(`[Similarity] Indexing worker observer failed on "${event.type}":`, error);
 	}
 }
