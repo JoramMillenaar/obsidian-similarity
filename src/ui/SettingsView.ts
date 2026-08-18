@@ -5,8 +5,7 @@ import { DEFAULT_SETTINGS, EMBEDDING_MODELS, MAX_OVERLAP_PERCENT } from "../cons
 import { EmbeddingModelId, SimilaritySettings } from "../types";
 import { SettingsRepository } from "../ports";
 import { UpdateSettingsUseCase } from "../app/updateSettings";
-import { ModelRequestSupersededError, ModelSessionSnapshot, ModelStateReader } from "../app/modelSession";
-import { getModelStatus } from "./modelStatus";
+import { ModelRequestSupersededError, ModelStateReader } from "../app/modelSession";
 
 export type SettingsViewDeps = {
 	settingsRepo: SettingsRepository,
@@ -34,8 +33,7 @@ export class SettingView extends PluginSettingTab {
 	};
 	private embeddingModelDraft: EmbeddingModelId = DEFAULT_SETTINGS.embeddingModelId;
 	private loaded = false;
-	private modelState: ModelSessionSnapshot = {status: "not-loaded"};
-	private modelStatusSetting?: Setting;
+	private previousModelStatus: "not-loaded" | "loading" | "ready" = "not-loaded";
 
 	constructor(
 		app: App,
@@ -45,12 +43,8 @@ export class SettingView extends PluginSettingTab {
 		super(app, plugin);
 		void this.preload();
 		this.deps.modelSession.subscribe((snapshot) => {
-			const previousStatus = this.modelState.status;
-			this.modelState = snapshot;
-
-			this.modelStatusSetting?.setDesc(getModelStatus(snapshot).message);
-
-			if (previousStatus !== snapshot.status) this.update?.();
+			if (this.previousModelStatus !== snapshot.status) this.update?.();
+			this.previousModelStatus = snapshot.status;
 		});
 	}
 
@@ -84,17 +78,6 @@ export class SettingView extends PluginSettingTab {
 					options: EMBEDDING_MODEL_OPTIONS,
 					disabled: () => !this.loaded,
 				},
-			},
-			{
-				name: "Model status",
-				render: (setting) => {
-					this.modelStatusSetting = setting;
-					setting.setDesc(getModelStatus(this.modelState).message);
-					return () => {
-						if (this.modelStatusSetting === setting) this.modelStatusSetting = undefined;
-					};
-				},
-				searchable: false,
 			},
 			{
 				name: "Ignored paths/folders",
@@ -215,9 +198,9 @@ export class SettingView extends PluginSettingTab {
 
 	/**
 	 * Fire-and-forget: a model switch can take up to a minute, and the whole point of surfacing
-	 * live status (see the "Model status" row and `modelSession` subscription above) is that the
-	 * user doesn't have to sit and wait for it — they can keep the settings tab interactive,
-	 * including picking a different model before this one finishes, which cancels it.
+	 * live status elsewhere (sidebar banner, status bar) is that the user doesn't have to sit and
+	 * wait for it here — they can keep the settings tab interactive, including picking a different
+	 * model before this one finishes, which cancels it.
 	 */
 	private save(draft: {
 		ignoredPaths: string[];
@@ -283,10 +266,6 @@ export class SettingView extends PluginSettingTab {
 					draftModelId = value as EmbeddingModelId;
 				});
 			});
-
-		this.modelStatusSetting = new Setting(containerEl)
-			.setName("Model status")
-			.setDesc(getModelStatus(this.modelState).message);
 
 		new Setting(containerEl)
 			.setName("Ignored paths/folders")

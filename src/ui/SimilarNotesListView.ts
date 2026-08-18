@@ -1,5 +1,5 @@
 import { ItemView, Notice, TFile, WorkspaceLeaf } from "obsidian";
-import { GetSimilarNotesUseCase } from "../app/getSimilarNotes";
+import { GetSimilarNotesForNoteUseCase } from "../app/getSimilarNotesForNote";
 import { SubscribeIndexingStateUseCase } from "../app/indexingProgress";
 import { SynchronizeIndexUseCase } from "../app/synchronizeIndex";
 import { ModelSessionSnapshot, ModelStateReader } from "../app/modelSession";
@@ -18,7 +18,7 @@ type SimilarNote = { id: string; score: number };
 
 export type SimilarNotesListViewDeps = {
 	isIndexEmpty: () => Promise<boolean>;
-	getSimilarNotes: GetSimilarNotesUseCase;
+	getSimilarNotesForNote: GetSimilarNotesForNoteUseCase;
 	synchronizeIndex: SynchronizeIndexUseCase;
 	subscribeIndexingState: SubscribeIndexingStateUseCase;
 	modelSession: ModelStateReader;
@@ -209,7 +209,13 @@ export class SimilarNotesListView extends ItemView {
 			if (this.modelState.status !== "ready") {
 				loadingEl?.remove();
 				this.renderIndexingBanner(workingContainer);
-				this.renderMessage(workingContainer, "Related notes will appear once the embedding model finishes loading.");
+
+				const cached = await this.deps.getSimilarNotesForNote({noteId: active.path}).catch(() => []);
+				if (cached.length > 0) {
+					this.renderRelatedList(workingContainer, cached);
+				} else {
+					this.renderMessage(workingContainer, "Related notes will appear once the embedding model finishes loading.");
+				}
 				this.commitRenderedContent(targetContainer, workingContainer, showLoading);
 				return;
 			}
@@ -281,7 +287,7 @@ export class SimilarNotesListView extends ItemView {
 	}
 
 	private async loadSimilarNotesForActiveFile(notePath: string): Promise<SimilarNote[]> {
-		return this.deps.getSimilarNotes({noteId: notePath});
+		return this.deps.getSimilarNotesForNote({noteId: notePath});
 	}
 
 	private renderRelatedList(container: HTMLElement, related: SimilarNote[]) {

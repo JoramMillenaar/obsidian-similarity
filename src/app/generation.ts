@@ -12,7 +12,8 @@ import { MonolithicIndexRepository } from "../infra/index/monolithicIndexReposit
 import { KeyedDebouncer } from "../domain/debouncer";
 import { EmbedTextUseCase, makeEmbedText } from "./embedText";
 import { IndexNoteUseCase, makeIndexNote } from "./indexNote";
-import { GetSimilarNotesUseCase, makeGetSimilarNotes } from "./getSimilarNotes";
+import { GetSimilarNotesForNoteUseCase, makeGetSimilarNotesForNote } from "./getSimilarNotesForNote";
+import { GetSimilarNotesForTextUseCase, makeGetSimilarNotesForText } from "./getSimilarNotesForText";
 import { GetNoteTextUseCase } from "./getNoteText";
 import { IsIgnoredPath } from "./isIgnoredPath";
 import { BuildIndexSyncPlanUseCase, makeBuildIndexSyncPlan } from "./buildIndexSyncPlan";
@@ -26,7 +27,8 @@ export type Generation = {
 	readonly indexRepo: IndexRepository;
 	readonly indexNote: IndexNoteUseCase;
 	readonly embedText: EmbedTextUseCase;
-	readonly getSimilarNotes: GetSimilarNotesUseCase;
+	readonly getSimilarNotesForNote: GetSimilarNotesForNoteUseCase;
+	readonly getSimilarNotesForText: GetSimilarNotesForTextUseCase;
 	readonly buildIndexSyncPlan: BuildIndexSyncPlanUseCase;
 	readonly synchronizeIndex: SynchronizeIndexUseCase;
 	readonly liveNoteSync: LiveNoteSync;
@@ -78,11 +80,8 @@ export function makeBuildGeneration(deps: GenerationSharedDeps): BuildGeneration
 			embedText,
 		});
 
-		const getSimilarNotes = makeGetSimilarNotes({
-			indexRepo,
-			embedText: embedQuery,
-			getNoteText: deps.getNoteText,
-		});
+		const getSimilarNotesForNote = makeGetSimilarNotesForNote({indexRepo});
+		const getSimilarNotesForText = makeGetSimilarNotesForText({indexRepo, embedText: embedQuery});
 
 		const buildIndexSyncPlan = makeBuildIndexSyncPlan({
 			noteSource: deps.noteSource,
@@ -110,7 +109,8 @@ export function makeBuildGeneration(deps: GenerationSharedDeps): BuildGeneration
 			indexRepo,
 			indexNote,
 			embedText,
-			getSimilarNotes,
+			getSimilarNotesForNote,
+			getSimilarNotesForText,
 			buildIndexSyncPlan,
 			synchronizeIndex,
 			liveNoteSync,

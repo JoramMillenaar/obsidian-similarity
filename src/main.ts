@@ -24,7 +24,7 @@ export default class RelatedNotes extends Plugin {
 			(leaf) =>
 				new SimilarNotesListView(leaf, {
 					isIndexEmpty: this.appContainer.isIndexEmpty,
-					getSimilarNotes: this.appContainer.getSimilarNotes,
+					getSimilarNotesForNote: this.appContainer.getSimilarNotesForNote,
 					synchronizeIndex: this.appContainer.synchronizeIndex,
 					subscribeIndexingState: this.appContainer.subscribeIndexingState,
 					modelSession: this.appContainer.modelSession,
@@ -41,7 +41,8 @@ export default class RelatedNotes extends Plugin {
 			name: "Open semantic search",
 			callback: () => {
 				new SearchModal(this.app, {
-					getSimilarNotes: this.appContainer.getSimilarNotes,
+					getSimilarNotesForNote: this.appContainer.getSimilarNotesForNote,
+					getSimilarNotesForText: this.appContainer.getSimilarNotesForText,
 					insertWikilinkAtCursor: this.appContainer.insertWikilinkAtCursor,
 					subscribeIndexingState: this.appContainer.subscribeIndexingState,
 					modelSession: this.appContainer.modelSession,
@@ -62,6 +63,7 @@ export default class RelatedNotes extends Plugin {
 		this.app.workspace.onLayoutReady(() => {
 			registerObsidianEvents(this, this.appContainer);
 			void initializePlugin(this.appContainer);
+			this.appContainer.similarityView.refreshResults();
 		});
 
 		// if (__DEV__) {

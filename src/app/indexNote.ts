@@ -51,7 +51,9 @@ export function makeIndexNote(deps: IndexNoteDeps): IndexNoteUseCase {
 		}
 
 		if (embedded.metadata.embeddingModelId !== deps.indexRepo.modelId) {
-			// TODO: Should this layer be in charge of this? Seems like a thin check knowing the consequences could be total index corruption
+			console.warn(
+				`[Similarity] Dropped embedding for "${noteId}": computed with ${embedded.metadata.embeddingModelId}, index expects ${deps.indexRepo.modelId}.`,
+			);
 			return "unchanged";
 		}
 

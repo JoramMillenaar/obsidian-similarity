@@ -8,7 +8,7 @@ type SessionStatus = "not-loaded" | "loading";
 
 type SessionState =
 	| { status: "not-loaded" }
-	| { status: "loading"; targetModelId: EmbeddingModelId; epoch: number; progress: ModelLoadProgress | null }
+	| { status: "loading"; targetModelId: EmbeddingModelId; epoch: number; progress: ModelLoadProgress | null; phase: "downloading" | "finalizing" }
 	| { status: "ready"; generation: Generation; epoch: number };
 
 type PendingRequest = { modelId: EmbeddingModelId; promise: Promise<void> };
@@ -31,7 +31,7 @@ export class ModelRequestSupersededError extends Error {
 
 export type ModelSessionSnapshot =
 	| { status: "not-loaded" }
-	| { status: "loading"; targetModelId: EmbeddingModelId; progress: ModelLoadProgress | null }
+	| { status: "loading"; targetModelId: EmbeddingModelId; progress: ModelLoadProgress | null; phase: "downloading" | "finalizing" }
 	| { status: "ready"; modelId: EmbeddingModelId };
 
 export type ModelStateReader = {
@@ -60,7 +60,7 @@ export class ModelSession implements ModelStateReader {
 	getSnapshot(): ModelSessionSnapshot {
 		if (this.state.status === "ready") return {status: "ready", modelId: this.state.generation.modelId};
 		if (this.state.status === "loading") {
-			return {status: "loading", targetModelId: this.state.targetModelId, progress: this.state.progress};
+			return {status: "loading", targetModelId: this.state.targetModelId, progress: this.state.progress, phase: this.state.phase};
 		}
 		return {status: "not-loaded"};
 	}
@@ -120,7 +120,7 @@ export class ModelSession implements ModelStateReader {
 
 		const outgoing = this.state.status === "ready" ? this.state.generation : null;
 
-		this.state = {status: "loading", targetModelId: modelId, epoch, progress: null};
+		this.state = {status: "loading", targetModelId: modelId, epoch, progress: null, phase: "downloading"};
 		this.notify();
 
 		await this.deps.worker.pause();
@@ -137,12 +137,15 @@ export class ModelSession implements ModelStateReader {
 		let generation: Generation;
 		try {
 			generation = await this.deps.buildGeneration(modelId, config, (progress) => {
+				const phase: "downloading" | "finalizing" = progress.progress >= 100 ? "finalizing" : "downloading";
 				if (epoch === this.epoch && this.state.status === "loading") {
-					this.state = {...this.state, progress};
+					this.state = {...this.state, progress, phase};
 					this.notify();
 				}
 				if (Date.now() - loadStartedAt < 1000) return;
-				this.deps.status.update(`Downloading ${config.label} model… ${Math.round(progress.progress)}%`);
+				this.deps.status.update(
+					phase === "finalizing" ? `Finalizing ${config.label} model…` : `Downloading ${config.label} model…`,
+				);
 			}, controller.signal);
 		} catch (error) {
 			if (epoch !== this.epoch) throw new ModelRequestSupersededError(modelId);

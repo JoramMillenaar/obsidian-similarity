@@ -1,5 +1,6 @@
 import { App, Notice, Platform, SuggestModal, TFile } from "obsidian";
-import { GetSimilarNotesUseCase } from "../app/getSimilarNotes";
+import { GetSimilarNotesForNoteUseCase } from "../app/getSimilarNotesForNote";
+import { GetSimilarNotesForTextUseCase } from "../app/getSimilarNotesForText";
 import { InsertWikilinkAtCursorUseCase } from "../app/insertWikilinkAtCursor";
 import { SubscribeIndexingStateUseCase } from "../app/indexingProgress";
 import { ModelSessionSnapshot, ModelStateReader } from "../app/modelSession";
@@ -10,7 +11,8 @@ import { getIndexingBannerState, IndexingBannerState } from "./indexingBanner";
 import { getModelStatus } from "./modelStatus";
 
 export type SearchModalDeps = {
-	getSimilarNotes: GetSimilarNotesUseCase;
+	getSimilarNotesForNote: GetSimilarNotesForNoteUseCase;
+	getSimilarNotesForText: GetSimilarNotesForTextUseCase;
 	insertWikilinkAtCursor: InsertWikilinkAtCursorUseCase;
 	isIndexEmpty: () => Promise<boolean>;
 	isIgnoredPath: (path: string) => Promise<boolean>;
@@ -139,7 +141,7 @@ export class SearchModal extends SuggestModal<RelatedNote> {
 						return;
 					}
 
-					const results = await this.deps.getSimilarNotes({text: query});
+					const results = await this.deps.getSimilarNotesForText({text: query});
 					this.emptyStateText = results.length > 0
 						? SearchModal.DEFAULT_EMPTY_STATE
 						: this.getNoResultsText();
@@ -233,7 +235,7 @@ export class SearchModal extends SuggestModal<RelatedNote> {
 				return [];
 			}
 
-			const results = await this.deps.getSimilarNotes({noteId: active.path});
+			const results = await this.deps.getSimilarNotesForNote({noteId: active.path});
 			this.emptyStateText = results.length > 0
 				? SearchModal.DEFAULT_EMPTY_STATE
 				: this.getNoResultsText();

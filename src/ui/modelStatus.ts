@@ -19,9 +19,10 @@ export function getModelStatus(snapshot: ModelSessionSnapshot): ModelStatus {
 
 	const label = EMBEDDING_MODELS[snapshot.targetModelId].label;
 	const percent = snapshot.progress ? Math.round(snapshot.progress.progress) : undefined;
+	const message = snapshot.phase === "finalizing" ? `Finalizing ${label} model…` : `Downloading ${label} model…`;
 	return {
 		ready: false,
-		message: percent !== undefined ? `Loading ${label} model… ${percent}%` : `Loading ${label} model…`,
+		message: snapshot.progress ? message : `Loading ${label} model…`,
 		processed: percent,
 		total: percent !== undefined ? 100 : undefined,
 	};

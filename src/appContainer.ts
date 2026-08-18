@@ -8,8 +8,10 @@ import { ObsidianIndexStorage } from "./infra/obsidian/obsidianIndexStorage";
 import { BinaryEmbeddingFileStore } from "./infra/obsidian/binaryEmbeddingFileStore";
 import { ObsidianModelIndexMetaStore } from "./infra/obsidian/obsidianModelIndexMetaStore";
 import { LegacyEmbeddingFileStore } from "./infra/obsidian/legacyEmbeddingFileStore";
-import { GetSimilarNotesUseCase } from "./app/getSimilarNotes";
+import { GetSimilarNotesForNoteUseCase, makeGetSimilarNotesForNote } from "./app/getSimilarNotesForNote";
+import { GetSimilarNotesForTextUseCase } from "./app/getSimilarNotesForText";
 import { InsertWikilinkAtCursorUseCase, makeInsertWikilinkAtCursor } from "./app/insertWikilinkAtCursor";
+import { MonolithicIndexRepository } from "./infra/index/monolithicIndexRepository";
 import {
 	EmbeddingFileStore,
 	MarkdownTextExtractor,
@@ -53,7 +55,8 @@ export class AppContainer {
 	readonly runLegacyMigrations: RunLegacyMigrationsUseCase;
 	readonly isIndexEmpty: () => Promise<boolean>;
 	readonly getNoteText: GetNoteTextUseCase;
-	readonly getSimilarNotes: GetSimilarNotesUseCase;
+	readonly getSimilarNotesForNote: GetSimilarNotesForNoteUseCase;
+	readonly getSimilarNotesForText: GetSimilarNotesForTextUseCase;
 	readonly insertWikilinkAtCursor: InsertWikilinkAtCursorUseCase;
 	readonly synchronizeIndex: SynchronizeIndexUseCase;
 	readonly subscribeIndexingState: SubscribeIndexingStateUseCase;
@@ -98,7 +101,20 @@ export class AppContainer {
 			settingsRepo: this.settingsRepo,
 		});
 
-		this.getSimilarNotes = (args) => this.modelSession.withGeneration((generation) => generation.getSimilarNotes(args));
+		// Never needs the embedder — it only reads what's already in the index — so it works
+		// whether or not a model is currently loaded, unlike getSimilarNotesForText below.
+		this.getSimilarNotesForNote = async (args) => {
+			const snapshot = this.modelSession.getSnapshot();
+			const modelId = snapshot.status === "ready"
+				? snapshot.modelId
+				: snapshot.status === "loading"
+					? snapshot.targetModelId
+					: (await this.settingsRepo.get()).embeddingModelId;
+
+			const indexRepo = new MonolithicIndexRepository(this.indexStorage, modelId);
+			return makeGetSimilarNotesForNote({indexRepo})(args);
+		};
+		this.getSimilarNotesForText = (args) => this.modelSession.withGeneration((generation) => generation.getSimilarNotesForText(args));
 		this.synchronizeIndex = () => this.modelSession.withGeneration((generation) => generation.synchronizeIndex());
 		this.isIndexEmpty = () => this.modelSession.withGeneration((generation) => generation.indexRepo.isEmpty());
 

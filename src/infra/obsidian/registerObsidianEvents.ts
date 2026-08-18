@@ -4,8 +4,10 @@ import { LiveNoteSync } from "../../app/liveNoteSync";
 import { ModelNotReadyError } from "../../app/modelSession";
 
 
+export type ObsidianEventsDeps = Pick<AppContainer, "modelSession" | "status" | "similarityView">;
+
 function withLiveNoteSync(
-	container: AppContainer,
+	container: ObsidianEventsDeps,
 	failureMessage: string,
 	action: (liveNoteSync: LiveNoteSync) => void | Promise<void>,
 ): void {
@@ -16,8 +18,8 @@ function withLiveNoteSync(
 			console.error(`[Similarity] ${failureMessage}`, error);
 		});
 }
-// TODO: is handing the whole container jungle necessary? Wouldn't it be cleaner only to pass what it actually uses?
-export function registerObsidianEvents(plugin: Plugin, container: AppContainer): void {
+
+export function registerObsidianEvents(plugin: Plugin, container: ObsidianEventsDeps): void {
 	plugin.registerEvent(
 		plugin.app.workspace.on("editor-change", (_editor, info) => {
 			const file = info.file;
