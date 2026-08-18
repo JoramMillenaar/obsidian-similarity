@@ -30,7 +30,7 @@ export type ModelLoadProgress = {
 export interface EmbeddingPort {
 	embed(text: string, options: EmbedOptions): Promise<EmbeddingResult | null>;
 
-	load(config: EmbeddingModelConfig, onProgress?: (progress: ModelLoadProgress) => void): Promise<void>;
+	load(config: EmbeddingModelConfig, onProgress?: (progress: ModelLoadProgress) => void, signal?: AbortSignal): Promise<void>;
 
 	unload(): void;
 }

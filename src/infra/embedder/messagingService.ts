@@ -12,6 +12,30 @@ function isProgressMessage(message: ProgressMessage | ResultMessage): message is
     return 'type' in message && message.type === 'model-load-progress';
 }
 
+function abortError(): Error {
+    return new Error("Embedding iframe load was aborted");
+}
+
+function sleep(ms: number, signal?: AbortSignal): Promise<void> {
+    return new Promise((resolve, reject) => {
+        if (signal?.aborted) {
+            reject(abortError());
+            return;
+        }
+
+        const timer = window.setTimeout(() => {
+            signal?.removeEventListener('abort', onAbort);
+            resolve();
+        }, ms);
+
+        const onAbort = () => {
+            window.clearTimeout(timer);
+            reject(abortError());
+        };
+        signal?.addEventListener('abort', onAbort, {once: true});
+    });
+}
+
 export class IframeMessenger {
     private iframe: HTMLIFrameElement | null = null;
     private requestIdCounter = 0;
@@ -25,14 +49,9 @@ export class IframeMessenger {
         private onProgress?: (progress: ModelLoadProgress) => void,
     ) {}
 
-    async initialize(): Promise<void> {
+    async initialize(signal?: AbortSignal): Promise<void> {
         if (this.iframe) return;
-
-        const existingIframe = activeDocument.getElementById(this.iframeId) as HTMLIFrameElement | null;
-        if (existingIframe) {
-            this.iframe = existingIframe;
-            return;
-        }
+        if (signal?.aborted) throw abortError();
 
         this.iframe = activeDocument.body.createEl('iframe', {
             attr: {
@@ -45,7 +64,12 @@ export class IframeMessenger {
         window.removeEventListener('message', this.onMessageReceived);
         window.addEventListener('message', this.onMessageReceived);
 
-        await this.waitForIframeReady();
+        try {
+            await this.waitForIframeReady(signal);
+        } catch (error) {
+            if (signal?.aborted) this.unload();
+            throw error;
+        }
     }
 
     private buildSrcdoc(): string {
@@ -112,14 +136,17 @@ export class IframeMessenger {
         throw new Error(`All ${retries} attempts to send the message failed`);
     }
 
-    private async waitForIframeReady(): Promise<void> {
+    private async waitForIframeReady(signal?: AbortSignal): Promise<void> {
         this.lastIframeActivityAt = Date.now();
 
         for (let attempt = 0; ; attempt++) {
+            if (signal?.aborted) throw abortError();
             try {
                 await this.ping();
                 return;
             } catch {
+                if (signal?.aborted) throw abortError();
+
                 const silentFor = Date.now() - this.lastIframeActivityAt;
                 if (silentFor > READY_STALL_TIMEOUT_MS) {
                     throw new Error(
@@ -127,7 +154,7 @@ export class IframeMessenger {
                     );
                 }
 				if (attempt) console.warn(`Iframe ping attempt ${attempt + 1} failed. Retrying...`);
-                await new Promise((resolve) => window.setTimeout(resolve, 1000));
+                await sleep(1000, signal);
             }
         }
     }
