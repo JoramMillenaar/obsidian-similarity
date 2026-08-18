@@ -16,16 +16,18 @@ export default class RelatedNotes extends Plugin {
 		this.addSettingTab(new SettingView(this.app, this, {
 			settingsRepo: this.appContainer.settingsRepo,
 			updateSettings: this.appContainer.updateSettings,
+			modelSession: this.appContainer.modelSession,
 		}));
 
 		this.registerView(
 			VIEW_TYPE_SIMILARITY,
 			(leaf) =>
 				new SimilarNotesListView(leaf, {
-					indexRepo: this.appContainer.indexRepo,
+					isIndexEmpty: this.appContainer.isIndexEmpty,
 					getSimilarNotes: this.appContainer.getSimilarNotes,
 					synchronizeIndex: this.appContainer.synchronizeIndex,
 					subscribeIndexingState: this.appContainer.subscribeIndexingState,
+					modelSession: this.appContainer.modelSession,
 					isIgnoredPath: this.appContainer.isIgnoredPath,
 				})
 		);
@@ -42,7 +44,8 @@ export default class RelatedNotes extends Plugin {
 					getSimilarNotes: this.appContainer.getSimilarNotes,
 					insertWikilinkAtCursor: this.appContainer.insertWikilinkAtCursor,
 					subscribeIndexingState: this.appContainer.subscribeIndexingState,
-					indexRepo: this.appContainer.indexRepo,
+					modelSession: this.appContainer.modelSession,
+					isIndexEmpty: this.appContainer.isIndexEmpty,
 					isIgnoredPath: this.appContainer.isIgnoredPath,
 				}).open();
 			},

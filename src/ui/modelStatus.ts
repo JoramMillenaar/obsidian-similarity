@@ -1,0 +1,30 @@
+import { EMBEDDING_MODELS } from "../constants";
+import { ModelSessionSnapshot } from "../app/modelSession";
+
+export type ModelStatus = {
+	ready: boolean;
+	message: string;
+	/** Set together: a 0–100 progress bar can be drawn when both are present. */
+	processed?: number;
+	total?: number;
+};
+
+/** Formats a `ModelSessionSnapshot` for display in the similar-notes view, search modal, and settings. */
+export function getModelStatus(snapshot: ModelSessionSnapshot): ModelStatus {
+	if (snapshot.status === "ready") {
+		return {ready: true, message: `Active model: ${EMBEDDING_MODELS[snapshot.modelId].label}.`};
+	}
+
+	if (snapshot.status === "not-loaded") {
+		return {ready: false, message: "No embedding model is loaded yet."};
+	}
+
+	const label = EMBEDDING_MODELS[snapshot.targetModelId].label;
+	const percent = snapshot.progress ? Math.round(snapshot.progress.progress) : undefined;
+	return {
+		ready: false,
+		message: percent !== undefined ? `Loading ${label} model… ${percent}%` : `Loading ${label} model…`,
+		processed: percent,
+		total: percent !== undefined ? 100 : undefined,
+	};
+}

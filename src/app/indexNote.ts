@@ -50,6 +50,11 @@ export function makeIndexNote(deps: IndexNoteDeps): IndexNoteUseCase {
 			return "removed";
 		}
 
+		if (embedded.metadata.embeddingModelId !== deps.indexRepo.modelId) {
+			// The model changed mid-job; this embedding belongs to a retired Generation. Drop it rather than corrupt the index.
+			return "unchanged";
+		}
+
 		const indexedNote = {
 			id: noteId,
 			chunks: toNoteChunks(embedded.chunks, text),
@@ -57,7 +62,7 @@ export function makeIndexNote(deps: IndexNoteDeps): IndexNoteUseCase {
 			updatedAt: new Date().toISOString(),
 		};
 
-		await deps.indexRepo.upsert(indexedNote, embedded.metadata.embeddingModelId);
+		await deps.indexRepo.upsert(indexedNote);
 		return "indexed";
 	}
 }

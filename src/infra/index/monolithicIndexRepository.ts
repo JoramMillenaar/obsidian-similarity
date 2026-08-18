@@ -1,28 +1,28 @@
 import { EmbeddingModelId, IndexedNote } from "../../types";
 import { IndexRepository, IndexStorage } from "../../ports";
-import { ModelSession } from "../../domain/modelSession";
 
+/** Bound to one model for its whole lifetime — construct a new instance per Generation, never reused across models. */
 export class MonolithicIndexRepository implements IndexRepository {
 	constructor(
 		private readonly storage: IndexStorage,
-		private readonly modelSession: ModelSession,
+		readonly modelId: EmbeddingModelId,
 	) {
 	}
 
 	async findById(noteId: string): Promise<IndexedNote | null> {
-		const index = await this.storage.getAll(this.modelSession.current());
+		const index = await this.storage.getAll(this.modelId);
 		return index.find(n => n.id === noteId) ?? null;
 	}
 
-	async upsert(note: IndexedNote, embeddingModelId: EmbeddingModelId) {
-		await this.upsertMany([note], embeddingModelId);
+	async upsert(note: IndexedNote) {
+		await this.upsertMany([note]);
 	}
 
-	async upsertMany(notes: IndexedNote[], embeddingModelId: EmbeddingModelId) {
+	async upsertMany(notes: IndexedNote[]) {
 		if (notes.length === 0) return;
 
 		// TODO: this should technically be atomic
-		const index = await this.storage.getAll(embeddingModelId);
+		const index = await this.storage.getAll(this.modelId);
 
 		const map = new Map(index.map(n => [n.id, n]));
 
@@ -30,34 +30,31 @@ export class MonolithicIndexRepository implements IndexRepository {
 			map.set(note.id, note);
 		}
 
-		await this.storage.rewrite(embeddingModelId, [...map.values()]);
+		await this.storage.rewrite(this.modelId, [...map.values()]);
 	}
 
 	async listAll(): Promise<IndexedNote[]> {
-		return await this.storage.getAll(this.modelSession.current());
+		return await this.storage.getAll(this.modelId);
 	}
 
 	async isEmpty(): Promise<boolean> {
-		return await this.storage.isEmpty(this.modelSession.current());
+		return await this.storage.isEmpty(this.modelId);
 	}
 
 	async remove(noteId: string) {
-		const embeddingModelId = this.modelSession.current();
-		const index = await this.storage.getAll(embeddingModelId);
+		const index = await this.storage.getAll(this.modelId);
 		const next = index.filter(n => n.id !== noteId);
-		await this.storage.rewrite(embeddingModelId, next);
+		await this.storage.rewrite(this.modelId, next);
 	}
 
 	async clear() {
-		const embeddingModelId = this.modelSession.current();
-		await this.storage.rewrite(embeddingModelId, []);
+		await this.storage.rewrite(this.modelId, []);
 	}
 
 	async rename(oldId: string, newId: string) {
 		if (oldId === newId) return;
 
-		const embeddingModelId = this.modelSession.current();
-		const index = await this.storage.getAll(embeddingModelId);
+		const index = await this.storage.getAll(this.modelId);
 
 		const existing = index.find(n => n.id === oldId);
 		if (!existing) return;
@@ -69,6 +66,6 @@ export class MonolithicIndexRepository implements IndexRepository {
 			id: newId,
 		};
 
-		await this.storage.rewrite(embeddingModelId, [...filtered, renamed]);
+		await this.storage.rewrite(this.modelId, [...filtered, renamed]);
 	}
 }

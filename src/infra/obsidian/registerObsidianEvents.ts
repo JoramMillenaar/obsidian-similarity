@@ -1,5 +1,25 @@
 import { Plugin, TFile } from "obsidian";
 import { AppContainer } from "../../appContainer";
+import { LiveNoteSync } from "../../app/liveNoteSync";
+import { ModelNotReadyError } from "../../app/modelSession";
+
+/**
+ * Vault events fire whether or not a model is loaded, and Obsidian gives these handlers nowhere to
+ * report a failure — so resolve the current Generation per event and swallow the outcome here.
+ * "No model yet" is an ordinary state during startup and switches, not an error worth logging.
+ */
+function withLiveNoteSync(
+	container: AppContainer,
+	failureMessage: string,
+	action: (liveNoteSync: LiveNoteSync) => void | Promise<void>,
+): void {
+	void container.modelSession
+		.withGeneration(async (generation) => action(generation.liveNoteSync))
+		.catch((error) => {
+			if (error instanceof ModelNotReadyError) return;
+			console.error(`[Similarity] ${failureMessage}`, error);
+		});
+}
 
 export function registerObsidianEvents(plugin: Plugin, container: AppContainer): void {
 	plugin.registerEvent(
@@ -7,7 +27,9 @@ export function registerObsidianEvents(plugin: Plugin, container: AppContainer):
 			const file = info.file;
 			if (!(file instanceof TFile)) return;
 
-			container.liveNoteSync.update(file.path);
+			withLiveNoteSync(container, "Indexing edited note failed", (liveNoteSync) => {
+				liveNoteSync.update(file.path);
+			});
 		}),
 	);
 
@@ -15,7 +37,9 @@ export function registerObsidianEvents(plugin: Plugin, container: AppContainer):
 		plugin.app.vault.on("delete", (file) => {
 			if (!(file instanceof TFile)) return;
 
-			void container.liveNoteSync.delete(file.path);
+			withLiveNoteSync(container, "Delete from index failed", (liveNoteSync) =>
+				liveNoteSync.delete(file.path),
+			);
 
 			container.status.update("Note removed from index", 1500);
 		}),
@@ -25,7 +49,9 @@ export function registerObsidianEvents(plugin: Plugin, container: AppContainer):
 		plugin.app.vault.on("rename", (file, oldPath) => {
 			if (!(file instanceof TFile)) return;
 
-			void container.liveNoteSync.rename(oldPath, file.path);
+			withLiveNoteSync(container, "Rename note failed", (liveNoteSync) =>
+				liveNoteSync.rename(oldPath, file.path),
+			);
 
 			container.status.update("Index updated (rename)", 1500);
 		}),
@@ -34,7 +60,9 @@ export function registerObsidianEvents(plugin: Plugin, container: AppContainer):
 	plugin.registerEvent(
 		plugin.app.workspace.on("file-open", (file) => {
 			if (file instanceof TFile) {
-				container.liveNoteSync.view(file.path);
+				withLiveNoteSync(container, "Indexing viewed note failed", (liveNoteSync) => {
+					liveNoteSync.view(file.path);
+				});
 			}
 
 			container.similarityView.refreshResults();

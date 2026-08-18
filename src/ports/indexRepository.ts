@@ -1,15 +1,17 @@
 import { EmbeddingModelId, IndexedNote } from "../types";
 
 export interface IndexRepository {
+	readonly modelId: EmbeddingModelId;
+
 	findById(noteId: string): Promise<IndexedNote | null>;
 
 	listAll(): Promise<IndexedNote[]>;
 
 	isEmpty(): Promise<boolean>;
 
-	upsert(note: IndexedNote, embeddingModelId: EmbeddingModelId): Promise<void>;
+	upsert(note: IndexedNote): Promise<void>;
 
-	upsertMany(notes: IndexedNote[], embeddingModelId: EmbeddingModelId): Promise<void>;
+	upsertMany(notes: IndexedNote[]): Promise<void>;
 
 	remove(noteId: string): Promise<void>;
 

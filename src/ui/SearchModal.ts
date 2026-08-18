@@ -2,18 +2,20 @@ import { App, Notice, Platform, SuggestModal, TFile } from "obsidian";
 import { GetSimilarNotesUseCase } from "../app/getSimilarNotes";
 import { InsertWikilinkAtCursorUseCase } from "../app/insertWikilinkAtCursor";
 import { SubscribeIndexingStateUseCase } from "../app/indexingProgress";
+import { ModelSessionSnapshot, ModelStateReader } from "../app/modelSession";
 import { KeyedDebouncer } from "../domain/debouncer";
 import { isMarkdownPath } from "../domain/markdownPath";
 import { IDLE_INDEXING_SNAPSHOT, IndexingQueueSnapshot, RelatedNote } from "../types";
-import { IndexRepository } from "../ports";
-import { getIndexingBannerState } from "./indexingBanner";
+import { getIndexingBannerState, IndexingBannerState } from "./indexingBanner";
+import { getModelStatus } from "./modelStatus";
 
 export type SearchModalDeps = {
 	getSimilarNotes: GetSimilarNotesUseCase;
 	insertWikilinkAtCursor: InsertWikilinkAtCursorUseCase;
-	indexRepo: IndexRepository;
+	isIndexEmpty: () => Promise<boolean>;
 	isIgnoredPath: (path: string) => Promise<boolean>;
 	subscribeIndexingState: SubscribeIndexingStateUseCase;
+	modelSession: ModelStateReader;
 }
 
 export class SearchModal extends SuggestModal<RelatedNote> {
@@ -23,8 +25,10 @@ export class SearchModal extends SuggestModal<RelatedNote> {
 	private chooseMode: "open" | "open-new-tab" | "open-right" | "insert-link" = "open";
 	private isAutoRefreshing = false;
 	private indexingState: IndexingQueueSnapshot = IDLE_INDEXING_SNAPSHOT;
+	private modelState: ModelSessionSnapshot = {status: "not-loaded"};
 	private lastAutoRefreshAt = 0;
 	private unsubscribeIndexingState?: () => void;
+	private unsubscribeModelState?: () => void;
 	private refreshTimer?: number;
 	private bannerEl?: HTMLElement;
 
@@ -80,6 +84,17 @@ export class SearchModal extends SuggestModal<RelatedNote> {
 				this.scheduleSuggestionRefresh();
 			}
 		});
+		this.unsubscribeModelState = this.deps.modelSession.subscribe((snapshot) => {
+			const previousReady = this.modelState.status === "ready";
+			this.modelState = snapshot;
+			this.renderBanner();
+
+			if (snapshot.status === "ready" && !previousReady) {
+				this.lastAutoRefreshAt = Date.now();
+				this.isAutoRefreshing = true;
+				this.inputEl.dispatchEvent(new Event("input"));
+			}
+		});
 		window.setTimeout(() => this.inputEl.dispatchEvent(new Event("input")), 0);
 	}
 
@@ -89,6 +104,7 @@ export class SearchModal extends SuggestModal<RelatedNote> {
 			this.refreshTimer = undefined;
 		}
 		this.unsubscribeIndexingState?.();
+		this.unsubscribeModelState?.();
 		super.onClose();
 	}
 
@@ -108,7 +124,13 @@ export class SearchModal extends SuggestModal<RelatedNote> {
 		return new Promise((resolve) => {
 			this.debouncer.schedule("search", async () => {
 				try {
-					const indexEmpty = await this.deps.indexRepo.isEmpty();
+					if (this.modelState.status !== "ready") {
+						this.emptyStateText = getModelStatus(this.modelState).message;
+						resolve([]);
+						return;
+					}
+
+					const indexEmpty = await this.deps.isIndexEmpty();
 					if (indexEmpty) {
 						this.emptyStateText = getIndexingBannerState(this.indexingState).kind !== "hidden"
 							? SearchModal.EMPTY_DURING_INDEX_STATE
@@ -192,16 +214,18 @@ export class SearchModal extends SuggestModal<RelatedNote> {
 		}
 
 		try {
-			const [indexEmpty, isIgnored] = await Promise.all([
-				this.deps.indexRepo.isEmpty(),
-				this.deps.isIgnoredPath(active.path),
-			]);
-
+			const isIgnored = await this.deps.isIgnoredPath(active.path);
 			if (isIgnored) {
 				this.emptyStateText = SearchModal.IGNORED_NOTE_STATE;
 				return [];
 			}
 
+			if (this.modelState.status !== "ready") {
+				this.emptyStateText = getModelStatus(this.modelState).message;
+				return [];
+			}
+
+			const indexEmpty = await this.deps.isIndexEmpty();
 			if (indexEmpty) {
 				this.emptyStateText = getIndexingBannerState(this.indexingState).kind !== "hidden"
 					? SearchModal.EMPTY_DURING_INDEX_STATE
@@ -239,12 +263,21 @@ export class SearchModal extends SuggestModal<RelatedNote> {
 		this.renderBanner();
 	}
 
+	/** While the model isn't ready, that takes priority over indexing state — there's nothing to index into yet. */
+	private currentBannerState(): IndexingBannerState {
+		if (this.modelState.status !== "ready") {
+			const status = getModelStatus(this.modelState);
+			return {kind: "updating", message: status.message, processed: status.processed ?? 0, total: status.total ?? 0};
+		}
+		return getIndexingBannerState(this.indexingState);
+	}
+
 	private renderBanner() {
 		if (!this.bannerEl) {
 			return;
 		}
 
-		const banner = getIndexingBannerState(this.indexingState);
+		const banner = this.currentBannerState();
 		this.bannerEl.empty();
 		this.bannerEl.className = `similarity-index-banner similarity-index-banner-${banner.kind}`;
 		this.bannerEl.toggleClass("is-hidden", !this.shouldShowIndexingBanner());
@@ -308,6 +341,8 @@ export class SearchModal extends SuggestModal<RelatedNote> {
 	}
 
 	private shouldShowIndexingBanner(): boolean {
+		if (this.modelState.status !== "ready") return true;
+
 		const {total} = this.indexingState;
 		const banner = getIndexingBannerState(this.indexingState);
 		if (banner.kind === "hidden" || banner.kind === "failed") {

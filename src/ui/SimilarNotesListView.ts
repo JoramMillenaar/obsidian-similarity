@@ -2,10 +2,11 @@ import { ItemView, Notice, TFile, WorkspaceLeaf } from "obsidian";
 import { GetSimilarNotesUseCase } from "../app/getSimilarNotes";
 import { SubscribeIndexingStateUseCase } from "../app/indexingProgress";
 import { SynchronizeIndexUseCase } from "../app/synchronizeIndex";
+import { ModelSessionSnapshot, ModelStateReader } from "../app/modelSession";
 import { isMarkdownPath } from "../domain/markdownPath";
 import { IDLE_INDEXING_SNAPSHOT, IndexingQueueSnapshot } from "../types";
-import { IndexRepository } from "../ports";
-import { getIndexingBannerState } from "./indexingBanner";
+import { getIndexingBannerState, IndexingBannerState } from "./indexingBanner";
+import { getModelStatus } from "./modelStatus";
 
 export function logError(message: unknown, ...optionalParams: unknown[]) {
 	console.error("[Similarity]:", message, ...optionalParams);
@@ -16,10 +17,11 @@ export const VIEW_TYPE_SIMILARITY = "similarity";
 type SimilarNote = { id: string; score: number };
 
 export type SimilarNotesListViewDeps = {
-	indexRepo: IndexRepository;
+	isIndexEmpty: () => Promise<boolean>;
 	getSimilarNotes: GetSimilarNotesUseCase;
 	synchronizeIndex: SynchronizeIndexUseCase;
 	subscribeIndexingState: SubscribeIndexingStateUseCase;
+	modelSession: ModelStateReader;
 	isIgnoredPath: (path: string) => Promise<boolean>;
 }
 
@@ -28,7 +30,9 @@ export class SimilarNotesListView extends ItemView {
 	private isLoading = false;
 	private lastAutoRefreshAt = 0;
 	private indexingState: IndexingQueueSnapshot = IDLE_INDEXING_SNAPSHOT;
+	private modelState: ModelSessionSnapshot = {status: "not-loaded"};
 	private unsubscribeIndexingState?: () => void;
+	private unsubscribeModelState?: () => void;
 	private refreshTimer?: number;
 
 	constructor(leaf: WorkspaceLeaf, private deps: SimilarNotesListViewDeps) {
@@ -87,6 +91,19 @@ export class SimilarNotesListView extends ItemView {
 			}
 		});
 
+		this.unsubscribeModelState = this.deps.modelSession.subscribe((snapshot) => {
+			const previousReady = this.modelState.status === "ready";
+			this.modelState = snapshot;
+
+			if (snapshot.status === "ready" && !previousReady) {
+				// The model just became available (or switched): a full reload, not a debounced one.
+				void this.refresh({background: false});
+				return;
+			}
+
+			this.updateLiveBanner();
+		});
+
 		await this.render();
 	}
 
@@ -110,8 +127,17 @@ export class SimilarNotesListView extends ItemView {
 		});
 	}
 
+	/** While the model isn't ready, that takes priority over indexing state — there's nothing to index into yet. */
+	private currentBannerState(): IndexingBannerState {
+		if (this.modelState.status !== "ready") {
+			const status = getModelStatus(this.modelState);
+			return {kind: "updating", message: status.message, processed: status.processed ?? 0, total: status.total ?? 0};
+		}
+		return getIndexingBannerState(this.indexingState);
+	}
+
 	private renderIndexingBanner(container: HTMLElement) {
-		const banner = getIndexingBannerState(this.indexingState);
+		const banner = this.currentBannerState();
 		const existing = container.querySelector(".similarity-index-banner");
 		if (!this.shouldShowIndexingBanner()) {
 			existing?.remove();
@@ -180,7 +206,15 @@ export class SimilarNotesListView extends ItemView {
 				return;
 			}
 
-			const indexEmpty = await this.deps.indexRepo.isEmpty();
+			if (this.modelState.status !== "ready") {
+				loadingEl?.remove();
+				this.renderIndexingBanner(workingContainer);
+				this.renderMessage(workingContainer, "Related notes will appear once the embedding model finishes loading.");
+				this.commitRenderedContent(targetContainer, workingContainer, showLoading);
+				return;
+			}
+
+			const indexEmpty = await this.deps.isIndexEmpty();
 			const related = indexEmpty
 				? []
 				: await this.loadSimilarNotesForActiveFile(active.path);
@@ -341,6 +375,8 @@ export class SimilarNotesListView extends ItemView {
 	}
 
 	private shouldShowIndexingBanner(): boolean {
+		if (this.modelState.status !== "ready") return true;
+
 		const {total} = this.indexingState;
 		const banner = getIndexingBannerState(this.indexingState);
 		if (banner.kind === "hidden" || banner.kind === "failed") {
@@ -378,6 +414,7 @@ export class SimilarNotesListView extends ItemView {
 			this.refreshTimer = undefined;
 		}
 		this.unsubscribeIndexingState?.();
+		this.unsubscribeModelState?.();
 
 		return Promise.resolve();
 	}
