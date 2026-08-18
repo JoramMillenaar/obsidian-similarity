@@ -4,12 +4,10 @@ import { ModelSessionSnapshot } from "../app/modelSession";
 export type ModelStatus = {
 	ready: boolean;
 	message: string;
-	/** Set together: a 0–100 progress bar can be drawn when both are present. */
 	processed?: number;
 	total?: number;
 };
 
-/** Formats a `ModelSessionSnapshot` for display in the similar-notes view, search modal, and settings. */
 export function getModelStatus(snapshot: ModelSessionSnapshot): ModelStatus {
 	if (snapshot.status === "ready") {
 		return {ready: true, message: `Active model: ${EMBEDDING_MODELS[snapshot.modelId].label}.`};

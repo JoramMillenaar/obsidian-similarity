@@ -44,13 +44,10 @@ export class SettingView extends PluginSettingTab {
 	) {
 		super(app, plugin);
 		void this.preload();
-		// This tab lives for the plugin's whole lifetime, so the subscription is never torn down.
 		this.deps.modelSession.subscribe((snapshot) => {
 			const previousStatus = this.modelState.status;
 			this.modelState = snapshot;
 
-			// Download progress fires many times per second. Update the one row that shows it in place;
-			// a full `update()` would rebuild the tab underneath whatever the user is typing.
 			this.modelStatusSetting?.setDesc(getModelStatus(snapshot).message);
 
 			if (previousStatus !== snapshot.status) this.update?.();
@@ -90,8 +87,6 @@ export class SettingView extends PluginSettingTab {
 			},
 			{
 				name: "Model status",
-				// `render` rather than `desc` so we keep a handle and can update the text in place on
-				// each progress tick instead of re-rendering the tab.
 				render: (setting) => {
 					this.modelStatusSetting = setting;
 					setting.setDesc(getModelStatus(this.modelState).message);

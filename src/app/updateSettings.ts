@@ -27,8 +27,6 @@ export function makeUpdateSettings(deps: {
 				void generation.synchronizeIndex();
 			});
 		} catch (error) {
-			// The settings above are already persisted, so this is not a failed save: there is simply
-			// no model to repair or resync against yet. Whichever load is pending does both when it lands.
 			if (!(error instanceof ModelNotReadyError)) throw error;
 		}
 	};

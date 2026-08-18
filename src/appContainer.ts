@@ -98,10 +98,6 @@ export class AppContainer {
 			settingsRepo: this.settingsRepo,
 		});
 
-		// Consumers below hold these references for their whole lifetime (the worker forever, views
-		// until their leaf closes), so each resolves the current Generation per call rather than
-		// capturing one. `this.modelSession` is assigned further down; these closures only run later,
-		// once the container is fully wired.
 		this.getSimilarNotes = (args) => this.modelSession.withGeneration((generation) => generation.getSimilarNotes(args));
 		this.synchronizeIndex = () => this.modelSession.withGeneration((generation) => generation.synchronizeIndex());
 		this.isIndexEmpty = () => this.modelSession.withGeneration((generation) => generation.indexRepo.isEmpty());
@@ -156,8 +152,6 @@ export class AppContainer {
 
 	async shutdown(): Promise<void> {
 		this.indexingWorker.unload();
-		// Aborts an in-flight load too — otherwise a plugin unload mid-download leaves the iframe
-		// in the DOM with the model still initializing.
 		this.modelSession.shutdown();
 		this.disposeIndexingProgress();
 		this.upsertDebouncer.cancel();

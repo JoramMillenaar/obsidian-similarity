@@ -20,10 +20,6 @@ import { makeSynchronizeIndex, SynchronizeIndexUseCase } from "./synchronizeInde
 import { LiveNoteSync, makeLiveNoteSync } from "./liveNoteSync";
 import { IndexingWorker, Priority } from "./indexingWorker";
 
-/**
- * An immutable bundle of everything whose meaning depends on which embedding model is active.
- * Built whole by `buildGeneration`, never mutated, and published only once fully constructed.
- */
 export type Generation = {
 	readonly modelId: EmbeddingModelId;
 	readonly embedder: EmbeddingPort;
@@ -37,7 +33,6 @@ export type Generation = {
 	unload(): void;
 };
 
-/** Stateless with respect to the model: constructed once outside, reused across every Generation. */
 export type GenerationSharedDeps = {
 	indexStorage: IndexStorage;
 	noteSource: NoteSource;
@@ -66,8 +61,6 @@ export function makeBuildGeneration(deps: GenerationSharedDeps): BuildGeneration
 				deps.indexStorage.repair(modelId),
 			]);
 		} catch (error) {
-			// Nothing else holds this provider yet, so if we don't tear it down here its iframe stays
-			// in the DOM forever (ids are unique per instance, so failures would accumulate).
 			embedder.unload();
 			throw error;
 		}

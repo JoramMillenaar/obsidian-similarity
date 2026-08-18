@@ -51,7 +51,7 @@ export function makeIndexNote(deps: IndexNoteDeps): IndexNoteUseCase {
 		}
 
 		if (embedded.metadata.embeddingModelId !== deps.indexRepo.modelId) {
-			// The model changed mid-job; this embedding belongs to a retired Generation. Drop it rather than corrupt the index.
+			// TODO: Should this layer be in charge of this? Seems like a thin check knowing the consequences could be total index corruption
 			return "unchanged";
 		}
 

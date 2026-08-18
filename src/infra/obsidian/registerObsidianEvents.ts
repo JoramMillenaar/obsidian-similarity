@@ -3,11 +3,7 @@ import { AppContainer } from "../../appContainer";
 import { LiveNoteSync } from "../../app/liveNoteSync";
 import { ModelNotReadyError } from "../../app/modelSession";
 
-/**
- * Vault events fire whether or not a model is loaded, and Obsidian gives these handlers nowhere to
- * report a failure — so resolve the current Generation per event and swallow the outcome here.
- * "No model yet" is an ordinary state during startup and switches, not an error worth logging.
- */
+
 function withLiveNoteSync(
 	container: AppContainer,
 	failureMessage: string,
@@ -20,7 +16,7 @@ function withLiveNoteSync(
 			console.error(`[Similarity] ${failureMessage}`, error);
 		});
 }
-
+// TODO: is handing the whole container jungle necessary? Wouldn't it be cleaner only to pass what it actually uses?
 export function registerObsidianEvents(plugin: Plugin, container: AppContainer): void {
 	plugin.registerEvent(
 		plugin.app.workspace.on("editor-change", (_editor, info) => {

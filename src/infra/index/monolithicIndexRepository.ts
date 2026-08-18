@@ -1,7 +1,6 @@
 import { EmbeddingModelId, IndexedNote } from "../../types";
 import { IndexRepository, IndexStorage } from "../../ports";
 
-/** Bound to one model for its whole lifetime — construct a new instance per Generation, never reused across models. */
 export class MonolithicIndexRepository implements IndexRepository {
 	constructor(
 		private readonly storage: IndexStorage,
