@@ -53,7 +53,8 @@ export class IframeMessenger {
         if (this.iframe) return;
         if (signal?.aborted) throw abortError();
 
-        this.iframe = activeDocument.body.createEl('iframe', {
+		// deliberately document and not activeDocument to prevent attaching to settings window
+        this.iframe = document.body.createEl('iframe', {
             attr: {
                 id: this.iframeId,
                 style: "display: none;",
@@ -190,7 +191,7 @@ export class IframeMessenger {
         }
         this.pendingRequests.clear();
 
-        activeDocument.getElementById(this.iframeId)?.remove();
+        this.iframe?.remove();
         window.removeEventListener('message', this.onMessageReceived);
         this.iframe = null;
     }
