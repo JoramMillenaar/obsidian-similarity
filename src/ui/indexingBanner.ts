@@ -1,44 +1,37 @@
 import { IndexingQueueSnapshot } from "../types";
+import { ModelSessionSnapshot } from "../app/modelSession";
 
-export type IndexingBannerState = {
-	kind: "hidden" | "initial" | "updating" | "failed";
+export type BannerState = {
+	visible: boolean;
 	message: string;
-	progressLabel?: string;
 	processed: number;
 	total: number;
 };
 
-export function getIndexingBannerState(snapshot: IndexingQueueSnapshot): IndexingBannerState {
-	const {processed, total} = snapshot;
-	const progressLabel = total > 0
-		? `${processed} / ${total}`
-		: undefined;
+const HIDDEN_BANNER: BannerState = {visible: false, message: "", processed: 0, total: 0};
 
-	if (snapshot.fatalError) {
-		return {
-			kind: "failed",
-			message: "Indexing paused after an error. Try restarting your Obsidian.",
-			progressLabel,
-			processed,
-			total,
-		};
-	}
-
-	if (snapshot.isRunning || snapshot.pending > 0) {
-		return {
-			kind: "updating",
-			message: "Optimizing your experience. Results may shift as more notes are processed.",
-			progressLabel,
-			processed,
-			total,
-		};
+export function getModelDownloadBannerState(snapshot: ModelSessionSnapshot): BannerState {
+	if (snapshot.status !== "loading" || !snapshot.progress || snapshot.progress.progress >= 100) {
+		return HIDDEN_BANNER;
 	}
 
 	return {
-		kind: "hidden",
-		message: "",
-		progressLabel,
-		processed,
-		total,
+		visible: true,
+		message: "Setting up your experience.",
+		processed: Math.round(snapshot.progress.progress),
+		total: 100,
+	};
+}
+
+export function getIndexingBannerState(snapshot: IndexingQueueSnapshot): BannerState {
+	if (snapshot.fatalError || !(snapshot.isRunning || snapshot.pending > 0)) {
+		return {...HIDDEN_BANNER, processed: snapshot.processed, total: snapshot.total};
+	}
+
+	return {
+		visible: true,
+		message: "Optimizing your experience. Results may shift as more notes are processed.",
+		processed: snapshot.processed,
+		total: snapshot.total,
 	};
 }

@@ -1,6 +1,6 @@
 import { EmbeddingModelId } from "../types";
 import { ModelLoadProgress, SettingsRepository, StatusReporter } from "../ports";
-import { EMBEDDING_MODELS } from "../constants";
+import { EMBEDDING_MODELS, MIN_DOWNLOAD_PROGRESS_BYTES } from "../constants";
 import { IndexingWorker } from "./indexingWorker";
 import { BuildGenerationUseCase, Generation } from "./generation";
 
@@ -132,17 +132,17 @@ export class ModelSession implements ModelStateReader {
 
 		const config = EMBEDDING_MODELS[modelId];
 		this.deps.status.update(`Loading ${config.label} model…`);
-		const loadStartedAt = Date.now();
 
 		let generation: Generation;
 		try {
 			generation = await this.deps.buildGeneration(modelId, config, (progress) => {
+				if (progress.total < MIN_DOWNLOAD_PROGRESS_BYTES) return;
+
 				const phase: "downloading" | "finalizing" = progress.progress >= 100 ? "finalizing" : "downloading";
 				if (epoch === this.epoch && this.state.status === "loading") {
 					this.state = {...this.state, progress, phase};
 					this.notify();
 				}
-				if (Date.now() - loadStartedAt < 1000) return;
 				this.deps.status.update(
 					phase === "finalizing" ? `Finalizing ${config.label} model…` : `Downloading ${config.label} model…`,
 				);

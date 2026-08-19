@@ -5,8 +5,7 @@ import { SynchronizeIndexUseCase } from "../app/synchronizeIndex";
 import { ModelSessionSnapshot, ModelStateReader } from "../app/modelSession";
 import { isMarkdownPath } from "../domain/markdownPath";
 import { IDLE_INDEXING_SNAPSHOT, IndexingQueueSnapshot } from "../types";
-import { getIndexingBannerState, IndexingBannerState } from "./indexingBanner";
-import { getModelStatus } from "./modelStatus";
+import { BannerState, getIndexingBannerState, getModelDownloadBannerState } from "./indexingBanner";
 
 export function logError(message: unknown, ...optionalParams: unknown[]) {
 	console.error("[Similarity]:", message, ...optionalParams);
@@ -127,13 +126,10 @@ export class SimilarNotesListView extends ItemView {
 		});
 	}
 
-	/** While the model isn't ready, that takes priority over indexing state — there's nothing to index into yet. */
-	private currentBannerState(): IndexingBannerState {
-		if (this.modelState.status !== "ready") {
-			const status = getModelStatus(this.modelState);
-			return {kind: "updating", message: status.message, processed: status.processed ?? 0, total: status.total ?? 0};
-		}
-		return getIndexingBannerState(this.indexingState);
+	/** Downloading the model takes priority over indexing progress — there's nothing to index into yet. */
+	private currentBannerState(): BannerState {
+		const download = getModelDownloadBannerState(this.modelState);
+		return download.visible ? download : getIndexingBannerState(this.indexingState);
 	}
 
 	private renderIndexingBanner(container: HTMLElement) {
@@ -148,7 +144,7 @@ export class SimilarNotesListView extends ItemView {
 			? existing
 			: container.insertBefore(createDiv(), container.firstChild);
 
-		bannerEl.className = `similarity-index-banner similarity-index-banner-${banner.kind}`;
+		bannerEl.className = "similarity-index-banner";
 		bannerEl.empty();
 		bannerEl.createDiv({
 			cls: "similarity-index-banner-message",
@@ -234,7 +230,7 @@ export class SimilarNotesListView extends ItemView {
 				return;
 			}
 
-			if (getIndexingBannerState(this.indexingState).kind === "failed") {
+			if (this.indexingState.fatalError) {
 				this.renderMessage(
 					workingContainer,
 					indexEmpty
@@ -381,21 +377,14 @@ export class SimilarNotesListView extends ItemView {
 	}
 
 	private shouldShowIndexingBanner(): boolean {
-		if (this.modelState.status !== "ready") return true;
+		if (getModelDownloadBannerState(this.modelState).visible) return true;
 
-		const {total} = this.indexingState;
-		const banner = getIndexingBannerState(this.indexingState);
-		if (banner.kind === "hidden" || banner.kind === "failed") {
-			return banner.kind === "failed";
-		}
-
-		return total > SimilarNotesListView.MIN_ITEMS_FOR_PROGRESS_BANNER - 1;
+		const indexing = getIndexingBannerState(this.indexingState);
+		return indexing.visible && indexing.total > SimilarNotesListView.MIN_ITEMS_FOR_PROGRESS_BANNER - 1;
 	}
 
 	private shouldRefreshResults(previous: IndexingQueueSnapshot, snapshot: IndexingQueueSnapshot): boolean {
-		const previousBannerKind = getIndexingBannerState(previous).kind;
-		const snapshotBannerKind = getIndexingBannerState(snapshot).kind;
-		if (previousBannerKind !== snapshotBannerKind || previous.fatalError !== snapshot.fatalError) {
+		if (getIndexingBannerState(previous).visible !== getIndexingBannerState(snapshot).visible || previous.fatalError !== snapshot.fatalError) {
 			return true;
 		}
 		if (previous.isRunning && !snapshot.isRunning) {

@@ -4,7 +4,7 @@ import { EmbeddingModelConfig } from 'src/types';
 env.allowLocalModels = false;
 
 export type Device = 'wasm' | 'webgpu';
-export type ModelLoadProgress = { progress: number; file: string };
+export type ModelLoadProgress = { progress: number; file: string; loaded: number; total: number };
 export type ModelLoadProgressCallback = (progress: ModelLoadProgress) => void;
 
 export class EmbeddingModel {
@@ -27,7 +27,9 @@ export class EmbeddingModel {
 			device: this.#device,
 			dtype: webgpuAvailable ? 'fp16' : 'q8',
 			progress_callback: onProgress ? (info: ProgressInfo) => {
-				if (info.status === 'progress') onProgress({ progress: info.progress, file: info.file });
+				if (info.status === 'progress') {
+					onProgress({ progress: info.progress, file: info.file, loaded: info.loaded, total: info.total });
+				}
 			} : undefined,
 		});
 	}

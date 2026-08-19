@@ -9,7 +9,13 @@ declare global {
 }
 
 const model = new EmbeddingModel(window.__EMBEDDING_MODEL_CONFIG__, (progress) => {
-	window.parent.postMessage({ type: 'model-load-progress', progress: progress.progress, file: progress.file }, window.origin);
+	window.parent.postMessage({
+		type: 'model-load-progress',
+		progress: progress.progress,
+		file: progress.file,
+		loaded: progress.loaded,
+		total: progress.total,
+	}, window.origin);
 });
 const generateDocumentEmbeddings = makeGenerateDocumentEmbeddings(model);
 

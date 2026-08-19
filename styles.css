@@ -66,11 +66,6 @@
 	white-space: nowrap;
 }
 
-.similarity-index-banner-failed {
-	border-color: var(--text-error);
-	background: color-mix(in srgb, var(--background-secondary) 86%, var(--text-error) 14%);
-}
-
 .suggestion-note {
 	color: var(--text-muted);
 	font-size: var(--font-smallest);

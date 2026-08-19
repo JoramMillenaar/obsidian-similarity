@@ -25,6 +25,8 @@ export type EmbeddingResult = {
 export type ModelLoadProgress = {
 	progress: number;
 	file: string;
+	loaded: number;
+	total: number;
 };
 
 export interface EmbeddingPort {

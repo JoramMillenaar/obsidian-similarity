@@ -5,7 +5,7 @@ const EMBED_TIMEOUT_MS = 30000;
 const READY_PING_TIMEOUT_MS = 3000;
 const READY_STALL_TIMEOUT_MS = 120000;
 
-type ProgressMessage = { type: 'model-load-progress'; progress: number; file: string };
+type ProgressMessage = { type: 'model-load-progress'; progress: number; file: string; loaded: number; total: number };
 type ResultMessage = { requestId: number; data: EmbeddingResult; error?: string };
 
 function isProgressMessage(message: ProgressMessage | ResultMessage): message is ProgressMessage {
@@ -88,7 +88,7 @@ export class IframeMessenger {
         this.lastIframeActivityAt = Date.now();
 
         if (isProgressMessage(message)) {
-            this.onProgress?.({ progress: message.progress, file: message.file });
+            this.onProgress?.({ progress: message.progress, file: message.file, loaded: message.loaded, total: message.total });
             return;
         }
 

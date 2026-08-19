@@ -82,7 +82,7 @@ export class AppContainer {
 		const activeEditor = new ObsidianActiveEditor(plugin);
 		this.similarityView = new ObsidianSimilarityView(plugin);
 
-		const indexingProgress = new IndexingProgress();
+		const indexingProgress = new IndexingProgress({status: this.status});
 
 		this.runLegacyMigrations = makeRunLegacyMigrations({
 			pluginDataStore: this.pluginDataStore,

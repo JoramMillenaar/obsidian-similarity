@@ -7,8 +7,7 @@ import { ModelSessionSnapshot, ModelStateReader } from "../app/modelSession";
 import { KeyedDebouncer } from "../domain/debouncer";
 import { isMarkdownPath } from "../domain/markdownPath";
 import { IDLE_INDEXING_SNAPSHOT, IndexingQueueSnapshot, RelatedNote } from "../types";
-import { getIndexingBannerState, IndexingBannerState } from "./indexingBanner";
-import { getModelStatus } from "./modelStatus";
+import { BannerState, getIndexingBannerState, getModelDownloadBannerState } from "./indexingBanner";
 
 export type SearchModalDeps = {
 	getSimilarNotesForNote: GetSimilarNotesForNoteUseCase;
@@ -43,6 +42,7 @@ export class SearchModal extends SuggestModal<RelatedNote> {
 	private static readonly IGNORED_NOTE_STATE = "The current note is ignored by settings.";
 	private static readonly NON_MARKDOWN_NOTE_STATE = this.DEFAULT_EMPTY_STATE;
 	private static readonly NO_ACTIVE_NOTE_STATE = "Open a note to see similar notes.";
+	private static readonly PREPARING_EMPTY_STATE = "Getting things ready. Try again in a moment.";
 
 	constructor(app: App, deps: SearchModalDeps) {
 		super(app);
@@ -127,14 +127,14 @@ export class SearchModal extends SuggestModal<RelatedNote> {
 			this.debouncer.schedule("search", async () => {
 				try {
 					if (this.modelState.status !== "ready") {
-						this.emptyStateText = getModelStatus(this.modelState).message;
+						this.emptyStateText = SearchModal.PREPARING_EMPTY_STATE;
 						resolve([]);
 						return;
 					}
 
 					const indexEmpty = await this.deps.isIndexEmpty();
 					if (indexEmpty) {
-						this.emptyStateText = getIndexingBannerState(this.indexingState).kind !== "hidden"
+						this.emptyStateText = getIndexingBannerState(this.indexingState).visible
 							? SearchModal.EMPTY_DURING_INDEX_STATE
 							: SearchModal.EMPTY_INDEX_STATE;
 						resolve([]);
@@ -223,13 +223,13 @@ export class SearchModal extends SuggestModal<RelatedNote> {
 			}
 
 			if (this.modelState.status !== "ready") {
-				this.emptyStateText = getModelStatus(this.modelState).message;
+				this.emptyStateText = SearchModal.PREPARING_EMPTY_STATE;
 				return [];
 			}
 
 			const indexEmpty = await this.deps.isIndexEmpty();
 			if (indexEmpty) {
-				this.emptyStateText = getIndexingBannerState(this.indexingState).kind !== "hidden"
+				this.emptyStateText = getIndexingBannerState(this.indexingState).visible
 					? SearchModal.EMPTY_DURING_INDEX_STATE
 					: SearchModal.EMPTY_INDEX_STATE;
 				return [];
@@ -248,7 +248,7 @@ export class SearchModal extends SuggestModal<RelatedNote> {
 	}
 
 	private getNoResultsText(): string {
-		return getIndexingBannerState(this.indexingState).kind !== "hidden"
+		return getIndexingBannerState(this.indexingState).visible
 			? SearchModal.NO_RESULTS_DURING_INDEX_STATE
 			: SearchModal.NO_RESULTS_EMPTY_STATE;
 	}
@@ -265,13 +265,10 @@ export class SearchModal extends SuggestModal<RelatedNote> {
 		this.renderBanner();
 	}
 
-	/** While the model isn't ready, that takes priority over indexing state — there's nothing to index into yet. */
-	private currentBannerState(): IndexingBannerState {
-		if (this.modelState.status !== "ready") {
-			const status = getModelStatus(this.modelState);
-			return {kind: "updating", message: status.message, processed: status.processed ?? 0, total: status.total ?? 0};
-		}
-		return getIndexingBannerState(this.indexingState);
+	/** Downloading the model takes priority over indexing progress — there's nothing to index into yet. */
+	private currentBannerState(): BannerState {
+		const download = getModelDownloadBannerState(this.modelState);
+		return download.visible ? download : getIndexingBannerState(this.indexingState);
 	}
 
 	private renderBanner() {
@@ -281,7 +278,6 @@ export class SearchModal extends SuggestModal<RelatedNote> {
 
 		const banner = this.currentBannerState();
 		this.bannerEl.empty();
-		this.bannerEl.className = `similarity-index-banner similarity-index-banner-${banner.kind}`;
 		this.bannerEl.toggleClass("is-hidden", !this.shouldShowIndexingBanner());
 
 		if (!this.shouldShowIndexingBanner()) {
@@ -321,9 +317,7 @@ export class SearchModal extends SuggestModal<RelatedNote> {
 	}
 
 	private shouldRefreshSuggestions(previous: IndexingQueueSnapshot, snapshot: IndexingQueueSnapshot): boolean {
-		const previousBannerKind = getIndexingBannerState(previous).kind;
-		const snapshotBannerKind = getIndexingBannerState(snapshot).kind;
-		if (previousBannerKind !== snapshotBannerKind || previous.fatalError !== snapshot.fatalError) {
+		if (getIndexingBannerState(previous).visible !== getIndexingBannerState(snapshot).visible || previous.fatalError !== snapshot.fatalError) {
 			return true;
 		}
 		if (previous.isRunning && !snapshot.isRunning) {
@@ -343,20 +337,15 @@ export class SearchModal extends SuggestModal<RelatedNote> {
 	}
 
 	private shouldShowIndexingBanner(): boolean {
-		if (this.modelState.status !== "ready") return true;
+		if (getModelDownloadBannerState(this.modelState).visible) return true;
 
-		const {total} = this.indexingState;
-		const banner = getIndexingBannerState(this.indexingState);
-		if (banner.kind === "hidden" || banner.kind === "failed") {
-			return banner.kind === "failed";
-		}
-
-		return total > SearchModal.MIN_ITEMS_FOR_PROGRESS_BANNER - 1;
+		const indexing = getIndexingBannerState(this.indexingState);
+		return indexing.visible && indexing.total > SearchModal.MIN_ITEMS_FOR_PROGRESS_BANNER - 1;
 	}
 }
 
 function createBannerElement() {
 	const element = createDiv();
-	element.className = "similarity-index-banner similarity-index-banner-hidden is-hidden";
+	element.className = "similarity-index-banner is-hidden";
 	return element;
 }
