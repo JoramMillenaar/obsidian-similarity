@@ -15,12 +15,11 @@ export type SimilarNotesListViewDeps = {
 	backendState: BackendState;
 };
 
-const HIDDEN_BANNER: BannerState = {visible: false, message: "", processed: 0, total: 0};
-
 export class SimilarNotesListView extends ItemView {
 	private snapshot: SimilarNotesSnapshot | undefined;
 	private activePath: string | null = null;
-	private banner: BannerState = HIDDEN_BANNER;
+	private bannerEl?: HTMLElement;
+	private bodyEl?: HTMLElement;
 	private unsubscribeSnapshot?: () => void;
 	private unsubscribeBanner?: () => void;
 
@@ -71,7 +70,9 @@ export class SimilarNotesListView extends ItemView {
 
 	async onOpen() {
 		this.containerEl.empty();
-		this.containerEl.createDiv({cls: "tag-container"});
+		const root = this.containerEl.createDiv({cls: "tag-container"});
+		this.bannerEl = root.createDiv({cls: "similarity-index-banner is-hidden"});
+		this.bodyEl = root.createDiv();
 
 		this.registerEvent(
 			this.app.workspace.on("active-leaf-change", () => this.syncActiveNote()),
@@ -82,12 +83,9 @@ export class SimilarNotesListView extends ItemView {
 
 		this.unsubscribeSnapshot = this.deps.similarNotesFeed.subscribe((snapshot) => {
 			this.snapshot = snapshot;
-			this.render();
+			this.renderBody();
 		});
-		this.unsubscribeBanner = subscribeBanner(this.deps.backendState, (banner) => {
-			this.banner = banner;
-			this.render();
-		});
+		this.unsubscribeBanner = subscribeBanner(this.deps.backendState, (banner) => this.renderBanner(banner));
 
 		this.syncActiveNote();
 	}
@@ -96,15 +94,13 @@ export class SimilarNotesListView extends ItemView {
 		const active = this.app.workspace.getActiveFile();
 		this.activePath = active?.path ?? null;
 		this.deps.similarNotesFeed.setActiveNote(this.activePath);
-		this.render();
+		this.renderBody();
 	}
 
-	private render() {
-		const container = this.containerEl.querySelector(".tag-container") as HTMLElement | null
-			?? this.containerEl.createDiv({cls: "tag-container"});
+	private renderBody() {
+		const container = this.bodyEl;
+		if (!container) return;
 		container.empty();
-
-		this.renderTopBanner(container);
 
 		if (!this.snapshot || this.snapshot.noteId !== this.activePath) {
 			container.createDiv({cls: "tree-item-self", text: "Loading similar notes..."});
@@ -138,12 +134,14 @@ export class SimilarNotesListView extends ItemView {
 		});
 	}
 
-	private renderTopBanner(container: HTMLElement) {
-		const banner = this.banner;
+	private renderBanner(banner: BannerState) {
+		const bannerEl = this.bannerEl;
+		if (!bannerEl) return;
+
+		bannerEl.empty();
+		bannerEl.toggleClass("is-hidden", !banner.visible);
 		if (!banner.visible) return;
 
-		const bannerEl = container.insertBefore(createDiv(), container.firstChild);
-		bannerEl.className = "similarity-index-banner";
 		bannerEl.createDiv({
 			cls: "similarity-index-banner-message",
 			text: banner.message,
