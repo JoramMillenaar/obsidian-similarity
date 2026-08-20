@@ -1,9 +1,9 @@
 import { IndexingQueueSnapshot, RelatedNote } from "../types";
 import { GetSimilarNotesForNoteUseCase } from "./getSimilarNotesForNote";
 import { IsIgnoredPath } from "./isIgnoredPath";
-import { isMarkdownPath } from "../domain/markdownPath";
 import { backendNoticeFor, SimilarNotesNotice, shouldRefreshOnIndexingChange } from "./similarNotesNotice";
 import { BackendState } from "./backendState";
+import { resolveSimilarNotesForNote } from "./resolveSimilarNotes";
 
 export type { SimilarNotesNotice };
 
@@ -60,45 +60,25 @@ export function makeSimilarNotesFeed(deps: SimilarNotesFeedDeps): SimilarNotesFe
 		if (forEpoch !== epoch || noteId === null) return;
 		const currentNoteId = noteId;
 
-		if (!isMarkdownPath(currentNoteId)) {
-			emit({epoch: forEpoch, noteId: currentNoteId, items: [], refining: false, notice: {kind: "unsupported-file"}});
-			return;
-		}
-
-		if (await deps.isIgnoredPath(currentNoteId)) {
-			if (forEpoch !== epoch) return;
-			emit({epoch: forEpoch, noteId: currentNoteId, items: [], refining: false, notice: {kind: "ignored-path"}});
-			return;
-		}
+		const result = await resolveSimilarNotesForNote(
+			{
+				backendState: backend,
+				getSimilarNotesForNote: deps.getSimilarNotesForNote,
+				isIndexEmpty: deps.isIndexEmpty,
+				isIgnoredPath: deps.isIgnoredPath,
+			},
+			currentNoteId,
+		);
 		if (forEpoch !== epoch) return;
 
-		const modelState = backend.getModelState();
-		const ready = modelState.status === "ready";
-
-		const items = await deps.getSimilarNotesForNote({noteId: currentNoteId}).catch(() => []);
-		if (forEpoch !== epoch) return;
-
-		if (!ready) {
-			emit({
-				epoch: forEpoch,
-				noteId: currentNoteId,
-				items,
-				refining: true,
-				notice: {kind: "warming-up", progress: modelState.status === "loading" ? (modelState.progress?.progress ?? null) : null},
-			});
-			return;
-		}
-
-		const indexEmpty = await deps.isIndexEmpty().catch(() => false);
-		if (forEpoch !== epoch) return;
-		lastIndexEmpty = indexEmpty;
+		if (result.indexEmpty !== undefined) lastIndexEmpty = result.indexEmpty;
 
 		emit({
 			epoch: forEpoch,
 			noteId: currentNoteId,
-			items,
-			refining: false,
-			notice: backendNoticeFor(indexEmpty, indexingState),
+			items: result.items,
+			refining: result.notice?.kind === "warming-up",
+			notice: result.notice,
 		});
 	}
 

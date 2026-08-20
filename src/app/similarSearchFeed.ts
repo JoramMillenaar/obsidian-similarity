@@ -2,9 +2,9 @@ import { RelatedNote } from "../types";
 import { GetSimilarNotesForNoteUseCase } from "./getSimilarNotesForNote";
 import { GetSimilarNotesForTextUseCase } from "./getSimilarNotesForText";
 import { IsIgnoredPath } from "./isIgnoredPath";
-import { isMarkdownPath } from "../domain/markdownPath";
 import { backendNoticeFor, SimilarNotesNotice } from "./similarNotesNotice";
 import { BackendState, Unsubscribe } from "./backendState";
+import { resolveSimilarNotesForNote } from "./resolveSimilarNotes";
 
 export type SimilarSearchResult = {
 	items: RelatedNote[];
@@ -36,7 +36,7 @@ export function makeSimilarSearchFeed(deps: SimilarSearchFeedDeps): SimilarSearc
 		};
 	}
 
-	async function resolveEmbedded(fetchItems: () => Promise<RelatedNote[]>): Promise<SimilarSearchResult> {
+	async function resolveEmbeddedQuery(text: string): Promise<SimilarSearchResult> {
 		if (!backend.isReady()) {
 			return warmingUp();
 		}
@@ -46,27 +46,17 @@ export function makeSimilarSearchFeed(deps: SimilarSearchFeedDeps): SimilarSearc
 			return {items: [], notice: backendNoticeFor(true, backend.getIndexingState())};
 		}
 
-		const items = await fetchItems().catch(() => []);
+		const items = await deps.getSimilarNotesForText({text}).catch(() => []);
 		return {items, notice: backendNoticeFor(false, backend.getIndexingState())};
 	}
 
 	return {
 		async resolveForNote(noteId) {
-			if (noteId === null) {
-				return {items: [], notice: {kind: "no-active-note"}};
-			}
-			if (!isMarkdownPath(noteId)) {
-				return {items: [], notice: {kind: "unsupported-file"}};
-			}
-			if (await deps.isIgnoredPath(noteId)) {
-				return {items: [], notice: {kind: "ignored-path"}};
-			}
-
-			return resolveEmbedded(() => deps.getSimilarNotesForNote({noteId}));
+			return resolveSimilarNotesForNote(deps, noteId);
 		},
 
 		async resolveForQuery(text) {
-			return resolveEmbedded(() => deps.getSimilarNotesForText({text}));
+			return resolveEmbeddedQuery(text);
 		},
 
 		subscribeRefreshSignal: backend.subscribeRefreshSignal,
