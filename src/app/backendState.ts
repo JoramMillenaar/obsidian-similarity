@@ -8,8 +8,10 @@ export type Unsubscribe = () => void;
 
 export interface BackendState {
 	getIndexingState(): IndexingQueueSnapshot | undefined;
-	getModelSnapshot(): ModelSessionSnapshot;
+	getModelState(): ModelSessionSnapshot;
 	isReady(): boolean;
+	subscribeModelState(fn: (snapshot: ModelSessionSnapshot) => void): Unsubscribe;
+	subscribeIndexingState(fn: (snapshot: IndexingQueueSnapshot) => void): Unsubscribe;
 	subscribeBanner(fn: (banner: BannerState) => void): Unsubscribe;
 	subscribeRefreshSignal(fn: () => void): Unsubscribe;
 	dispose(): void;
@@ -30,6 +32,8 @@ export function makeBackendState(deps: BackendStateDeps): BackendState {
 	let refreshTimer: ReturnType<typeof setTimeout> | undefined;
 	const bannerListeners = new Set<(banner: BannerState) => void>();
 	const refreshListeners = new Set<() => void>();
+	const modelStateListeners = new Set<(snapshot: ModelSessionSnapshot) => void>();
+	const indexingStateListeners = new Set<(snapshot: IndexingQueueSnapshot) => void>();
 
 	function emitBanner() {
 		if (!indexingState) return;
@@ -56,6 +60,7 @@ export function makeBackendState(deps: BackendStateDeps): BackendState {
 		const previous = indexingState;
 		indexingState = next;
 		emitBanner();
+		for (const fn of indexingStateListeners) fn(next);
 		if (shouldRefreshOnIndexingChange(previous, next, null)) {
 			scheduleThrottledRefresh();
 		}
@@ -65,6 +70,7 @@ export function makeBackendState(deps: BackendStateDeps): BackendState {
 		const wasReady = modelReady;
 		modelReady = next.status === "ready";
 		emitBanner();
+		for (const fn of modelStateListeners) fn(next);
 		if (modelReady && !wasReady) {
 			if (refreshTimer) {
 				clearTimeout(refreshTimer);
@@ -77,8 +83,18 @@ export function makeBackendState(deps: BackendStateDeps): BackendState {
 
 	return {
 		getIndexingState: () => indexingState,
-		getModelSnapshot: () => deps.modelSession.getSnapshot(),
+		getModelState: () => deps.modelSession.getSnapshot(),
 		isReady: () => modelReady,
+		subscribeModelState(fn) {
+			modelStateListeners.add(fn);
+			fn(deps.modelSession.getSnapshot());
+			return () => modelStateListeners.delete(fn);
+		},
+		subscribeIndexingState(fn) {
+			indexingStateListeners.add(fn);
+			if (indexingState) fn(indexingState);
+			return () => indexingStateListeners.delete(fn);
+		},
 		subscribeBanner(fn) {
 			bannerListeners.add(fn);
 			if (indexingState) fn(computeBanner(deps.modelSession.getSnapshot(), indexingState));
@@ -94,6 +110,8 @@ export function makeBackendState(deps: BackendStateDeps): BackendState {
 			if (refreshTimer) clearTimeout(refreshTimer);
 			bannerListeners.clear();
 			refreshListeners.clear();
+			modelStateListeners.clear();
+			indexingStateListeners.clear();
 		},
 	};
 }

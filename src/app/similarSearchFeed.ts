@@ -29,7 +29,7 @@ export function makeSimilarSearchFeed(deps: SimilarSearchFeedDeps): SimilarSearc
 	const backend = deps.backendState;
 
 	function warmingUp(): SimilarSearchResult {
-		const modelState = backend.getModelSnapshot();
+		const modelState = backend.getModelState();
 		return {
 			items: [],
 			notice: {kind: "warming-up", progress: modelState.status === "loading" ? (modelState.progress?.progress ?? null) : null},

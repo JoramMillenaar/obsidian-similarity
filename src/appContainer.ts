@@ -168,9 +168,13 @@ export class AppContainer {
 			modelSession: this.modelSession,
 		});
 
-		this.similarNotesFeed = makeSimilarNotesFeed({
+		this.backendState = makeBackendState({
 			modelSession: this.modelSession,
 			subscribeIndexingState: this.subscribeIndexingState,
+		});
+
+		this.similarNotesFeed = makeSimilarNotesFeed({
+			backendState: this.backendState,
 			getSimilarNotesForNote: this.getSimilarNotesForNote,
 			isIndexEmpty: this.isIndexEmpty,
 			isIgnoredPath: this.isIgnoredPath,
@@ -178,11 +182,6 @@ export class AppContainer {
 		});
 
 		this.similarityView = new ObsidianSimilarityView(plugin, this.similarNotesFeed);
-
-		this.backendState = makeBackendState({
-			modelSession: this.modelSession,
-			subscribeIndexingState: this.subscribeIndexingState,
-		});
 
 		this.similarSearchFeed = makeSimilarSearchFeed({
 			backendState: this.backendState,

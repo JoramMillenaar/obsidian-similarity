@@ -1,10 +1,9 @@
 import { IndexingQueueSnapshot, RelatedNote } from "../types";
 import { GetSimilarNotesForNoteUseCase } from "./getSimilarNotesForNote";
-import { SubscribeIndexingStateUseCase } from "./indexingProgress";
-import { ModelStateReader } from "./modelSession";
 import { IsIgnoredPath } from "./isIgnoredPath";
 import { isMarkdownPath } from "../domain/markdownPath";
 import { backendNoticeFor, SimilarNotesNotice, shouldRefreshOnIndexingChange } from "./similarNotesNotice";
+import { BackendState } from "./backendState";
 
 export type { SimilarNotesNotice };
 
@@ -28,8 +27,7 @@ export interface SimilarNotesFeed {
 }
 
 type SimilarNotesFeedDeps = {
-	modelSession: ModelStateReader;
-	subscribeIndexingState: SubscribeIndexingStateUseCase;
+	backendState: BackendState;
 	getSimilarNotesForNote: GetSimilarNotesForNoteUseCase;
 	isIndexEmpty: () => Promise<boolean>;
 	isIgnoredPath: IsIgnoredPath;
@@ -40,13 +38,14 @@ type SimilarNotesFeedDeps = {
 const IDLE: SimilarNotesSnapshot = {epoch: 0, noteId: null, items: [], refining: false, notice: {kind: "no-active-note"}};
 
 export function makeSimilarNotesFeed(deps: SimilarNotesFeedDeps): SimilarNotesFeed {
+	const backend = deps.backendState;
 	const refreshDebounceMs = deps.refreshDebounceMs ?? 1500;
 
 	let epoch = 0;
 	let noteId: string | null = null;
 	let snapshot: SimilarNotesSnapshot = IDLE;
-	let indexingState: IndexingQueueSnapshot | undefined;
-	let modelReady = deps.modelSession.getSnapshot().status === "ready";
+	let indexingState: IndexingQueueSnapshot | undefined = backend.getIndexingState();
+	let modelReady = backend.getModelState().status === "ready";
 	let lastIndexEmpty = false;
 	let lastRefreshAt = 0;
 	let refreshTimer: ReturnType<typeof setTimeout> | undefined;
@@ -73,7 +72,7 @@ export function makeSimilarNotesFeed(deps: SimilarNotesFeedDeps): SimilarNotesFe
 		}
 		if (forEpoch !== epoch) return;
 
-		const modelState = deps.modelSession.getSnapshot();
+		const modelState = backend.getModelState();
 		const ready = modelState.status === "ready";
 
 		const items = await deps.getSimilarNotesForNote({noteId: currentNoteId}).catch(() => []);
@@ -116,7 +115,7 @@ export function makeSimilarNotesFeed(deps: SimilarNotesFeedDeps): SimilarNotesFe
 
 	const BACKEND_NOTICE_KINDS = new Set(["indexing", "empty-index", "fatal-error", undefined]);
 
-	const unsubscribeIndexingState = deps.subscribeIndexingState((next) => {
+	const unsubscribeIndexingState = backend.subscribeIndexingState((next) => {
 		const previous = indexingState;
 		indexingState = next;
 		if (shouldRefreshOnIndexingChange(previous, next, noteId)) {
@@ -126,7 +125,7 @@ export function makeSimilarNotesFeed(deps: SimilarNotesFeedDeps): SimilarNotesFe
 		}
 	});
 
-	const unsubscribeModelState = deps.modelSession.subscribe((next) => {
+	const unsubscribeModelState = backend.subscribeModelState((next) => {
 		const wasReady = modelReady;
 		modelReady = next.status === "ready";
 
