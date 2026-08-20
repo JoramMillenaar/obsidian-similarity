@@ -48,14 +48,14 @@ export default class SimilarNotes extends Plugin {
 			id: "open-similar-notes",
 			name: "Open similar notes",
 			callback: async () => {
-				await this.appContainer.similarityView.activate({reveal: true, focus: true});
+				await this.appContainer.activateSimilarityView({reveal: true, focus: true});
 			},
 		});
 
 		this.app.workspace.onLayoutReady(() => {
 			registerObsidianEvents(this, this.appContainer);
 			void initializePlugin(this.appContainer);
-			this.appContainer.similarityView.refreshResults();
+			this.appContainer.similarNotesFeed.refresh();
 		});
 
 		// if (__DEV__) {

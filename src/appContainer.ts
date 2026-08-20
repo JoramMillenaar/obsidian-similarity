@@ -18,10 +18,10 @@ import {
 	ModelIndexMetaStore,
 	NoteSource,
 	SettingsRepository,
-	SimilarityView,
+	ActivateSimilarityViewUseCase,
 	StatusReporter,
 } from "./ports";
-import { ObsidianSimilarityView } from "./infra/obsidian/obsidianSimilarityView";
+import { makeActivateSimilarityView } from "./infra/obsidian/obsidianSimilarityView";
 import { ObsidianPluginDataStore } from "./infra/obsidian/obsidianPluginDataStore";
 import { ObsidianSettingsRepository } from "./infra/obsidian/obsidianSettings";
 import { IsIgnoredPath, makeIsIgnoredPath } from "./app/isIgnoredPath";
@@ -52,7 +52,7 @@ export class AppContainer {
 	readonly modelSession: ModelSession;
 	readonly settingsRepo: SettingsRepository;
 	readonly indexingWorker: IndexingWorker;
-	readonly similarityView: SimilarityView;
+	readonly activateSimilarityView: ActivateSimilarityViewUseCase;
 	readonly similarNotesFeed: SimilarNotesFeed;
 	readonly similarSearchFeed: SimilarSearchFeed;
 	readonly backendState: BackendState;
@@ -129,7 +129,7 @@ export class AppContainer {
 			if (event.type === "drained" || event.type === "cleared") return this.indexStorage.flush();
 		});
 		this.indexingWorker.subscribe((event) => {
-			if (event.type === "seeded") return this.similarityView.refreshResults();
+			if (event.type === "seeded") return this.similarNotesFeed.refresh();
 		})
 
 		this.insertWikilinkAtCursor = makeInsertWikilinkAtCursor({
@@ -151,7 +151,7 @@ export class AppContainer {
 			settingsRepo: this.settingsRepo,
 			worker: this.indexingWorker,
 			upsertDebouncer: this.upsertDebouncer,
-			onNoteUpdated: () => this.similarityView.refreshResults(),
+			onNoteUpdated: () => this.similarNotesFeed.refresh(),
 		});
 
 		this.modelSession = new ModelSession({
@@ -181,7 +181,7 @@ export class AppContainer {
 			synchronizeIndex: this.synchronizeIndex,
 		});
 
-		this.similarityView = new ObsidianSimilarityView(plugin, this.similarNotesFeed);
+		this.activateSimilarityView = makeActivateSimilarityView(plugin);
 
 		this.similarSearchFeed = makeSimilarSearchFeed({
 			backendState: this.backendState,

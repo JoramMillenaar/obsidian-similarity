@@ -4,7 +4,7 @@ import { LiveNoteSync } from "../../app/liveNoteSync";
 import { ModelNotReadyError } from "../../app/modelSession";
 
 
-export type ObsidianEventsDeps = Pick<AppContainer, "modelSession" | "status" | "similarityView">;
+export type ObsidianEventsDeps = Pick<AppContainer, "modelSession" | "status" | "similarNotesFeed">;
 
 function withLiveNoteSync(
 	container: ObsidianEventsDeps,
@@ -63,7 +63,7 @@ export function registerObsidianEvents(plugin: Plugin, container: ObsidianEvents
 				});
 			}
 
-			container.similarityView.refreshResults();
+			container.similarNotesFeed.refresh();
 		}),
 	);
 }

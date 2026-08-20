@@ -1,14 +1,10 @@
 import { Notice, Plugin, WorkspaceLeaf } from "obsidian";
 import { VIEW_TYPE_SIMILARITY } from "../../ui/SimilarNotesListView";
-import { ActivateOptions, SimilarityView } from "../../ports";
-import { SimilarNotesFeed } from "../../app/similarNotesFeed";
+import { ActivateOptions, ActivateSimilarityViewUseCase } from "../../ports";
 
-export class ObsidianSimilarityView implements SimilarityView {
-	constructor(private readonly plugin: Plugin, private readonly similarNotesFeed: SimilarNotesFeed) {
-	}
-
-	async activate(options: ActivateOptions = {}): Promise<void> {
-		const {workspace} = this.plugin.app;
+export function makeActivateSimilarityView(plugin: Plugin): ActivateSimilarityViewUseCase {
+	return async function activateSimilarityView(options: ActivateOptions = {}): Promise<void> {
+		const {workspace} = plugin.app;
 		const {reveal = true, focus = false} = options;
 
 		let leaf: WorkspaceLeaf | null = workspace.getLeavesOfType(VIEW_TYPE_SIMILARITY)[0];
@@ -33,9 +29,5 @@ export class ObsidianSimilarityView implements SimilarityView {
 		if (focus) {
 			workspace.setActiveLeaf(leaf, {focus: true});
 		}
-	}
-
-	refreshResults(): void {
-		this.similarNotesFeed.refresh();
-	}
+	};
 }

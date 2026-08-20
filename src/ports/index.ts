@@ -9,4 +9,4 @@ export type { MarkdownTextExtractor } from "./markdownTextExtractor";
 export type { NoteSource } from "./noteSource";
 export type { SettingsRepository } from "./settingsRepository";
 export type { StatusReporter } from "./statusReporter";
-export type { SimilarityView, ActivateOptions } from "./similarityView";
+export type { ActivateSimilarityViewUseCase, ActivateOptions } from "./similarityView";
