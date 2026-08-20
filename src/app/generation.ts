@@ -7,7 +7,7 @@ import {
 	NoteSource,
 	SettingsRepository
 } from "../ports";
-import { EmbeddingProvider } from "../infra/embedder/embeddingProvider";
+import { loadEmbeddingProvider } from "../infra/embedder/embeddingProvider";
 import { MonolithicIndexRepository } from "../infra/index/monolithicIndexRepository";
 import { KeyedDebouncer } from "../domain/debouncer";
 import { EmbedTextUseCase, makeEmbedText } from "./embedText";
@@ -55,15 +55,14 @@ export type BuildGenerationUseCase = (
 
 export function makeBuildGeneration(deps: GenerationSharedDeps): BuildGenerationUseCase {
 	return async function buildGeneration(modelId, config, onProgress, signal) {
-		const embedder = new EmbeddingProvider();
+		const embedderPromise = loadEmbeddingProvider(config, onProgress, signal);
+		const repairPromise = deps.indexStorage.repair(modelId);
 
+		let embedder: EmbeddingPort;
 		try {
-			await Promise.all([
-				embedder.load(config, onProgress, signal),
-				deps.indexStorage.repair(modelId),
-			]);
+			[embedder] = await Promise.all([embedderPromise, repairPromise]);
 		} catch (error) {
-			embedder.unload();
+			await embedderPromise.then((loaded) => loaded.unload()).catch(() => undefined);
 			throw error;
 		}
 
