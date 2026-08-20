@@ -1,11 +1,5 @@
 import { ItemView, Notice, TFile, WorkspaceLeaf } from "obsidian";
-import { GetSimilarNotesForNoteUseCase } from "../app/getSimilarNotesForNote";
-import { SubscribeIndexingStateUseCase } from "../app/indexingProgress";
-import { SynchronizeIndexUseCase } from "../app/synchronizeIndex";
-import { ModelSessionSnapshot, ModelStateReader } from "../app/modelSession";
-import { isMarkdownPath } from "../domain/markdownPath";
-import { IDLE_INDEXING_SNAPSHOT, IndexingQueueSnapshot } from "../types";
-import { BannerState, getIndexingBannerState, getModelDownloadBannerState } from "./indexingBanner";
+import { RelatedNotesFeed, RelatedNotesSnapshot } from "../app/relatedNotesFeed";
 
 export function logError(message: unknown, ...optionalParams: unknown[]) {
 	console.error("[Similarity]:", message, ...optionalParams);
@@ -13,26 +7,16 @@ export function logError(message: unknown, ...optionalParams: unknown[]) {
 
 export const VIEW_TYPE_SIMILARITY = "similarity";
 
-type SimilarNote = { id: string; score: number };
-
 export type SimilarNotesListViewDeps = {
-	isIndexEmpty: () => Promise<boolean>;
-	getSimilarNotesForNote: GetSimilarNotesForNoteUseCase;
-	synchronizeIndex: SynchronizeIndexUseCase;
-	subscribeIndexingState: SubscribeIndexingStateUseCase;
-	modelSession: ModelStateReader;
-	isIgnoredPath: (path: string) => Promise<boolean>;
-}
+	relatedNotesFeed: RelatedNotesFeed;
+};
+
+const MIN_ITEMS_FOR_INDEXING_BANNER = 8;
 
 export class SimilarNotesListView extends ItemView {
-	private static readonly MIN_ITEMS_FOR_PROGRESS_BANNER = 8;
-	private isLoading = false;
-	private lastAutoRefreshAt = 0;
-	private indexingState: IndexingQueueSnapshot = IDLE_INDEXING_SNAPSHOT;
-	private modelState: ModelSessionSnapshot = {status: "not-loaded"};
-	private unsubscribeIndexingState?: () => void;
-	private unsubscribeModelState?: () => void;
-	private refreshTimer?: number;
+	private snapshot: RelatedNotesSnapshot | undefined;
+	private activePath: string | null = null;
+	private unsubscribe?: () => void;
 
 	constructor(leaf: WorkspaceLeaf, private deps: SimilarNotesListViewDeps) {
 		super(leaf);
@@ -80,43 +64,82 @@ export class SimilarNotesListView extends ItemView {
 	}
 
 	async onOpen() {
-		this.unsubscribeIndexingState = this.deps.subscribeIndexingState((snapshot) => {
-			const previous = this.indexingState;
-			this.indexingState = snapshot;
-			this.updateLiveBanner();
-
-			if (this.shouldRefreshResults(previous, snapshot)) {
-				this.scheduleRefresh();
-			}
-		});
-
-		this.unsubscribeModelState = this.deps.modelSession.subscribe((snapshot) => {
-			const previousReady = this.modelState.status === "ready";
-			this.modelState = snapshot;
-
-			if (snapshot.status === "ready" && !previousReady) {
-				// The model just became available (or switched): a full reload, not a debounced one.
-				void this.refresh({background: false});
-				return;
-			}
-
-			this.updateLiveBanner();
-		});
-
-		await this.render();
-	}
-
-	async render() {
 		this.containerEl.empty();
-		const content = this.containerEl.createDiv({cls: "tag-container"});
-		await this.renderContent(content);
+		this.containerEl.createDiv({cls: "tag-container"});
+
+		this.registerEvent(
+			this.app.workspace.on("active-leaf-change", () => this.syncActiveNote()),
+		);
+		this.registerEvent(
+			this.app.workspace.on("file-open", () => this.syncActiveNote()),
+		);
+
+		this.unsubscribe = this.deps.relatedNotesFeed.subscribe((snapshot) => {
+			this.snapshot = snapshot;
+			this.render();
+		});
+
+		this.syncActiveNote();
 	}
 
-	private renderLoading(container: HTMLElement) {
-		return container.createDiv({
-			cls: "tree-item-self",
-			text: "Loading similar notes...",
-		});
+	private syncActiveNote() {
+		const active = this.app.workspace.getActiveFile();
+		this.activePath = active?.path ?? null;
+		this.deps.relatedNotesFeed.setActiveNote(this.activePath);
+		this.render();
+	}
+
+	private render() {
+		const container = this.containerEl.querySelector(".tag-container") as HTMLElement | null
+			?? this.containerEl.createDiv({cls: "tag-container"});
+		container.empty();
+
+		if (!this.snapshot || this.snapshot.noteId !== this.activePath) {
+			container.createDiv({cls: "tree-item-self", text: "Loading similar notes..."});
+			return;
+		}
+
+		this.renderBanner(container, this.snapshot);
+
+		if (this.snapshot.items.length > 0) {
+			this.renderRelatedList(container, this.snapshot.items);
+			return;
+		}
+
+		const {text, showRetry} = this.emptyStateFor(this.snapshot);
+		if (text) this.renderMessage(container, text, this.snapshot.notice?.kind === "no-active-note" ? "similar-notes-no-active" : undefined);
+		if (showRetry) this.renderRetryAction(container);
+	}
+
+	private emptyStateFor(snapshot: RelatedNotesSnapshot): { text?: string; showRetry?: boolean } {
+		const notice = snapshot.notice;
+		if (!notice) return {text: "No related notes were similar enough to display yet."};
+
+		switch (notice.kind) {
+			case "no-active-note":
+				return {text: "Open a note to see similar notes."};
+			case "unsupported-file":
+				return {text: "Semantic matching only supports Markdown notes. Open a .md file to see similar notes."};
+			case "ignored-path":
+				return {text: "This note is ignored by settings. Remove it from ignored paths to see related notes."};
+			case "warming-up":
+				return {text: "Related notes will appear once the embedding model finishes loading."};
+			case "fatal-error":
+				return {
+					text: notice.indexEmpty
+						? "Indexing stopped before any results were ready."
+						: "No related notes matched yet. Indexing also hit an error, so results may be stale.",
+					showRetry: true,
+				};
+			case "empty-index":
+				return {text: "Your index currently has no notes. Run “Sync vault index” to rebuild it.", showRetry: true};
+			case "indexing":
+				return {
+					text: notice.indexEmpty
+						? "Indexing is underway. Related notes will appear as the queue progresses."
+						: "No related notes were similar enough yet. More may appear while indexing continues.",
+				};
+		}
 	}
 
 	private renderMessage(container: HTMLElement, text: string, extraCls?: string) {
@@ -126,39 +149,35 @@ export class SimilarNotesListView extends ItemView {
 		});
 	}
 
-	/** Downloading the model takes priority over indexing progress — there's nothing to index into yet. */
-	private currentBannerState(): BannerState {
-		const download = getModelDownloadBannerState(this.modelState);
-		return download.visible ? download : getIndexingBannerState(this.indexingState);
-	}
+	private renderBanner(container: HTMLElement, snapshot: RelatedNotesSnapshot) {
+		const notice = snapshot.notice;
+		if (!notice) return;
 
-	private renderIndexingBanner(container: HTMLElement) {
-		const banner = this.currentBannerState();
-		const existing = container.querySelector(".similarity-index-banner");
-		if (!this.shouldShowIndexingBanner()) {
-			existing?.remove();
-			return;
-		}
+		const message = notice.kind === "warming-up"
+			? "Setting up..."
+			: notice.kind === "indexing" && notice.total > MIN_ITEMS_FOR_INDEXING_BANNER - 1
+				? "Optimizing your experience. Results may shift as more notes are processed."
+				: undefined;
+		if (!message) return;
 
-		const bannerEl = existing instanceof HTMLElement
-			? existing
-			: container.insertBefore(createDiv(), container.firstChild);
-
+		const bannerEl = container.insertBefore(createDiv(), container.firstChild);
 		bannerEl.className = "similarity-index-banner";
-		bannerEl.empty();
 		bannerEl.createDiv({
 			cls: "similarity-index-banner-message",
-			text: banner.message,
+			text: message,
 		});
 
-		if (banner.total > 0) {
+		if (notice.kind === "warming-up" && notice.progress !== null) {
 			const progressRow = bannerEl.createDiv({cls: "similarity-index-banner-progress"});
 			progressRow.createEl("progress", {
 				cls: "similarity-index-banner-bar",
-				attr: {
-					max: String(banner.total),
-					value: String(Math.min(banner.processed, banner.total)),
-				},
+				attr: {max: "100", value: String(Math.min(notice.progress, 100))},
+			});
+		} else if (notice.kind === "indexing") {
+			const progressRow = bannerEl.createDiv({cls: "similarity-index-banner-progress"});
+			progressRow.createEl("progress", {
+				cls: "similarity-index-banner-bar",
+				attr: {max: String(notice.total), value: String(Math.min(notice.processed, notice.total))},
 			});
 		}
 	}
@@ -171,122 +190,14 @@ export class SimilarNotesListView extends ItemView {
 		});
 
 		retryButton.addEventListener("click", () => {
-			void this.startIndexing();
+			this.deps.relatedNotesFeed.retryIndexing().catch((error) => {
+				logError("Error starting indexing:", error);
+				new Notice("Failed to start indexing. See console for details.");
+			});
 		});
 	}
 
-	private async renderContent(targetContainer: HTMLElement, options: { showLoading?: boolean } = {}) {
-		const showLoading = options.showLoading ?? true;
-		const workingContainer = showLoading ? targetContainer : createDiv();
-		if (showLoading) {
-			targetContainer.empty();
-		}
-
-		const loadingEl = showLoading ? this.renderLoading(workingContainer) : undefined;
-
-		this.isLoading = true;
-		try {
-			const active = this.getActiveFileOrShowEmptyState(workingContainer, loadingEl);
-			if (!active) return;
-			if (!isMarkdownPath(active.path)) {
-				loadingEl?.remove();
-				this.renderMessage(workingContainer, "Semantic matching only supports Markdown notes. Open a .md file to see similar notes.");
-				this.commitRenderedContent(targetContainer, workingContainer, showLoading);
-				return;
-			}
-
-			if (await this.deps.isIgnoredPath(active.path)) {
-				loadingEl?.remove();
-				this.renderMessage(workingContainer, "This note is ignored by settings. Remove it from ignored paths to see related notes.");
-				this.commitRenderedContent(targetContainer, workingContainer, showLoading);
-				return;
-			}
-
-			if (this.modelState.status !== "ready") {
-				loadingEl?.remove();
-				this.renderIndexingBanner(workingContainer);
-
-				const cached = await this.deps.getSimilarNotesForNote({noteId: active.path}).catch(() => []);
-				if (cached.length > 0) {
-					this.renderRelatedList(workingContainer, cached);
-				} else {
-					this.renderMessage(workingContainer, "Related notes will appear once the embedding model finishes loading.");
-				}
-				this.commitRenderedContent(targetContainer, workingContainer, showLoading);
-				return;
-			}
-
-			const indexEmpty = await this.deps.isIndexEmpty();
-			const related = indexEmpty
-				? []
-				: await this.loadSimilarNotesForActiveFile(active.path);
-
-			loadingEl?.remove();
-			this.renderIndexingBanner(workingContainer);
-
-			if (related.length > 0) {
-				this.renderRelatedList(workingContainer, related);
-				this.commitRenderedContent(targetContainer, workingContainer, showLoading);
-				return;
-			}
-
-			if (this.indexingState.fatalError) {
-				this.renderMessage(
-					workingContainer,
-					indexEmpty
-						? "Indexing stopped before any results were ready."
-						: "No related notes matched yet. Indexing also hit an error, so results may be stale.",
-				);
-				this.renderRetryAction(workingContainer);
-				this.commitRenderedContent(targetContainer, workingContainer, showLoading);
-				return;
-			}
-
-			if (indexEmpty && this.indexingState.isRunning) {
-				this.renderMessage(workingContainer, "Indexing is underway. Related notes will appear as the queue progresses.");
-				this.commitRenderedContent(targetContainer, workingContainer, showLoading);
-				return;
-			}
-
-			if (!indexEmpty && this.indexingState.isRunning) {
-				this.renderMessage(workingContainer, "No related notes were similar enough yet. More may appear while indexing continues.");
-				this.commitRenderedContent(targetContainer, workingContainer, showLoading);
-				return;
-			}
-
-			if (indexEmpty) {
-				this.renderMessage(workingContainer, "Your index currently has no notes. Run “Sync vault index” to rebuild it.");
-				this.renderRetryAction(workingContainer);
-				this.commitRenderedContent(targetContainer, workingContainer, showLoading);
-				return;
-			}
-
-			this.renderMessage(workingContainer, "No related notes were similar enough to display yet.");
-			this.commitRenderedContent(targetContainer, workingContainer, showLoading);
-		} catch (error) {
-			logError("Error fetching related notes:", error);
-			if (showLoading && loadingEl) {
-				loadingEl.textContent = "Failed to load related notes. Please try again.";
-			}
-		} finally {
-			this.isLoading = false;
-		}
-	}
-
-	private getActiveFileOrShowEmptyState(container: HTMLElement, loadingEl?: HTMLElement) {
-		const active = this.app.workspace.getActiveFile();
-		if (active) return active;
-
-		loadingEl?.remove();
-		this.renderMessage(container, "Open a note to see similar notes.", "similar-notes-no-active");
-		return null;
-	}
-
-	private async loadSimilarNotesForActiveFile(notePath: string): Promise<SimilarNote[]> {
-		return this.deps.getSimilarNotesForNote({noteId: notePath});
-	}
-
-	private renderRelatedList(container: HTMLElement, related: SimilarNote[]) {
+	private renderRelatedList(container: HTMLElement, related: RelatedNotesSnapshot["items"]) {
 		const list = container.createDiv();
 
 		related.forEach((note) => {
@@ -323,94 +234,8 @@ export class SimilarNotesListView extends ItemView {
 		});
 	}
 
-	private async startIndexing() {
-		try {
-			await this.deps.synchronizeIndex();
-		} catch (error) {
-			logError("Error starting indexing:", error);
-			new Notice("Failed to start indexing. See console for details.");
-		}
-	}
-
-	private scheduleRefresh() {
-		if (this.refreshTimer || this.isLoading) {
-			return;
-		}
-
-		const elapsed = Date.now() - this.lastAutoRefreshAt;
-		const delay = Math.max(0, 1500 - elapsed);
-		this.refreshTimer = window.setTimeout(() => {
-			this.refreshTimer = undefined;
-			void this.refresh({background: true});
-		}, delay);
-	}
-
-	async refresh(args: { background?: boolean } = {}) {
-		if (this.isLoading) return;
-		const contentContainer = this.containerEl.querySelector(".tag-container");
-		if (contentContainer) {
-			this.lastAutoRefreshAt = Date.now();
-			await this.renderContent(contentContainer as HTMLElement, {
-				showLoading: !args.background,
-			});
-		}
-	}
-
-	private commitRenderedContent(targetContainer: HTMLElement, workingContainer: HTMLElement, showLoading: boolean) {
-		if (showLoading) {
-			return;
-		}
-
-		targetContainer.empty();
-		while (workingContainer.firstChild) {
-			targetContainer.appendChild(workingContainer.firstChild);
-		}
-	}
-
-	private updateLiveBanner() {
-		const contentContainer = this.containerEl.querySelector(".tag-container");
-		if (!(contentContainer instanceof HTMLElement)) {
-			return;
-		}
-
-		this.renderIndexingBanner(contentContainer);
-	}
-
-	private shouldShowIndexingBanner(): boolean {
-		if (getModelDownloadBannerState(this.modelState).visible) return true;
-
-		const indexing = getIndexingBannerState(this.indexingState);
-		return indexing.visible && indexing.total > SimilarNotesListView.MIN_ITEMS_FOR_PROGRESS_BANNER - 1;
-	}
-
-	private shouldRefreshResults(previous: IndexingQueueSnapshot, snapshot: IndexingQueueSnapshot): boolean {
-		if (getIndexingBannerState(previous).visible !== getIndexingBannerState(snapshot).visible || previous.fatalError !== snapshot.fatalError) {
-			return true;
-		}
-		if (previous.isRunning && !snapshot.isRunning) {
-			return true;
-		}
-
-		const activePath = this.app.workspace.getActiveFile()?.path;
-		if (activePath && previous.currentNoteId === activePath && snapshot.currentNoteId !== activePath) {
-			return true;
-		}
-
-		if (previous.processed !== snapshot.processed) {
-			return Date.now() - this.lastAutoRefreshAt >= 1500;
-		}
-
-		return false;
-	}
-
 	override onClose(): Promise<void> {
-		if (this.refreshTimer) {
-			window.clearTimeout(this.refreshTimer);
-			this.refreshTimer = undefined;
-		}
-		this.unsubscribeIndexingState?.();
-		this.unsubscribeModelState?.();
-
+		this.unsubscribe?.();
 		return Promise.resolve();
 	}
 }

@@ -34,6 +34,7 @@ import { IndexingWorker } from "./app/indexingWorker";
 import { makeRunLegacyMigrations, RunLegacyMigrationsUseCase } from "./app/legacyMigrations";
 import { makeBuildGeneration } from "./app/generation";
 import { ModelSession } from "./app/modelSession";
+import { makeRelatedNotesFeed, RelatedNotesFeed } from "./app/relatedNotesFeed";
 
 const INDEX_WRITE_THROTTLE_MS = 1000;
 
@@ -50,6 +51,7 @@ export class AppContainer {
 	readonly settingsRepo: SettingsRepository;
 	readonly indexingWorker: IndexingWorker;
 	readonly similarityView: SimilarityView;
+	readonly relatedNotesFeed: RelatedNotesFeed;
 	readonly upsertDebouncer: KeyedDebouncer<string>;
 
 	readonly runLegacyMigrations: RunLegacyMigrationsUseCase;
@@ -80,7 +82,6 @@ export class AppContainer {
 			INDEX_WRITE_THROTTLE_MS,
 		);
 		const activeEditor = new ObsidianActiveEditor(plugin);
-		this.similarityView = new ObsidianSimilarityView(plugin);
 
 		const indexingProgress = new IndexingProgress({status: this.status});
 
@@ -164,11 +165,23 @@ export class AppContainer {
 			indexStorage: this.indexStorage,
 			modelSession: this.modelSession,
 		});
+
+		this.relatedNotesFeed = makeRelatedNotesFeed({
+			modelSession: this.modelSession,
+			subscribeIndexingState: this.subscribeIndexingState,
+			getSimilarNotesForNote: this.getSimilarNotesForNote,
+			isIndexEmpty: this.isIndexEmpty,
+			isIgnoredPath: this.isIgnoredPath,
+			synchronizeIndex: this.synchronizeIndex,
+		});
+
+		this.similarityView = new ObsidianSimilarityView(plugin, this.relatedNotesFeed);
 	}
 
 	async shutdown(): Promise<void> {
 		this.indexingWorker.unload();
 		this.modelSession.shutdown();
+		this.relatedNotesFeed.dispose();
 		this.disposeIndexingProgress();
 		this.upsertDebouncer.cancel();
 		await this.indexStorage.flush().catch((error) => {

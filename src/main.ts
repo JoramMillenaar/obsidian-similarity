@@ -23,12 +23,7 @@ export default class RelatedNotes extends Plugin {
 			VIEW_TYPE_SIMILARITY,
 			(leaf) =>
 				new SimilarNotesListView(leaf, {
-					isIndexEmpty: this.appContainer.isIndexEmpty,
-					getSimilarNotesForNote: this.appContainer.getSimilarNotesForNote,
-					synchronizeIndex: this.appContainer.synchronizeIndex,
-					subscribeIndexingState: this.appContainer.subscribeIndexingState,
-					modelSession: this.appContainer.modelSession,
-					isIgnoredPath: this.appContainer.isIgnoredPath,
+					relatedNotesFeed: this.appContainer.relatedNotesFeed,
 				})
 		);
 		this.registerHoverLinkSource(VIEW_TYPE_SIMILARITY, {
