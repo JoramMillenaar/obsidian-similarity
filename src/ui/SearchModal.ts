@@ -2,7 +2,7 @@ import { App, Notice, Platform, SuggestModal, TFile } from "obsidian";
 import { InsertWikilinkAtCursorUseCase } from "../app/insertWikilinkAtCursor";
 import { SimilarSearchFeed, SimilarSearchResult } from "../app/similarSearchFeed";
 import { BackendState } from "../app/backendState";
-import { BannerState } from "../app/backendBanner";
+import { BannerState, subscribeBanner } from "./backendBanner";
 import { textForNotice } from "./similarNoticeText";
 import { KeyedDebouncer } from "../domain/debouncer";
 import { RelatedNote } from "../types";
@@ -64,7 +64,7 @@ export class SearchModal extends SuggestModal<RelatedNote> {
 	onOpen(): void {
 		void super.onOpen();
 		this.ensureBanner();
-		this.unsubscribeBanner = this.deps.backendState.subscribeBanner((banner) => {
+		this.unsubscribeBanner = subscribeBanner(this.deps.backendState, (banner) => {
 			this.banner = banner;
 			this.renderBanner();
 		});

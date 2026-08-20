@@ -1,7 +1,7 @@
 import { ItemView, Notice, TFile, WorkspaceLeaf } from "obsidian";
 import { SimilarNotesFeed, SimilarNotesSnapshot } from "../app/similarNotesFeed";
 import { BackendState } from "../app/backendState";
-import { BannerState } from "../app/backendBanner";
+import { BannerState, subscribeBanner } from "./backendBanner";
 import { textForNotice } from "./similarNoticeText";
 
 export function logError(message: unknown, ...optionalParams: unknown[]) {
@@ -84,7 +84,7 @@ export class SimilarNotesListView extends ItemView {
 			this.snapshot = snapshot;
 			this.render();
 		});
-		this.unsubscribeBanner = this.deps.backendState.subscribeBanner((banner) => {
+		this.unsubscribeBanner = subscribeBanner(this.deps.backendState, (banner) => {
 			this.banner = banner;
 			this.render();
 		});

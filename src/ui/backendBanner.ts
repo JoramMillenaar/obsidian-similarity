@@ -1,5 +1,6 @@
 import { IndexingQueueSnapshot } from "../types";
-import { ModelSessionSnapshot } from "./modelSession";
+import { ModelSessionSnapshot } from "../app/modelSession";
+import { BackendState, Unsubscribe } from "../app/backendState";
 
 export type BannerState = {
 	visible: boolean;
@@ -40,4 +41,22 @@ function indexingBanner(snapshot: IndexingQueueSnapshot): BannerState {
 export function computeBanner(modelState: ModelSessionSnapshot, indexingState: IndexingQueueSnapshot): BannerState {
 	const download = modelDownloadBanner(modelState);
 	return download.visible ? download : indexingBanner(indexingState);
+}
+
+export function subscribeBanner(backendState: BackendState, fn: (banner: BannerState) => void): Unsubscribe {
+	const indexingState = () => backendState.getIndexingState();
+
+	function emit() {
+		const indexing = indexingState();
+		if (!indexing) return;
+		fn(computeBanner(backendState.getModelState(), indexing));
+	}
+
+	const unsubscribeModel = backendState.subscribeModelState(() => emit());
+	const unsubscribeIndexing = backendState.subscribeIndexingState(() => emit());
+
+	return () => {
+		unsubscribeModel();
+		unsubscribeIndexing();
+	};
 }
