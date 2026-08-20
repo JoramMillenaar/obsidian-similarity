@@ -2,7 +2,7 @@ import { App, Notice, Platform, SuggestModal, TFile } from "obsidian";
 import { InsertWikilinkAtCursorUseCase } from "../app/insertWikilinkAtCursor";
 import { SimilarSearchFeed, SimilarSearchResult } from "../app/similarSearchFeed";
 import { BackendState } from "../app/backendState";
-import { BannerState, subscribeBanner } from "./backendBanner";
+import { BannerState, computeBanner, subscribeBanner } from "./backendBanner";
 import { textForNotice } from "./similarNoticeText";
 import { KeyedDebouncer } from "../domain/debouncer";
 import { RelatedNote } from "../types";
@@ -13,14 +13,11 @@ export type SearchModalDeps = {
 	insertWikilinkAtCursor: InsertWikilinkAtCursorUseCase;
 }
 
-const HIDDEN_BANNER: BannerState = {visible: false, message: "", processed: 0, total: 0};
-
 export class SearchModal extends SuggestModal<RelatedNote> {
 	private readonly deps: SearchModalDeps;
 	private readonly debouncer: KeyedDebouncer<string>;
 	private chooseMode: "open" | "open-new-tab" | "open-right" | "insert-link" = "open";
 	private isAutoRefreshing = false;
-	private banner: BannerState = HIDDEN_BANNER;
 	private unsubscribeBanner?: () => void;
 	private unsubscribeRefreshSignal?: () => void;
 	private bannerEl?: HTMLElement;
@@ -63,11 +60,7 @@ export class SearchModal extends SuggestModal<RelatedNote> {
 
 	onOpen(): void {
 		void super.onOpen();
-		this.ensureBanner();
-		this.unsubscribeBanner = subscribeBanner(this.deps.backendState, (banner) => {
-			this.banner = banner;
-			this.renderBanner();
-		});
+		this.unsubscribeBanner = subscribeBanner(this.deps.backendState, (banner) => this.renderBanner(banner));
 		this.unsubscribeRefreshSignal = this.deps.similarSearchFeed.subscribeRefreshSignal(() => {
 			this.isAutoRefreshing = true;
 			this.inputEl.dispatchEvent(new Event("input"));
@@ -193,29 +186,28 @@ export class SearchModal extends SuggestModal<RelatedNote> {
 	}
 
 	private getNoResultsText(): string {
-		return this.banner.visible
+		return this.isIndexingBusy()
 			? SearchModal.NO_RESULTS_DURING_INDEX_STATE
 			: SearchModal.NO_RESULTS_EMPTY_STATE;
 	}
 
-	private ensureBanner() {
-		if (this.bannerEl) {
-			return;
-		}
-
-		this.bannerEl = this.resultContainerEl.parentElement?.insertBefore(
-			createBannerElement(),
-			this.resultContainerEl,
-		) ?? undefined;
-		this.renderBanner();
+	private isIndexingBusy(): boolean {
+		const indexingState = this.deps.backendState.getIndexingState();
+		if (!indexingState) return false;
+		return computeBanner(this.deps.backendState.getModelState(), indexingState).visible;
 	}
 
-	private renderBanner() {
+	private renderBanner(banner: BannerState) {
+		if (!this.bannerEl) {
+			this.bannerEl = this.resultContainerEl.parentElement?.insertBefore(
+				createBannerElement(),
+				this.resultContainerEl,
+			) ?? undefined;
+		}
 		if (!this.bannerEl) {
 			return;
 		}
 
-		const banner = this.banner;
 		this.bannerEl.empty();
 		this.bannerEl.toggleClass("is-hidden", !banner.visible);
 
