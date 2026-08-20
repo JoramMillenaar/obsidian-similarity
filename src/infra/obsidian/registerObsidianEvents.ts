@@ -20,6 +20,18 @@ function withLiveNoteSync(
 }
 
 export function registerObsidianEvents(plugin: Plugin, container: ObsidianEventsDeps): void {
+	// Enabling the plugin without a connection (nothing cached to fall back on) leaves the session
+	// parked in its error state. Pick the load back up the moment the connection returns, so the
+	// user does not have to know that a manual retry exists.
+	plugin.registerDomEvent(window, "online", () => {
+		if (container.modelSession.getSnapshot().status !== "error") return;
+
+		container.status.update("Back online — loading the model…");
+		void container.modelSession.retry().catch((error) => {
+			console.error("[Similarity] Retrying the model load after reconnecting failed:", error);
+		});
+	});
+
 	plugin.registerEvent(
 		plugin.app.workspace.on("editor-change", (_editor, info) => {
 			const file = info.file;

@@ -1,4 +1,4 @@
-import { EmbeddingModelId } from "../types";
+import { EmbeddingModelConfig, EmbeddingModelId } from "../types";
 import { ModelLoadProgress, SettingsRepository, StatusReporter } from "../ports";
 import { EMBEDDING_MODELS, MIN_DOWNLOAD_PROGRESS_BYTES } from "../constants";
 import { IndexingWorker } from "./indexingWorker";
@@ -131,6 +131,8 @@ export class ModelSession implements ModelStateReader {
 		const epoch = ++this.epoch;
 
 		const outgoing = this.state.status === "ready" ? this.state.generation : null;
+		// The model we can fall back to: it is already downloaded, so restoring it works offline.
+		const previousModelId = outgoing?.modelId ?? null;
 
 		this.state = {status: "loading", targetModelId: modelId, epoch, progress: null, phase: "downloading"};
 		this.notify();
@@ -147,31 +149,11 @@ export class ModelSession implements ModelStateReader {
 
 		let generation: Generation;
 		try {
-			generation = await this.deps.buildGeneration(modelId, config, (progress) => {
-				if (progress.total < MIN_DOWNLOAD_PROGRESS_BYTES) return;
-
-				const phase: "downloading" | "finalizing" = progress.progress >= 100 ? "finalizing" : "downloading";
-				if (epoch === this.epoch && this.state.status === "loading") {
-					this.state = {...this.state, progress, phase};
-					this.notify();
-				}
-				this.deps.status.update(
-					phase === "finalizing" ? `Finalizing ${config.label} model…` : `Downloading ${config.label} model…`,
-				);
-			}, controller.signal);
+			generation = await this.loadGeneration(modelId, config, epoch, controller.signal);
 		} catch (error) {
 			if (epoch !== this.epoch) throw new ModelRequestSupersededError(modelId);
 
-			this.state = {
-				status: "error",
-				modelId,
-				message: error instanceof Error ? error.message : String(error),
-				offline: typeof navigator !== "undefined" && !navigator.onLine,
-				epoch,
-			};
-			this.notify();
-			this.deps.worker.resume();
-			this.deps.status.update(`Failed to load ${config.label}.`, 4000);
+			await this.recoverFromFailedLoad(modelId, previousModelId, error, epoch, controller.signal);
 			throw error;
 		}
 
@@ -189,5 +171,84 @@ export class ModelSession implements ModelStateReader {
 		this.deps.status.update(`${label} ${config.label}.`, 4000);
 
 		void generation.synchronizeIndex();
+	}
+
+	private loadGeneration(
+		modelId: EmbeddingModelId,
+		config: EmbeddingModelConfig,
+		epoch: number,
+		signal: AbortSignal,
+	): Promise<Generation> {
+		return this.deps.buildGeneration(modelId, config, (progress) => {
+			if (progress.total < MIN_DOWNLOAD_PROGRESS_BYTES) return;
+
+			const phase: "downloading" | "finalizing" = progress.progress >= 100 ? "finalizing" : "downloading";
+			if (epoch === this.epoch && this.state.status === "loading") {
+				this.state = {...this.state, progress, phase};
+				this.notify();
+			}
+			this.deps.status.update(
+				phase === "finalizing" ? `Finalizing ${config.label} model…` : `Downloading ${config.label} model…`,
+			);
+		}, signal);
+	}
+
+	/**
+	 * A switch that fails must not leave the user with nothing: the model they were already using is
+	 * cached, so it can be brought back even while offline. Only a first-ever load (nothing cached,
+	 * no previous model) genuinely has no way out — that is what the error state is for.
+	 */
+	private async recoverFromFailedLoad(
+		modelId: EmbeddingModelId,
+		previousModelId: EmbeddingModelId | null,
+		error: unknown,
+		epoch: number,
+		signal: AbortSignal,
+	): Promise<void> {
+		const config = EMBEDDING_MODELS[modelId];
+		const message = error instanceof Error ? error.message : String(error);
+
+		if (previousModelId !== null && previousModelId !== modelId) {
+			const previousConfig = EMBEDDING_MODELS[previousModelId];
+			this.state = {status: "loading", targetModelId: previousModelId, epoch, progress: null, phase: "downloading"};
+			this.notify();
+			this.deps.status.update(`Restoring ${previousConfig.label} model…`);
+
+			try {
+				const restored = await this.loadGeneration(previousModelId, previousConfig, epoch, signal);
+				if (epoch !== this.epoch) {
+					restored.unload();
+					throw new ModelRequestSupersededError(modelId);
+				}
+
+				this.state = {status: "ready", generation: restored, epoch};
+				this.notify();
+				this.deps.worker.resume();
+				this.deps.status.update(`Could not load ${config.label} — kept ${previousConfig.label}.`, 6000);
+				void restored.synchronizeIndex();
+				return;
+			} catch (restoreError) {
+				if (restoreError instanceof ModelRequestSupersededError) throw restoreError;
+				if (epoch !== this.epoch) throw new ModelRequestSupersededError(modelId);
+				console.error(`[Similarity] Could not restore ${previousConfig.label} after a failed switch:`, restoreError);
+			}
+		}
+
+		this.failWith(modelId, message, epoch);
+	}
+
+	private failWith(modelId: EmbeddingModelId, message: string, epoch: number): void {
+		// Park the failure in the state instead of falling back to "not-loaded": the UI would
+		// otherwise keep telling the user the model is still on its way, forever.
+		this.state = {
+			status: "error",
+			modelId,
+			message,
+			offline: typeof navigator !== "undefined" && navigator.onLine === false,
+			epoch,
+		};
+		this.notify();
+		this.deps.worker.resume();
+		this.deps.status.update(`Failed to load ${EMBEDDING_MODELS[modelId].label}.`, 4000);
 	}
 }

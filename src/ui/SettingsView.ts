@@ -225,7 +225,18 @@ export class SettingView extends PluginSettingTab {
 				if (error instanceof ModelRequestSupersededError) return;
 
 				const message = error instanceof Error ? error.message : String(error);
-				new Notice(modelChanged ? `Could not switch embedding model: ${message}` : `Could not save settings: ${message}`);
+				if (!modelChanged) {
+					new Notice(`Could not save settings: ${message}`);
+					return;
+				}
+
+				// A failed switch falls back to whatever was loaded before; say so, so the user knows
+				// their notes are still being matched — just by the previous model.
+				const snapshot = this.deps.modelSession.getSnapshot();
+				const kept = snapshot.status === "ready" && snapshot.modelId !== draft.modelId
+					? ` Kept ${EMBEDDING_MODELS[snapshot.modelId].label}.`
+					: "";
+				new Notice(`${message}${kept}`);
 			})
 			.finally(async () => {
 				// Only re-sync what `modelChanged` is compared against. The drafts belong to the user,

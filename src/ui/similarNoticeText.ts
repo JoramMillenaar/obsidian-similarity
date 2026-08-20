@@ -9,7 +9,9 @@ export function textForNotice(notice: SimilarNotesNotice): string {
 		case "ignored-path":
 			return "This note is ignored by settings. Remove it from ignored paths to see similar notes.";
 		case "model-error":
-			return notice.message;
+			return notice.offline
+				? `${notice.message} This will resume on its own once you are back online.`
+				: notice.message;
 		case "warming-up":
 			return "Similar notes will appear once loading finishes.";
 		case "empty-index":
