@@ -7,6 +7,15 @@ export type Device = 'wasm' | 'webgpu';
 export type ModelLoadProgress = { progress: number; file: string; loaded: number; total: number };
 export type ModelLoadProgressCallback = (progress: ModelLoadProgress) => void;
 
+function describeLoadFailure(error: unknown, config: EmbeddingModelConfig): string {
+	const detail = error instanceof Error ? error.message : String(error);
+	const looksLikeNetwork = !navigator.onLine || /failed to fetch|network|load model file/i.test(detail);
+	if (looksLikeNetwork) {
+		return `Could not download the ${config.label} model. Check your internet connection and try again.`;
+	}
+	return `Could not load the ${config.label} model: ${detail}`;
+}
+
 export class EmbeddingModel {
 	#pipeline: FeatureExtractionPipeline | null = null;
 	#device: Device = 'wasm';
@@ -23,15 +32,19 @@ export class EmbeddingModel {
 		const webgpuAvailable = (navigator as Navigator & { gpu?: unknown }).gpu != null;
 		this.#device = webgpuAvailable ? 'webgpu' : 'wasm';
 
-		this.#pipeline = await pipeline('feature-extraction', this.config.repoId, {
-			device: this.#device,
-			dtype: webgpuAvailable ? 'fp16' : 'q8',
-			progress_callback: onProgress ? (info: ProgressInfo) => {
-				if (info.status === 'progress') {
-					onProgress({ progress: info.progress, file: info.file, loaded: info.loaded, total: info.total });
-				}
-			} : undefined,
-		});
+		try {
+			this.#pipeline = await pipeline('feature-extraction', this.config.repoId, {
+				device: this.#device,
+				dtype: webgpuAvailable ? 'fp16' : 'q8',
+				progress_callback: onProgress ? (info: ProgressInfo) => {
+					if (info.status === 'progress') {
+						onProgress({ progress: info.progress, file: info.file, loaded: info.loaded, total: info.total });
+					}
+				} : undefined,
+			});
+		} catch (error) {
+			throw new Error(describeLoadFailure(error, this.config));
+		}
 	}
 
 	countTokens = (text: string): number => {

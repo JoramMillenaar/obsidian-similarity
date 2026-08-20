@@ -4,11 +4,12 @@ import { EMBEDDING_MODELS, MIN_DOWNLOAD_PROGRESS_BYTES } from "../constants";
 import { IndexingWorker } from "./indexingWorker";
 import { BuildGenerationUseCase, Generation } from "./generation";
 
-type SessionStatus = "not-loaded" | "loading";
+type SessionStatus = "not-loaded" | "loading" | "error";
 
 type SessionState =
 	| { status: "not-loaded" }
 	| { status: "loading"; targetModelId: EmbeddingModelId; epoch: number; progress: ModelLoadProgress | null; phase: "downloading" | "finalizing" }
+	| { status: "error"; modelId: EmbeddingModelId; message: string; offline: boolean; epoch: number }
 	| { status: "ready"; generation: Generation; epoch: number };
 
 type PendingRequest = { modelId: EmbeddingModelId; promise: Promise<void> };
@@ -18,7 +19,9 @@ export class ModelNotReadyError extends Error {
 		super(
 			status === "not-loaded"
 				? "No embedding model is loaded yet."
-				: "A model switch is in progress.",
+				: status === "error"
+					? "The embedding model failed to load."
+					: "A model switch is in progress.",
 		);
 	}
 }
@@ -32,6 +35,7 @@ export class ModelRequestSupersededError extends Error {
 export type ModelSessionSnapshot =
 	| { status: "not-loaded" }
 	| { status: "loading"; targetModelId: EmbeddingModelId; progress: ModelLoadProgress | null; phase: "downloading" | "finalizing" }
+	| { status: "error"; modelId: EmbeddingModelId; message: string; offline: boolean }
 	| { status: "ready"; modelId: EmbeddingModelId };
 
 export type ModelStateReader = {
@@ -61,6 +65,9 @@ export class ModelSession implements ModelStateReader {
 		if (this.state.status === "ready") return {status: "ready", modelId: this.state.generation.modelId};
 		if (this.state.status === "loading") {
 			return {status: "loading", targetModelId: this.state.targetModelId, progress: this.state.progress, phase: this.state.phase};
+		}
+		if (this.state.status === "error") {
+			return {status: "error", modelId: this.state.modelId, message: this.state.message, offline: this.state.offline};
 		}
 		return {status: "not-loaded"};
 	}
@@ -100,6 +107,11 @@ export class ModelSession implements ModelStateReader {
 		});
 		this.pending = pending;
 		return pending.promise;
+	}
+
+	retry(): Promise<void> {
+		if (this.state.status !== "error") return Promise.resolve();
+		return this.requestModel(this.state.modelId);
 	}
 
 	shutdown(): void {
@@ -150,7 +162,13 @@ export class ModelSession implements ModelStateReader {
 		} catch (error) {
 			if (epoch !== this.epoch) throw new ModelRequestSupersededError(modelId);
 
-			this.state = {status: "not-loaded"};
+			this.state = {
+				status: "error",
+				modelId,
+				message: error instanceof Error ? error.message : String(error),
+				offline: typeof navigator !== "undefined" && !navigator.onLine,
+				epoch,
+			};
 			this.notify();
 			this.deps.worker.resume();
 			this.deps.status.update(`Failed to load ${config.label}.`, 4000);

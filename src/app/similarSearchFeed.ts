@@ -30,6 +30,9 @@ export function makeSimilarSearchFeed(deps: SimilarSearchFeedDeps): SimilarSearc
 
 	function warmingUp(): SimilarSearchResult {
 		const modelState = backend.getModelState();
+		if (modelState.status === "error") {
+			return {items: [], notice: {kind: "model-error", message: modelState.message, offline: modelState.offline}};
+		}
 		return {
 			items: [],
 			notice: {kind: "warming-up", progress: modelState.status === "loading" ? (modelState.progress?.progress ?? null) : null},

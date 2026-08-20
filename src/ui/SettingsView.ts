@@ -5,7 +5,7 @@ import { DEFAULT_SETTINGS, EMBEDDING_MODELS, MAX_OVERLAP_PERCENT } from "../cons
 import { EmbeddingModelId, SimilaritySettings } from "../types";
 import { SettingsRepository } from "../ports";
 import { UpdateSettingsUseCase } from "../app/updateSettings";
-import { ModelRequestSupersededError, ModelStateReader } from "../app/modelSession";
+import { ModelRequestSupersededError, ModelSessionSnapshot, ModelStateReader } from "../app/modelSession";
 
 export type SettingsViewDeps = {
 	settingsRepo: SettingsRepository,
@@ -33,7 +33,7 @@ export class SettingView extends PluginSettingTab {
 	};
 	private embeddingModelDraft: EmbeddingModelId = DEFAULT_SETTINGS.embeddingModelId;
 	private loaded = false;
-	private previousModelStatus: "not-loaded" | "loading" | "ready" = "not-loaded";
+	private previousModelStatus: ModelSessionSnapshot["status"] = "not-loaded";
 
 	constructor(
 		app: App,

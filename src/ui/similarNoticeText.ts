@@ -8,6 +8,8 @@ export function textForNotice(notice: SimilarNotesNotice): string {
 			return "Similarity matching only supports Markdown/text-based notes.";
 		case "ignored-path":
 			return "This note is ignored by settings. Remove it from ignored paths to see similar notes.";
+		case "model-error":
+			return notice.message;
 		case "warming-up":
 			return "Similar notes will appear once loading finishes.";
 		case "empty-index":

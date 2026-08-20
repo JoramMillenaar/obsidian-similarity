@@ -5,6 +5,7 @@ export type SimilarNotesNotice =
 	| { kind: "unsupported-file" }
 	| { kind: "ignored-path" }
 	| { kind: "warming-up"; progress: number | null }
+	| { kind: "model-error"; message: string; offline: boolean }
 	| { kind: "indexing"; processed: number; total: number; indexEmpty: boolean }
 	| { kind: "empty-index" }
 	| { kind: "fatal-error"; message: string; indexEmpty: boolean };

@@ -10,6 +10,12 @@ export function logError(message: unknown, ...optionalParams: unknown[]) {
 
 export const VIEW_TYPE_SIMILARITY = "similarity";
 
+type RetryAction = {
+	label: string;
+	run: () => Promise<void>;
+	failureNotice: string;
+};
+
 export type SimilarNotesListViewDeps = {
 	similarNotesFeed: SimilarNotesFeed;
 	backendState: BackendState;
@@ -112,19 +118,37 @@ export class SimilarNotesListView extends ItemView {
 			return;
 		}
 
-		const {text, showRetry} = this.emptyStateFor(this.snapshot);
+		const {text, retry} = this.emptyStateFor(this.snapshot);
 		if (text) this.renderMessage(container, text, this.snapshot.notice?.kind === "no-active-note" ? "similar-notes-no-active" : undefined);
-		if (showRetry) this.renderRetryAction(container);
+		if (retry) this.renderRetryAction(container, retry);
 	}
 
-	private emptyStateFor(snapshot: SimilarNotesSnapshot): { text?: string; showRetry?: boolean } {
+	private emptyStateFor(snapshot: SimilarNotesSnapshot): { text?: string; retry?: RetryAction } {
 		const notice = snapshot.notice;
 		if (!notice) return {text: "No related notes were similar enough to display yet."};
 
-		return {
-			text: textForNotice(notice),
-			showRetry: notice.kind === "fatal-error" || notice.kind === "empty-index",
-		};
+		const text = textForNotice(notice);
+		if (notice.kind === "model-error") {
+			return {
+				text,
+				retry: {
+					label: "Try again",
+					run: () => this.deps.similarNotesFeed.retryModelLoad(),
+					failureNotice: "Could not load the model. See console for details.",
+				},
+			};
+		}
+		if (notice.kind === "fatal-error" || notice.kind === "empty-index") {
+			return {
+				text,
+				retry: {
+					label: "Retry indexing",
+					run: () => this.deps.similarNotesFeed.retryIndexing(),
+					failureNotice: "Failed to start indexing. See console for details.",
+				},
+			};
+		}
+		return {text};
 	}
 
 	private renderMessage(container: HTMLElement, text: string, extraCls?: string) {
@@ -156,18 +180,21 @@ export class SimilarNotesListView extends ItemView {
 		}
 	}
 
-	private renderRetryAction(container: HTMLElement) {
+	private renderRetryAction(container: HTMLElement, retry: RetryAction) {
 		const actions = container.createDiv({cls: "related-notes-actions"});
 		const retryButton = actions.createEl("button", {
 			cls: "mod-cta related-notes-button",
-			text: "Retry indexing",
+			text: retry.label,
 		});
 
 		retryButton.addEventListener("click", () => {
-			this.deps.similarNotesFeed.retryIndexing().catch((error) => {
-				logError("Error starting indexing:", error);
-				new Notice("Failed to start indexing. See console for details.");
-			});
+			retryButton.setAttr("disabled", "true");
+			retry.run()
+				.catch((error) => {
+					logError(`${retry.label} failed:`, error);
+					new Notice(retry.failureNotice);
+				})
+				.finally(() => retryButton.removeAttribute("disabled"));
 		});
 	}
 

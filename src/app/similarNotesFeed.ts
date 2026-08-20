@@ -22,6 +22,7 @@ export interface SimilarNotesFeed {
 	subscribe(fn: (snapshot: SimilarNotesSnapshot) => void): Unsubscribe;
 	setActiveNote(noteId: string | null): void;
 	retryIndexing(): Promise<void>;
+	retryModelLoad(): Promise<void>;
 	refresh(): void;
 	dispose(): void;
 }
@@ -32,6 +33,7 @@ type SimilarNotesFeedDeps = {
 	isIndexEmpty: () => Promise<boolean>;
 	isIgnoredPath: IsIgnoredPath;
 	synchronizeIndex: () => Promise<void>;
+	retryModelLoad: () => Promise<void>;
 };
 
 const IDLE: SimilarNotesSnapshot = {epoch: 0, noteId: null, items: [], refining: false, notice: {kind: "no-active-note"}};
@@ -102,7 +104,7 @@ export function makeSimilarNotesFeed(deps: SimilarNotesFeedDeps): SimilarNotesFe
 		const wasReady = modelReady;
 		modelReady = next.status === "ready";
 
-		if (modelReady && !wasReady && noteId !== null) {
+		if (((modelReady && !wasReady) || next.status === "error") && noteId !== null) {
 			epoch += 1;
 			void load(epoch);
 		} else if (next.status === "loading" && snapshot.notice?.kind === "warming-up") {
@@ -129,6 +131,9 @@ export function makeSimilarNotesFeed(deps: SimilarNotesFeedDeps): SimilarNotesFe
 		},
 		async retryIndexing() {
 			await deps.synchronizeIndex();
+		},
+		async retryModelLoad() {
+			await deps.retryModelLoad();
 		},
 		refresh() {
 			if (noteId === null) return;

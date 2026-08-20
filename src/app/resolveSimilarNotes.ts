@@ -38,6 +38,10 @@ export async function resolveSimilarNotesForNote(
 
 	const items = await deps.getSimilarNotesForNote({noteId}).catch(() => []);
 
+	if (modelState.status === "error") {
+		return {items, notice: {kind: "model-error", message: modelState.message, offline: modelState.offline}};
+	}
+
 	if (!ready) {
 		return {
 			items,

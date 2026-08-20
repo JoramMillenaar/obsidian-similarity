@@ -6,10 +6,23 @@ const READY_PING_TIMEOUT_MS = 3000;
 const READY_STALL_TIMEOUT_MS = 120000;
 
 type ProgressMessage = { type: 'model-load-progress'; progress: number; file: string; loaded: number; total: number };
+type LoadErrorMessage = { type: 'model-load-error'; message: string; offline: boolean };
 type ResultMessage = { requestId: number; data: EmbeddingResult; error?: string };
+type IncomingMessage = ProgressMessage | LoadErrorMessage | ResultMessage;
 
-function isProgressMessage(message: ProgressMessage | ResultMessage): message is ProgressMessage {
+function isProgressMessage(message: IncomingMessage): message is ProgressMessage {
     return 'type' in message && message.type === 'model-load-progress';
+}
+
+function isLoadErrorMessage(message: IncomingMessage): message is LoadErrorMessage {
+    return 'type' in message && message.type === 'model-load-error';
+}
+
+export class ModelLoadFailedError extends Error {
+    constructor(message: string, readonly offline: boolean) {
+        super(message);
+        this.name = "ModelLoadFailedError";
+    }
 }
 
 function abortError(): Error {
@@ -40,6 +53,7 @@ export class IframeMessenger {
     private iframe: HTMLIFrameElement | null = null;
     private requestIdCounter = 0;
     private lastIframeActivityAt = 0;
+    private loadError: ModelLoadFailedError | null = null;
     private pendingRequests = new Map<number, { resolve: (data: EmbeddingResult) => void; reject: (error: Error) => void; timeoutId: number }>();
 
     constructor(
@@ -68,7 +82,7 @@ export class IframeMessenger {
         try {
             await this.waitForIframeReady(signal);
         } catch (error) {
-            if (signal?.aborted) this.unload();
+            this.unload();
             throw error;
         }
     }
@@ -84,11 +98,21 @@ export class IframeMessenger {
         if (event.origin !== window.location.origin) return;
         if (event.source !== this.iframe?.contentWindow) return;
 
-        const message = event.data as ProgressMessage | ResultMessage;
+        const message = event.data as IncomingMessage;
         this.lastIframeActivityAt = Date.now();
 
         if (isProgressMessage(message)) {
             this.onProgress?.({ progress: message.progress, file: message.file, loaded: message.loaded, total: message.total });
+            return;
+        }
+
+        if (isLoadErrorMessage(message)) {
+            this.loadError = new ModelLoadFailedError(message.message, message.offline);
+            for (const [requestId, pending] of this.pendingRequests) {
+                this.pendingRequests.delete(requestId);
+                window.clearTimeout(pending.timeoutId);
+                pending.reject(this.loadError);
+            }
             return;
         }
 
@@ -114,6 +138,7 @@ export class IframeMessenger {
         }
 
         for (let attempt = 0; attempt < retries; attempt++) {
+            if (this.loadError) throw this.loadError;
             const requestId = this.requestIdCounter++;
             const message: IframeMessage = { requestId, payload, maxOverlapPercent, maxChunkSize };
 
@@ -142,11 +167,13 @@ export class IframeMessenger {
 
         for (let attempt = 0; ; attempt++) {
             if (signal?.aborted) throw abortError();
+            if (this.loadError) throw this.loadError;
             try {
                 await this.ping();
                 return;
             } catch {
                 if (signal?.aborted) throw abortError();
+                if (this.loadError) throw this.loadError;
 
                 const silentFor = Date.now() - this.lastIframeActivityAt;
                 if (silentFor > READY_STALL_TIMEOUT_MS) {

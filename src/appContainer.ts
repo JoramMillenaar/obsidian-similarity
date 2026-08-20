@@ -179,6 +179,7 @@ export class AppContainer {
 			isIndexEmpty: this.isIndexEmpty,
 			isIgnoredPath: this.isIgnoredPath,
 			synchronizeIndex: this.synchronizeIndex,
+			retryModelLoad: () => this.modelSession.retry(),
 		});
 
 		this.activateSimilarityView = makeActivateSimilarityView(plugin);
