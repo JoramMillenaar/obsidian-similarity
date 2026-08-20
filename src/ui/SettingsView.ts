@@ -1,4 +1,4 @@
-import { App, AnySettingDefinition, Notice, PluginSettingTab, Setting } from "obsidian";
+import { App, AnySettingDefinition, DropdownComponent, Notice, PluginSettingTab, Setting } from "obsidian";
 import RelatedNotes from "../main";
 import { parseIgnoredPaths } from "../domain/ignoreRules";
 import { DEFAULT_SETTINGS, EMBEDDING_MODELS, MAX_OVERLAP_PERCENT } from "../constants";
@@ -34,6 +34,7 @@ export class SettingView extends PluginSettingTab {
 	private embeddingModelDraft: EmbeddingModelId = DEFAULT_SETTINGS.embeddingModelId;
 	private loaded = false;
 	private previousModelStatus: ModelSessionSnapshot["status"] = "not-loaded";
+	private modelDropdown?: DropdownComponent;
 
 	constructor(
 		app: App,
@@ -196,6 +197,24 @@ export class SettingView extends PluginSettingTab {
 		this.indexingDraft = {...this.indexingDraft, [key]: value as number};
 	}
 
+	/** The model the session fell back to after `requestedId` failed, if it is falling back at all. */
+	private fallbackModelId(requestedId: EmbeddingModelId): EmbeddingModelId | null {
+		const snapshot = this.deps.modelSession.getSnapshot();
+		const activeId = snapshot.status === "ready"
+			? snapshot.modelId
+			: snapshot.status === "loading"
+				? snapshot.targetModelId
+				: null;
+
+		return activeId !== null && activeId !== requestedId ? activeId : null;
+	}
+
+	private revertModelDraft(modelId: EmbeddingModelId): void {
+		this.embeddingModelDraft = modelId;
+		this.modelDropdown?.setValue(modelId);
+		this.update?.();
+	}
+
 	/**
 	 * Fire-and-forget: a model switch can take up to a minute, and the whole point of surfacing
 	 * live status elsewhere (sidebar banner, status bar) is that the user doesn't have to sit and
@@ -230,12 +249,12 @@ export class SettingView extends PluginSettingTab {
 					return;
 				}
 
-				// A failed switch falls back to whatever was loaded before; say so, so the user knows
-				// their notes are still being matched — just by the previous model.
-				const snapshot = this.deps.modelSession.getSnapshot();
-				const kept = snapshot.status === "ready" && snapshot.modelId !== draft.modelId
-					? ` Kept ${EMBEDDING_MODELS[snapshot.modelId].label}.`
-					: "";
+				// A failed switch falls back to whatever was loaded before. Put the dropdown back on
+				// that model too, so the setting keeps showing the language actually in use.
+				const fallbackId = this.fallbackModelId(draft.modelId);
+				if (fallbackId) this.revertModelDraft(fallbackId);
+
+				const kept = fallbackId ? ` Staying on ${EMBEDDING_MODELS[fallbackId].label}.` : "";
 				new Notice(`${message}${kept}`);
 			})
 			.finally(async () => {
@@ -262,7 +281,6 @@ export class SettingView extends PluginSettingTab {
 		this.applySettings(settings);
 		let draftIgnored = settings.ignoredPaths;
 		let advancedOpen = settings.advancedOpen;
-		let draftModelId = settings.embeddingModelId;
 		const draftIndexing = {...this.indexingDraft};
 
 		new Setting(containerEl)
@@ -272,10 +290,11 @@ export class SettingView extends PluginSettingTab {
 				for (const model of Object.values(EMBEDDING_MODELS)) {
 					dropdown.addOption(model.id, model.label);
 				}
-				dropdown.setValue(draftModelId);
+				dropdown.setValue(this.embeddingModelDraft);
 				dropdown.onChange((value) => {
-					draftModelId = value as EmbeddingModelId;
+					this.embeddingModelDraft = value as EmbeddingModelId;
 				});
+				this.modelDropdown = dropdown;
 			});
 
 		new Setting(containerEl)
@@ -367,7 +386,7 @@ export class SettingView extends PluginSettingTab {
 					this.save({
 						ignoredPaths: draftIgnored,
 						indexing: draftIndexing,
-						modelId: draftModelId,
+						modelId: this.embeddingModelDraft,
 					});
 				});
 			});

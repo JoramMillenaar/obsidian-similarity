@@ -4,6 +4,8 @@ import { EmbeddingModelConfig, IframeMessage } from "../../types";
 const EMBED_TIMEOUT_MS = 30000;
 const READY_PING_TIMEOUT_MS = 3000;
 const READY_STALL_TIMEOUT_MS = 120000;
+const READY_TOTAL_TIMEOUT_MS = 300000;
+const MAX_PING_BACKOFF_MS = 5000;
 
 type ProgressMessage = { type: 'model-load-progress'; progress: number; file: string; loaded: number; total: number };
 type LoadErrorMessage = { type: 'model-load-error'; message: string; offline: boolean };
@@ -165,6 +167,8 @@ export class IframeMessenger {
     private async waitForIframeReady(signal?: AbortSignal): Promise<void> {
         this.lastIframeActivityAt = Date.now();
 
+        const startedAt = Date.now();
+
         for (let attempt = 0; ; attempt++) {
             if (signal?.aborted) throw abortError();
             if (this.loadError) throw this.loadError;
@@ -176,13 +180,14 @@ export class IframeMessenger {
                 if (this.loadError) throw this.loadError;
 
                 const silentFor = Date.now() - this.lastIframeActivityAt;
-                if (silentFor > READY_STALL_TIMEOUT_MS) {
-                    throw new Error(
-                        `Iframe is not responsive: the embedding model did not load, and the iframe has been silent for ${Math.round(silentFor / 1000)}s`,
+                if (silentFor > READY_STALL_TIMEOUT_MS || Date.now() - startedAt > READY_TOTAL_TIMEOUT_MS) {
+                    throw new ModelLoadFailedError(
+                        `The ${this.modelConfig.label} model did not finish loading. Check your internet connection and try again.`,
+                        !window.navigator.onLine,
                     );
                 }
 				if (attempt) console.warn(`Iframe ping attempt ${attempt + 1} failed. Retrying...`);
-                await sleep(1000, signal);
+                await sleep(Math.min(1000 * 2 ** attempt, MAX_PING_BACKOFF_MS), signal);
             }
         }
     }

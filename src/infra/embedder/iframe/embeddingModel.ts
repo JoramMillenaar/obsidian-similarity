@@ -7,6 +7,19 @@ export type Device = 'wasm' | 'webgpu';
 export type ModelLoadProgress = { progress: number; file: string; loaded: number; total: number };
 export type ModelLoadProgressCallback = (progress: ModelLoadProgress) => void;
 
+const TRANSFORMERS_CACHE = 'transformers-cache';
+const cacheKeyFor = (repoId: string, file: string) => `https://huggingface.co/${repoId}/resolve/main/${file}`;
+
+async function isModelCached(repoId: string): Promise<boolean> {
+	if (typeof caches === 'undefined') return true;
+	try {
+		const cache = await caches.open(TRANSFORMERS_CACHE);
+		return (await cache.match(cacheKeyFor(repoId, 'config.json'))) !== undefined;
+	} catch {
+		return true;
+	}
+}
+
 function describeLoadFailure(error: unknown, config: EmbeddingModelConfig): string {
 	const detail = error instanceof Error ? error.message : String(error);
 	const looksLikeNetwork = !navigator.onLine || /failed to fetch|network|load model file/i.test(detail);
@@ -31,6 +44,13 @@ export class EmbeddingModel {
 	async #initialize(onProgress?: ModelLoadProgressCallback): Promise<void> {
 		const webgpuAvailable = (navigator as Navigator & { gpu?: unknown }).gpu != null;
 		this.#device = webgpuAvailable ? 'webgpu' : 'wasm';
+
+		if (!navigator.onLine && !(await isModelCached(this.config.repoId))) {
+			throw new Error(
+				`The ${this.config.label} model has not been downloaded yet, and you appear to be offline. `
+				+ `Connect to the internet to finish setting up.`,
+			);
+		}
 
 		try {
 			this.#pipeline = await pipeline('feature-extraction', this.config.repoId, {

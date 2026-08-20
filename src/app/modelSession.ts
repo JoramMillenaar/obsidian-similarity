@@ -131,7 +131,6 @@ export class ModelSession implements ModelStateReader {
 		const epoch = ++this.epoch;
 
 		const outgoing = this.state.status === "ready" ? this.state.generation : null;
-		// The model we can fall back to: it is already downloaded, so restoring it works offline.
 		const previousModelId = outgoing?.modelId ?? null;
 
 		this.state = {status: "loading", targetModelId: modelId, epoch, progress: null, phase: "downloading"};
@@ -153,7 +152,11 @@ export class ModelSession implements ModelStateReader {
 		} catch (error) {
 			if (epoch !== this.epoch) throw new ModelRequestSupersededError(modelId);
 
-			await this.recoverFromFailedLoad(modelId, previousModelId, error, epoch, controller.signal);
+			void this.recoverFromFailedLoad(modelId, previousModelId, error, epoch, controller.signal)
+				.catch((recoveryError) => {
+					if (recoveryError instanceof ModelRequestSupersededError) return;
+					console.error("[Similarity] Recovering from a failed model load failed:", recoveryError);
+				});
 			throw error;
 		}
 
