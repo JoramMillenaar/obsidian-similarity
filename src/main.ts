@@ -6,7 +6,7 @@ import { SimilarNotesListView, VIEW_TYPE_SIMILARITY } from "./ui/SimilarNotesLis
 import { SettingView } from "./ui/SettingsView";
 import { registerObsidianEvents } from "./infra/obsidian/registerObsidianEvents";
 
-export default class RelatedNotes extends Plugin {
+export default class SimilarNotes extends Plugin {
 	private appContainer!: AppContainer;
 
 	onload(): void {
@@ -23,7 +23,8 @@ export default class RelatedNotes extends Plugin {
 			VIEW_TYPE_SIMILARITY,
 			(leaf) =>
 				new SimilarNotesListView(leaf, {
-					relatedNotesFeed: this.appContainer.relatedNotesFeed,
+					similarNotesFeed: this.appContainer.similarNotesFeed,
+					backendState: this.appContainer.backendState,
 				})
 		);
 		this.registerHoverLinkSource(VIEW_TYPE_SIMILARITY, {
@@ -36,13 +37,9 @@ export default class RelatedNotes extends Plugin {
 			name: "Open semantic search",
 			callback: () => {
 				new SearchModal(this.app, {
-					getSimilarNotesForNote: this.appContainer.getSimilarNotesForNote,
-					getSimilarNotesForText: this.appContainer.getSimilarNotesForText,
+					similarSearchFeed: this.appContainer.similarSearchFeed,
+					backendState: this.appContainer.backendState,
 					insertWikilinkAtCursor: this.appContainer.insertWikilinkAtCursor,
-					subscribeIndexingState: this.appContainer.subscribeIndexingState,
-					modelSession: this.appContainer.modelSession,
-					isIndexEmpty: this.appContainer.isIndexEmpty,
-					isIgnoredPath: this.appContainer.isIgnoredPath,
 				}).open();
 			},
 		});

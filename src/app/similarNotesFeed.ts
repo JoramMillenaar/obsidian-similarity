@@ -4,36 +4,30 @@ import { SubscribeIndexingStateUseCase } from "./indexingProgress";
 import { ModelStateReader } from "./modelSession";
 import { IsIgnoredPath } from "./isIgnoredPath";
 import { isMarkdownPath } from "../domain/markdownPath";
+import { backendNoticeFor, SimilarNotesNotice, shouldRefreshOnIndexingChange } from "./similarNotesNotice";
 
-export type RelatedNotesNotice =
-	| { kind: "no-active-note" }
-	| { kind: "unsupported-file" }
-	| { kind: "ignored-path" }
-	| { kind: "warming-up"; progress: number | null }
-	| { kind: "indexing"; processed: number; total: number; indexEmpty: boolean }
-	| { kind: "empty-index" }
-	| { kind: "fatal-error"; message: string; indexEmpty: boolean };
+export type { SimilarNotesNotice };
 
-export type RelatedNotesSnapshot = {
+export type SimilarNotesSnapshot = {
 	epoch: number;
 	noteId: string | null;
 	items: RelatedNote[];
 	refining: boolean;
-	notice?: RelatedNotesNotice;
+	notice?: SimilarNotesNotice;
 };
 
 export type Unsubscribe = () => void;
 
-export interface RelatedNotesFeed {
-	getSnapshot(): RelatedNotesSnapshot;
-	subscribe(fn: (snapshot: RelatedNotesSnapshot) => void): Unsubscribe;
+export interface SimilarNotesFeed {
+	getSnapshot(): SimilarNotesSnapshot;
+	subscribe(fn: (snapshot: SimilarNotesSnapshot) => void): Unsubscribe;
 	setActiveNote(noteId: string | null): void;
 	retryIndexing(): Promise<void>;
 	refresh(): void;
 	dispose(): void;
 }
 
-type RelatedNotesFeedDeps = {
+type SimilarNotesFeedDeps = {
 	modelSession: ModelStateReader;
 	subscribeIndexingState: SubscribeIndexingStateUseCase;
 	getSimilarNotesForNote: GetSimilarNotesForNoteUseCase;
@@ -43,22 +37,22 @@ type RelatedNotesFeedDeps = {
 	refreshDebounceMs?: number;
 };
 
-const IDLE: RelatedNotesSnapshot = {epoch: 0, noteId: null, items: [], refining: false, notice: {kind: "no-active-note"}};
+const IDLE: SimilarNotesSnapshot = {epoch: 0, noteId: null, items: [], refining: false, notice: {kind: "no-active-note"}};
 
-export function makeRelatedNotesFeed(deps: RelatedNotesFeedDeps): RelatedNotesFeed {
+export function makeSimilarNotesFeed(deps: SimilarNotesFeedDeps): SimilarNotesFeed {
 	const refreshDebounceMs = deps.refreshDebounceMs ?? 1500;
 
 	let epoch = 0;
 	let noteId: string | null = null;
-	let snapshot: RelatedNotesSnapshot = IDLE;
+	let snapshot: SimilarNotesSnapshot = IDLE;
 	let indexingState: IndexingQueueSnapshot | undefined;
 	let modelReady = deps.modelSession.getSnapshot().status === "ready";
 	let lastIndexEmpty = false;
 	let lastRefreshAt = 0;
 	let refreshTimer: ReturnType<typeof setTimeout> | undefined;
-	const listeners = new Set<(snapshot: RelatedNotesSnapshot) => void>();
+	const listeners = new Set<(snapshot: SimilarNotesSnapshot) => void>();
 
-	function emit(next: RelatedNotesSnapshot) {
+	function emit(next: SimilarNotesSnapshot) {
 		snapshot = next;
 		for (const listener of listeners) listener(snapshot);
 	}
@@ -82,8 +76,6 @@ export function makeRelatedNotesFeed(deps: RelatedNotesFeedDeps): RelatedNotesFe
 		const modelState = deps.modelSession.getSnapshot();
 		const ready = modelState.status === "ready";
 
-		// The index is model-agnostic to read from, so cached results can render immediately
-		// even before the embedder has finished loading — only the *next* embed needs it ready.
 		const items = await deps.getSimilarNotesForNote({noteId: currentNoteId}).catch(() => []);
 		if (forEpoch !== epoch) return;
 
@@ -107,21 +99,8 @@ export function makeRelatedNotesFeed(deps: RelatedNotesFeedDeps): RelatedNotesFe
 			noteId: currentNoteId,
 			items,
 			refining: false,
-			notice: noticeFor(indexEmpty, indexingState),
+			notice: backendNoticeFor(indexEmpty, indexingState),
 		});
-	}
-
-	function noticeFor(indexEmpty: boolean, indexing: IndexingQueueSnapshot | undefined): RelatedNotesNotice | undefined {
-		if (indexing?.fatalError) {
-			return {kind: "fatal-error", message: indexing.fatalError, indexEmpty};
-		}
-		if (indexing && (indexing.isRunning || indexing.pending > 0)) {
-			return {kind: "indexing", processed: indexing.processed, total: indexing.total, indexEmpty};
-		}
-		if (indexEmpty) {
-			return {kind: "empty-index"};
-		}
-		return undefined;
 	}
 
 	function scheduleRefresh() {
@@ -135,25 +114,15 @@ export function makeRelatedNotesFeed(deps: RelatedNotesFeedDeps): RelatedNotesFe
 		}, delay);
 	}
 
-	function shouldRefreshOnIndexingChange(previous: IndexingQueueSnapshot | undefined, next: IndexingQueueSnapshot): boolean {
-		if (!previous) return false;
-		if (previous.fatalError !== next.fatalError) return true;
-		if (previous.isRunning && !next.isRunning) return true;
-		if (noteId !== null && previous.currentNoteId === noteId && next.currentNoteId !== noteId) return true;
-		if (previous.processed !== next.processed) return true;
-		return false;
-	}
-
 	const BACKEND_NOTICE_KINDS = new Set(["indexing", "empty-index", "fatal-error", undefined]);
 
 	const unsubscribeIndexingState = deps.subscribeIndexingState((next) => {
 		const previous = indexingState;
 		indexingState = next;
-		if (shouldRefreshOnIndexingChange(previous, next)) {
+		if (shouldRefreshOnIndexingChange(previous, next, noteId)) {
 			scheduleRefresh();
 		} else if (snapshot.noteId !== null && !snapshot.refining && BACKEND_NOTICE_KINDS.has(snapshot.notice?.kind)) {
-			// Keep the notice (e.g. progress numbers) current without re-fetching items.
-			emit({...snapshot, notice: noticeFor(lastIndexEmpty, next)});
+			emit({...snapshot, notice: backendNoticeFor(lastIndexEmpty, next)});
 		}
 	});
 

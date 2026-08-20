@@ -1,48 +1,35 @@
 import { App, Notice, Platform, SuggestModal, TFile } from "obsidian";
-import { GetSimilarNotesForNoteUseCase } from "../app/getSimilarNotesForNote";
-import { GetSimilarNotesForTextUseCase } from "../app/getSimilarNotesForText";
 import { InsertWikilinkAtCursorUseCase } from "../app/insertWikilinkAtCursor";
-import { SubscribeIndexingStateUseCase } from "../app/indexingProgress";
-import { ModelSessionSnapshot, ModelStateReader } from "../app/modelSession";
+import { SimilarSearchFeed, SimilarSearchResult } from "../app/similarSearchFeed";
+import { BackendState } from "../app/backendState";
+import { BannerState } from "../app/backendBanner";
+import { textForNotice } from "./similarNoticeText";
 import { KeyedDebouncer } from "../domain/debouncer";
-import { isMarkdownPath } from "../domain/markdownPath";
-import { IDLE_INDEXING_SNAPSHOT, IndexingQueueSnapshot, RelatedNote } from "../types";
-import { BannerState, getIndexingBannerState, getModelDownloadBannerState } from "./indexingBanner";
+import { RelatedNote } from "../types";
 
 export type SearchModalDeps = {
-	getSimilarNotesForNote: GetSimilarNotesForNoteUseCase;
-	getSimilarNotesForText: GetSimilarNotesForTextUseCase;
+	similarSearchFeed: SimilarSearchFeed;
+	backendState: BackendState;
 	insertWikilinkAtCursor: InsertWikilinkAtCursorUseCase;
-	isIndexEmpty: () => Promise<boolean>;
-	isIgnoredPath: (path: string) => Promise<boolean>;
-	subscribeIndexingState: SubscribeIndexingStateUseCase;
-	modelSession: ModelStateReader;
 }
 
+const HIDDEN_BANNER: BannerState = {visible: false, message: "", processed: 0, total: 0};
+
 export class SearchModal extends SuggestModal<RelatedNote> {
-	private static readonly MIN_ITEMS_FOR_PROGRESS_BANNER = 8;
 	private readonly deps: SearchModalDeps;
 	private readonly debouncer: KeyedDebouncer<string>;
 	private chooseMode: "open" | "open-new-tab" | "open-right" | "insert-link" = "open";
 	private isAutoRefreshing = false;
-	private indexingState: IndexingQueueSnapshot = IDLE_INDEXING_SNAPSHOT;
-	private modelState: ModelSessionSnapshot = {status: "not-loaded"};
-	private lastAutoRefreshAt = 0;
-	private unsubscribeIndexingState?: () => void;
-	private unsubscribeModelState?: () => void;
-	private refreshTimer?: number;
+	private banner: BannerState = HIDDEN_BANNER;
+	private unsubscribeBanner?: () => void;
+	private unsubscribeRefreshSignal?: () => void;
 	private bannerEl?: HTMLElement;
 
 	private static readonly DEFAULT_EMPTY_STATE = "Type to search related notes.";
-	private static readonly LOADING_EMPTY_STATE = "Searching related notes...";
-	private static readonly NO_RESULTS_EMPTY_STATE = "No related notes found.";
-	private static readonly NO_RESULTS_DURING_INDEX_STATE = "No related notes found yet. More may appear while indexing continues.";
-	private static readonly EMPTY_DURING_INDEX_STATE = "Indexing is still in progress. Results will appear as notes are processed.";
-	private static readonly EMPTY_INDEX_STATE = "Your index is empty. Run “Sync vault index” to rebuild it.";
-	private static readonly IGNORED_NOTE_STATE = "The current note is ignored by settings.";
+	private static readonly LOADING_EMPTY_STATE = "Searching similar notes...";
+	private static readonly NO_RESULTS_EMPTY_STATE = "No similar notes found.";
+	private static readonly NO_RESULTS_DURING_INDEX_STATE = "No similar notes found yet. More may appear while processing continues.";
 	private static readonly NON_MARKDOWN_NOTE_STATE = this.DEFAULT_EMPTY_STATE;
-	private static readonly NO_ACTIVE_NOTE_STATE = "Open a note to see similar notes.";
-	private static readonly PREPARING_EMPTY_STATE = "Getting things ready. Try again in a moment.";
 
 	constructor(app: App, deps: SearchModalDeps) {
 		super(app);
@@ -77,36 +64,20 @@ export class SearchModal extends SuggestModal<RelatedNote> {
 	onOpen(): void {
 		void super.onOpen();
 		this.ensureBanner();
-		this.unsubscribeIndexingState = this.deps.subscribeIndexingState((snapshot) => {
-			const previous = this.indexingState;
-			this.indexingState = snapshot;
+		this.unsubscribeBanner = this.deps.backendState.subscribeBanner((banner) => {
+			this.banner = banner;
 			this.renderBanner();
-
-			if (this.shouldRefreshSuggestions(previous, snapshot)) {
-				this.scheduleSuggestionRefresh();
-			}
 		});
-		this.unsubscribeModelState = this.deps.modelSession.subscribe((snapshot) => {
-			const previousReady = this.modelState.status === "ready";
-			this.modelState = snapshot;
-			this.renderBanner();
-
-			if (snapshot.status === "ready" && !previousReady) {
-				this.lastAutoRefreshAt = Date.now();
-				this.isAutoRefreshing = true;
-				this.inputEl.dispatchEvent(new Event("input"));
-			}
+		this.unsubscribeRefreshSignal = this.deps.similarSearchFeed.subscribeRefreshSignal(() => {
+			this.isAutoRefreshing = true;
+			this.inputEl.dispatchEvent(new Event("input"));
 		});
 		window.setTimeout(() => this.inputEl.dispatchEvent(new Event("input")), 0);
 	}
 
 	onClose(): void {
-		if (this.refreshTimer) {
-			window.clearTimeout(this.refreshTimer);
-			this.refreshTimer = undefined;
-		}
-		this.unsubscribeIndexingState?.();
-		this.unsubscribeModelState?.();
+		this.unsubscribeBanner?.();
+		this.unsubscribeRefreshSignal?.();
 		super.onClose();
 	}
 
@@ -126,26 +97,9 @@ export class SearchModal extends SuggestModal<RelatedNote> {
 		return new Promise((resolve) => {
 			this.debouncer.schedule("search", async () => {
 				try {
-					if (this.modelState.status !== "ready") {
-						this.emptyStateText = SearchModal.PREPARING_EMPTY_STATE;
-						resolve([]);
-						return;
-					}
-
-					const indexEmpty = await this.deps.isIndexEmpty();
-					if (indexEmpty) {
-						this.emptyStateText = getIndexingBannerState(this.indexingState).visible
-							? SearchModal.EMPTY_DURING_INDEX_STATE
-							: SearchModal.EMPTY_INDEX_STATE;
-						resolve([]);
-						return;
-					}
-
-					const results = await this.deps.getSimilarNotesForText({text: query});
-					this.emptyStateText = results.length > 0
-						? SearchModal.DEFAULT_EMPTY_STATE
-						: this.getNoResultsText();
-					resolve(results);
+					const result = await this.deps.similarSearchFeed.resolveForQuery(query);
+					this.emptyStateText = this.textFor(result);
+					resolve(result.items);
 				} catch (e) {
 					console.error("[Related Notes Search] Failed to get related notes:", e);
 					this.emptyStateText = this.getNoResultsText();
@@ -200,46 +154,16 @@ export class SearchModal extends SuggestModal<RelatedNote> {
 	}
 
 	private async getInitialSuggestions(isAutoRefresh = false): Promise<RelatedNote[]> {
-		const active = this.app.workspace.getActiveFile();
-		if (!active) {
-			this.emptyStateText = SearchModal.NO_ACTIVE_NOTE_STATE;
-			return [];
-		}
-		if (!isMarkdownPath(active.path)) {
-			this.emptyStateText = SearchModal.NON_MARKDOWN_NOTE_STATE;
-			return [];
-		}
-
 		if (!isAutoRefresh) {
 			this.emptyStateText = SearchModal.LOADING_EMPTY_STATE;
 			this.onNoSuggestion();
 		}
 
 		try {
-			const isIgnored = await this.deps.isIgnoredPath(active.path);
-			if (isIgnored) {
-				this.emptyStateText = SearchModal.IGNORED_NOTE_STATE;
-				return [];
-			}
-
-			if (this.modelState.status !== "ready") {
-				this.emptyStateText = SearchModal.PREPARING_EMPTY_STATE;
-				return [];
-			}
-
-			const indexEmpty = await this.deps.isIndexEmpty();
-			if (indexEmpty) {
-				this.emptyStateText = getIndexingBannerState(this.indexingState).visible
-					? SearchModal.EMPTY_DURING_INDEX_STATE
-					: SearchModal.EMPTY_INDEX_STATE;
-				return [];
-			}
-
-			const results = await this.deps.getSimilarNotesForNote({noteId: active.path});
-			this.emptyStateText = results.length > 0
-				? SearchModal.DEFAULT_EMPTY_STATE
-				: this.getNoResultsText();
-			return results;
+			const active = this.app.workspace.getActiveFile();
+			const result = await this.deps.similarSearchFeed.resolveForNote(active?.path ?? null);
+			this.emptyStateText = this.textFor(result);
+			return result.items;
 		} catch (e) {
 			console.error("[Related Notes Search] Failed to get initial suggestions:", e);
 			this.emptyStateText = this.getNoResultsText();
@@ -247,8 +171,29 @@ export class SearchModal extends SuggestModal<RelatedNote> {
 		}
 	}
 
+	private textFor(result: SimilarSearchResult): string {
+		const notice = result.notice;
+		if (!notice) {
+			return result.items.length > 0 ? SearchModal.DEFAULT_EMPTY_STATE : this.getNoResultsText();
+		}
+
+		switch (notice.kind) {
+			case "unsupported-file":
+				return SearchModal.NON_MARKDOWN_NOTE_STATE;
+			case "fatal-error":
+				return notice.indexEmpty
+					? textForNotice(notice)
+					: (result.items.length > 0 ? SearchModal.DEFAULT_EMPTY_STATE : textForNotice(notice));
+			case "indexing":
+				if (notice.indexEmpty) return textForNotice(notice);
+				return result.items.length > 0 ? SearchModal.DEFAULT_EMPTY_STATE : textForNotice(notice);
+			default:
+				return textForNotice(notice);
+		}
+	}
+
 	private getNoResultsText(): string {
-		return getIndexingBannerState(this.indexingState).visible
+		return this.banner.visible
 			? SearchModal.NO_RESULTS_DURING_INDEX_STATE
 			: SearchModal.NO_RESULTS_EMPTY_STATE;
 	}
@@ -265,22 +210,16 @@ export class SearchModal extends SuggestModal<RelatedNote> {
 		this.renderBanner();
 	}
 
-	/** Downloading the model takes priority over indexing progress — there's nothing to index into yet. */
-	private currentBannerState(): BannerState {
-		const download = getModelDownloadBannerState(this.modelState);
-		return download.visible ? download : getIndexingBannerState(this.indexingState);
-	}
-
 	private renderBanner() {
 		if (!this.bannerEl) {
 			return;
 		}
 
-		const banner = this.currentBannerState();
+		const banner = this.banner;
 		this.bannerEl.empty();
-		this.bannerEl.toggleClass("is-hidden", !this.shouldShowIndexingBanner());
+		this.bannerEl.toggleClass("is-hidden", !banner.visible);
 
-		if (!this.shouldShowIndexingBanner()) {
+		if (!banner.visible) {
 			return;
 		}
 
@@ -301,47 +240,6 @@ export class SearchModal extends SuggestModal<RelatedNote> {
 		}
 	}
 
-	private scheduleSuggestionRefresh() {
-		if (this.refreshTimer) {
-			return;
-		}
-
-		const elapsed = Date.now() - this.lastAutoRefreshAt;
-		const delay = Math.max(0, 1500 - elapsed);
-		this.refreshTimer = window.setTimeout(() => {
-			this.refreshTimer = undefined;
-			this.lastAutoRefreshAt = Date.now();
-			this.isAutoRefreshing = true;
-			this.inputEl.dispatchEvent(new Event("input"));
-		}, delay);
-	}
-
-	private shouldRefreshSuggestions(previous: IndexingQueueSnapshot, snapshot: IndexingQueueSnapshot): boolean {
-		if (getIndexingBannerState(previous).visible !== getIndexingBannerState(snapshot).visible || previous.fatalError !== snapshot.fatalError) {
-			return true;
-		}
-		if (previous.isRunning && !snapshot.isRunning) {
-			return true;
-		}
-
-		const activePath = this.app.workspace.getActiveFile()?.path;
-		if (activePath && previous.currentNoteId === activePath && snapshot.currentNoteId !== activePath) {
-			return true;
-		}
-
-		if (previous.processed !== snapshot.processed) {
-			return Date.now() - this.lastAutoRefreshAt >= 1500;
-		}
-
-		return false;
-	}
-
-	private shouldShowIndexingBanner(): boolean {
-		if (getModelDownloadBannerState(this.modelState).visible) return true;
-
-		const indexing = getIndexingBannerState(this.indexingState);
-		return indexing.visible && indexing.total > SearchModal.MIN_ITEMS_FOR_PROGRESS_BANNER - 1;
-	}
 }
 
 function createBannerElement() {

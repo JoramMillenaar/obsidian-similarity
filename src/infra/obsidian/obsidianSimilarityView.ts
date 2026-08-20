@@ -1,10 +1,10 @@
 import { Notice, Plugin, WorkspaceLeaf } from "obsidian";
 import { VIEW_TYPE_SIMILARITY } from "../../ui/SimilarNotesListView";
 import { ActivateOptions, SimilarityView } from "../../ports";
-import { RelatedNotesFeed } from "../../app/relatedNotesFeed";
+import { SimilarNotesFeed } from "../../app/similarNotesFeed";
 
 export class ObsidianSimilarityView implements SimilarityView {
-	constructor(private readonly plugin: Plugin, private readonly relatedNotesFeed: RelatedNotesFeed) {
+	constructor(private readonly plugin: Plugin, private readonly similarNotesFeed: SimilarNotesFeed) {
 	}
 
 	async activate(options: ActivateOptions = {}): Promise<void> {
@@ -36,6 +36,6 @@ export class ObsidianSimilarityView implements SimilarityView {
 	}
 
 	refreshResults(): void {
-		this.relatedNotesFeed.refresh();
+		this.similarNotesFeed.refresh();
 	}
 }

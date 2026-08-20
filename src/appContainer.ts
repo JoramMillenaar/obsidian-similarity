@@ -34,7 +34,9 @@ import { IndexingWorker } from "./app/indexingWorker";
 import { makeRunLegacyMigrations, RunLegacyMigrationsUseCase } from "./app/legacyMigrations";
 import { makeBuildGeneration } from "./app/generation";
 import { ModelSession } from "./app/modelSession";
-import { makeRelatedNotesFeed, RelatedNotesFeed } from "./app/relatedNotesFeed";
+import { makeSimilarNotesFeed, SimilarNotesFeed } from "./app/similarNotesFeed";
+import { makeSimilarSearchFeed, SimilarSearchFeed } from "./app/similarSearchFeed";
+import { BackendState, makeBackendState } from "./app/backendState";
 
 const INDEX_WRITE_THROTTLE_MS = 1000;
 
@@ -51,7 +53,9 @@ export class AppContainer {
 	readonly settingsRepo: SettingsRepository;
 	readonly indexingWorker: IndexingWorker;
 	readonly similarityView: SimilarityView;
-	readonly relatedNotesFeed: RelatedNotesFeed;
+	readonly similarNotesFeed: SimilarNotesFeed;
+	readonly similarSearchFeed: SimilarSearchFeed;
+	readonly backendState: BackendState;
 	readonly upsertDebouncer: KeyedDebouncer<string>;
 
 	readonly runLegacyMigrations: RunLegacyMigrationsUseCase;
@@ -102,8 +106,6 @@ export class AppContainer {
 			settingsRepo: this.settingsRepo,
 		});
 
-		// Never needs the embedder — it only reads what's already in the index — so it works
-		// whether or not a model is currently loaded, unlike getSimilarNotesForText below.
 		this.getSimilarNotesForNote = async (args) => {
 			const snapshot = this.modelSession.getSnapshot();
 			const modelId = snapshot.status === "ready"
@@ -166,7 +168,7 @@ export class AppContainer {
 			modelSession: this.modelSession,
 		});
 
-		this.relatedNotesFeed = makeRelatedNotesFeed({
+		this.similarNotesFeed = makeSimilarNotesFeed({
 			modelSession: this.modelSession,
 			subscribeIndexingState: this.subscribeIndexingState,
 			getSimilarNotesForNote: this.getSimilarNotesForNote,
@@ -175,13 +177,27 @@ export class AppContainer {
 			synchronizeIndex: this.synchronizeIndex,
 		});
 
-		this.similarityView = new ObsidianSimilarityView(plugin, this.relatedNotesFeed);
+		this.similarityView = new ObsidianSimilarityView(plugin, this.similarNotesFeed);
+
+		this.backendState = makeBackendState({
+			modelSession: this.modelSession,
+			subscribeIndexingState: this.subscribeIndexingState,
+		});
+
+		this.similarSearchFeed = makeSimilarSearchFeed({
+			backendState: this.backendState,
+			getSimilarNotesForNote: this.getSimilarNotesForNote,
+			getSimilarNotesForText: this.getSimilarNotesForText,
+			isIndexEmpty: this.isIndexEmpty,
+			isIgnoredPath: this.isIgnoredPath,
+		});
 	}
 
 	async shutdown(): Promise<void> {
 		this.indexingWorker.unload();
 		this.modelSession.shutdown();
-		this.relatedNotesFeed.dispose();
+		this.similarNotesFeed.dispose();
+		this.backendState.dispose();
 		this.disposeIndexingProgress();
 		this.upsertDebouncer.cancel();
 		await this.indexStorage.flush().catch((error) => {
