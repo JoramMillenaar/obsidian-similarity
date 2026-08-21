@@ -1,4 +1,4 @@
-import { Embedding } from "../types";
+import { Embedding, IndexedNote, RelatedNote } from "../types";
 import { QUANT_SCALE } from "./embeddingCodec";
 
 /** Scales a raw model-output vector to unit length. Needs float precision, so it runs before quantization, not on the stored Embedding. */
@@ -49,6 +49,22 @@ export function maxPairwiseSimilarity(a: Embedding[], b: Embedding[]): number {
 	}
 
 	return Number.isFinite(best) ? best : 0;
+}
+
+/** Shared ranking logic behind both getSimilarNotesForNote and getSimilarNotesForText. */
+export function rankSimilarNotes(
+	queryChunks: Embedding[],
+	notes: IndexedNote[],
+	options: {excludeId?: string; limit?: number; minScore?: number} = {},
+): RelatedNote[] {
+	const {excludeId, limit = 10, minScore = 0.25} = options;
+
+	return notes
+		.filter((n) => (excludeId ? n.id !== excludeId : true))
+		.map((n) => ({id: n.id, score: maxPairwiseSimilarity(queryChunks, n.chunks.map((chunk) => chunk.embedding))}))
+		.filter((r) => Number.isFinite(r.score) && r.score >= minScore)
+		.sort((a, b) => b.score - a.score)
+		.slice(0, limit);
 }
 
 export function dotProductSimilarity(a: Embedding, b: Embedding): number {

@@ -1,11 +1,8 @@
 import { ItemView, Notice, TFile, WorkspaceLeaf } from "obsidian";
-import { GetSimilarNotesUseCase } from "../app/getSimilarNotes";
-import { SubscribeIndexingStateUseCase } from "../app/indexingProgress";
-import { SynchronizeIndexUseCase } from "../app/synchronizeIndex";
-import { isMarkdownPath } from "../domain/markdownPath";
-import { IDLE_INDEXING_SNAPSHOT, IndexingQueueSnapshot } from "../types";
-import { IndexRepository } from "../ports";
-import { getIndexingBannerState } from "./indexingBanner";
+import { SimilarNotesFeed, SimilarNotesSnapshot } from "../app/similarNotesFeed";
+import { BackendState } from "../app/backendState";
+import { BannerState, subscribeBanner } from "./backendBanner";
+import { textForNotice } from "./similarNoticeText";
 
 export function logError(message: unknown, ...optionalParams: unknown[]) {
 	console.error("[Similarity]:", message, ...optionalParams);
@@ -13,23 +10,24 @@ export function logError(message: unknown, ...optionalParams: unknown[]) {
 
 export const VIEW_TYPE_SIMILARITY = "similarity";
 
-type SimilarNote = { id: string; score: number };
+type RetryAction = {
+	label: string;
+	run: () => Promise<void>;
+	failureNotice: string;
+};
 
 export type SimilarNotesListViewDeps = {
-	indexRepo: IndexRepository;
-	getSimilarNotes: GetSimilarNotesUseCase;
-	synchronizeIndex: SynchronizeIndexUseCase;
-	subscribeIndexingState: SubscribeIndexingStateUseCase;
-	isIgnoredPath: (path: string) => Promise<boolean>;
-}
+	similarNotesFeed: SimilarNotesFeed;
+	backendState: BackendState;
+};
 
 export class SimilarNotesListView extends ItemView {
-	private static readonly MIN_ITEMS_FOR_PROGRESS_BANNER = 8;
-	private isLoading = false;
-	private lastAutoRefreshAt = 0;
-	private indexingState: IndexingQueueSnapshot = IDLE_INDEXING_SNAPSHOT;
-	private unsubscribeIndexingState?: () => void;
-	private refreshTimer?: number;
+	private snapshot: SimilarNotesSnapshot | undefined;
+	private activePath: string | null = null;
+	private bannerEl?: HTMLElement;
+	private bodyEl?: HTMLElement;
+	private unsubscribeSnapshot?: () => void;
+	private unsubscribeBanner?: () => void;
 
 	constructor(leaf: WorkspaceLeaf, private deps: SimilarNotesListViewDeps) {
 		super(leaf);
@@ -77,30 +75,80 @@ export class SimilarNotesListView extends ItemView {
 	}
 
 	async onOpen() {
-		this.unsubscribeIndexingState = this.deps.subscribeIndexingState((snapshot) => {
-			const previous = this.indexingState;
-			this.indexingState = snapshot;
-			this.updateLiveBanner();
-
-			if (this.shouldRefreshResults(previous, snapshot)) {
-				this.scheduleRefresh();
-			}
-		});
-
-		await this.render();
-	}
-
-	async render() {
 		this.containerEl.empty();
-		const content = this.containerEl.createDiv({cls: "tag-container"});
-		await this.renderContent(content);
+		const root = this.containerEl.createDiv({cls: "tag-container"});
+		this.bannerEl = root.createDiv({cls: "similarity-index-banner is-hidden"});
+		this.bodyEl = root.createDiv();
+
+		this.registerEvent(
+			this.app.workspace.on("active-leaf-change", () => this.syncActiveNote()),
+		);
+		this.registerEvent(
+			this.app.workspace.on("file-open", () => this.syncActiveNote()),
+		);
+
+		this.unsubscribeSnapshot = this.deps.similarNotesFeed.subscribe((snapshot) => {
+			this.snapshot = snapshot;
+			this.renderBody();
+		});
+		this.unsubscribeBanner = subscribeBanner(this.deps.backendState, (banner) => this.renderBanner(banner));
+
+		this.syncActiveNote();
 	}
 
-	private renderLoading(container: HTMLElement) {
-		return container.createDiv({
-			cls: "tree-item-self",
-			text: "Loading similar notes...",
-		});
+	private syncActiveNote() {
+		const active = this.app.workspace.getActiveFile();
+		this.activePath = active?.path ?? null;
+		this.deps.similarNotesFeed.setActiveNote(this.activePath);
+		this.renderBody();
+	}
+
+	private renderBody() {
+		const container = this.bodyEl;
+		if (!container) return;
+		container.empty();
+
+		if (!this.snapshot || this.snapshot.noteId !== this.activePath) {
+			container.createDiv({cls: "tree-item-self", text: "Loading similar notes..."});
+			return;
+		}
+
+		if (this.snapshot.items.length > 0) {
+			this.renderRelatedList(container, this.snapshot.items);
+			return;
+		}
+
+		const {text, retry} = this.emptyStateFor(this.snapshot);
+		if (text) this.renderMessage(container, text, this.snapshot.notice?.kind === "no-active-note" ? "similar-notes-no-active" : undefined);
+		if (retry) this.renderRetryAction(container, retry);
+	}
+
+	private emptyStateFor(snapshot: SimilarNotesSnapshot): { text?: string; retry?: RetryAction } {
+		const notice = snapshot.notice;
+		if (!notice) return {text: "No related notes were similar enough to display yet."};
+
+		const text = textForNotice(notice);
+		if (notice.kind === "model-error") {
+			return {
+				text,
+				retry: {
+					label: "Try again",
+					run: () => this.deps.similarNotesFeed.retryModelLoad(),
+					failureNotice: "Could not load the model. See console for details.",
+				},
+			};
+		}
+		if (notice.kind === "fatal-error" || notice.kind === "empty-index") {
+			return {
+				text,
+				retry: {
+					label: "Retry indexing",
+					run: () => this.deps.similarNotesFeed.retryIndexing(),
+					failureNotice: "Failed to start indexing. See console for details.",
+				},
+			};
+		}
+		return {text};
 	}
 
 	private renderMessage(container: HTMLElement, text: string, extraCls?: string) {
@@ -110,20 +158,14 @@ export class SimilarNotesListView extends ItemView {
 		});
 	}
 
-	private renderIndexingBanner(container: HTMLElement) {
-		const banner = getIndexingBannerState(this.indexingState);
-		const existing = container.querySelector(".similarity-index-banner");
-		if (!this.shouldShowIndexingBanner()) {
-			existing?.remove();
-			return;
-		}
+	private renderBanner(banner: BannerState) {
+		const bannerEl = this.bannerEl;
+		if (!bannerEl) return;
 
-		const bannerEl = existing instanceof HTMLElement
-			? existing
-			: container.insertBefore(createDiv(), container.firstChild);
-
-		bannerEl.className = `similarity-index-banner similarity-index-banner-${banner.kind}`;
 		bannerEl.empty();
+		bannerEl.toggleClass("is-hidden", !banner.visible);
+		if (!banner.visible) return;
+
 		bannerEl.createDiv({
 			cls: "similarity-index-banner-message",
 			text: banner.message,
@@ -133,124 +175,30 @@ export class SimilarNotesListView extends ItemView {
 			const progressRow = bannerEl.createDiv({cls: "similarity-index-banner-progress"});
 			progressRow.createEl("progress", {
 				cls: "similarity-index-banner-bar",
-				attr: {
-					max: String(banner.total),
-					value: String(Math.min(banner.processed, banner.total)),
-				},
+				attr: {max: String(banner.total), value: String(Math.min(banner.processed, banner.total))},
 			});
 		}
 	}
 
-	private renderRetryAction(container: HTMLElement) {
+	private renderRetryAction(container: HTMLElement, retry: RetryAction) {
 		const actions = container.createDiv({cls: "related-notes-actions"});
 		const retryButton = actions.createEl("button", {
 			cls: "mod-cta related-notes-button",
-			text: "Retry indexing",
+			text: retry.label,
 		});
 
 		retryButton.addEventListener("click", () => {
-			void this.startIndexing();
+			retryButton.setAttr("disabled", "true");
+			retry.run()
+				.catch((error) => {
+					logError(`${retry.label} failed:`, error);
+					new Notice(retry.failureNotice);
+				})
+				.finally(() => retryButton.removeAttribute("disabled"));
 		});
 	}
 
-	private async renderContent(targetContainer: HTMLElement, options: { showLoading?: boolean } = {}) {
-		const showLoading = options.showLoading ?? true;
-		const workingContainer = showLoading ? targetContainer : createDiv();
-		if (showLoading) {
-			targetContainer.empty();
-		}
-
-		const loadingEl = showLoading ? this.renderLoading(workingContainer) : undefined;
-
-		this.isLoading = true;
-		try {
-			const active = this.getActiveFileOrShowEmptyState(workingContainer, loadingEl);
-			if (!active) return;
-			if (!isMarkdownPath(active.path)) {
-				loadingEl?.remove();
-				this.renderMessage(workingContainer, "Semantic matching only supports Markdown notes. Open a .md file to see similar notes.");
-				this.commitRenderedContent(targetContainer, workingContainer, showLoading);
-				return;
-			}
-
-			if (await this.deps.isIgnoredPath(active.path)) {
-				loadingEl?.remove();
-				this.renderMessage(workingContainer, "This note is ignored by settings. Remove it from ignored paths to see related notes.");
-				this.commitRenderedContent(targetContainer, workingContainer, showLoading);
-				return;
-			}
-
-			const indexEmpty = await this.deps.indexRepo.isEmpty();
-			const related = indexEmpty
-				? []
-				: await this.loadSimilarNotesForActiveFile(active.path);
-
-			loadingEl?.remove();
-			this.renderIndexingBanner(workingContainer);
-
-			if (related.length > 0) {
-				this.renderRelatedList(workingContainer, related);
-				this.commitRenderedContent(targetContainer, workingContainer, showLoading);
-				return;
-			}
-
-			if (getIndexingBannerState(this.indexingState).kind === "failed") {
-				this.renderMessage(
-					workingContainer,
-					indexEmpty
-						? "Indexing stopped before any results were ready."
-						: "No related notes matched yet. Indexing also hit an error, so results may be stale.",
-				);
-				this.renderRetryAction(workingContainer);
-				this.commitRenderedContent(targetContainer, workingContainer, showLoading);
-				return;
-			}
-
-			if (indexEmpty && this.indexingState.isRunning) {
-				this.renderMessage(workingContainer, "Indexing is underway. Related notes will appear as the queue progresses.");
-				this.commitRenderedContent(targetContainer, workingContainer, showLoading);
-				return;
-			}
-
-			if (!indexEmpty && this.indexingState.isRunning) {
-				this.renderMessage(workingContainer, "No related notes were similar enough yet. More may appear while indexing continues.");
-				this.commitRenderedContent(targetContainer, workingContainer, showLoading);
-				return;
-			}
-
-			if (indexEmpty) {
-				this.renderMessage(workingContainer, "Your index currently has no notes. Run “Sync vault index” to rebuild it.");
-				this.renderRetryAction(workingContainer);
-				this.commitRenderedContent(targetContainer, workingContainer, showLoading);
-				return;
-			}
-
-			this.renderMessage(workingContainer, "No related notes were similar enough to display yet.");
-			this.commitRenderedContent(targetContainer, workingContainer, showLoading);
-		} catch (error) {
-			logError("Error fetching related notes:", error);
-			if (showLoading && loadingEl) {
-				loadingEl.textContent = "Failed to load related notes. Please try again.";
-			}
-		} finally {
-			this.isLoading = false;
-		}
-	}
-
-	private getActiveFileOrShowEmptyState(container: HTMLElement, loadingEl?: HTMLElement) {
-		const active = this.app.workspace.getActiveFile();
-		if (active) return active;
-
-		loadingEl?.remove();
-		this.renderMessage(container, "Open a note to see similar notes.", "similar-notes-no-active");
-		return null;
-	}
-
-	private async loadSimilarNotesForActiveFile(notePath: string): Promise<SimilarNote[]> {
-		return this.deps.getSimilarNotes({noteId: notePath});
-	}
-
-	private renderRelatedList(container: HTMLElement, related: SimilarNote[]) {
+	private renderRelatedList(container: HTMLElement, related: SimilarNotesSnapshot["items"]) {
 		const list = container.createDiv();
 
 		related.forEach((note) => {
@@ -287,98 +235,9 @@ export class SimilarNotesListView extends ItemView {
 		});
 	}
 
-	private async startIndexing() {
-		try {
-			await this.deps.synchronizeIndex();
-		} catch (error) {
-			logError("Error starting indexing:", error);
-			new Notice("Failed to start indexing. See console for details.");
-		}
-	}
-
-	private scheduleRefresh() {
-		if (this.refreshTimer || this.isLoading) {
-			return;
-		}
-
-		const elapsed = Date.now() - this.lastAutoRefreshAt;
-		const delay = Math.max(0, 1500 - elapsed);
-		this.refreshTimer = window.setTimeout(() => {
-			this.refreshTimer = undefined;
-			void this.refresh({background: true});
-		}, delay);
-	}
-
-	async refresh(args: { background?: boolean } = {}) {
-		if (this.isLoading) return;
-		const contentContainer = this.containerEl.querySelector(".tag-container");
-		if (contentContainer) {
-			this.lastAutoRefreshAt = Date.now();
-			await this.renderContent(contentContainer as HTMLElement, {
-				showLoading: !args.background,
-			});
-		}
-	}
-
-	private commitRenderedContent(targetContainer: HTMLElement, workingContainer: HTMLElement, showLoading: boolean) {
-		if (showLoading) {
-			return;
-		}
-
-		targetContainer.empty();
-		while (workingContainer.firstChild) {
-			targetContainer.appendChild(workingContainer.firstChild);
-		}
-	}
-
-	private updateLiveBanner() {
-		const contentContainer = this.containerEl.querySelector(".tag-container");
-		if (!(contentContainer instanceof HTMLElement)) {
-			return;
-		}
-
-		this.renderIndexingBanner(contentContainer);
-	}
-
-	private shouldShowIndexingBanner(): boolean {
-		const {total} = this.indexingState;
-		const banner = getIndexingBannerState(this.indexingState);
-		if (banner.kind === "hidden" || banner.kind === "failed") {
-			return banner.kind === "failed";
-		}
-
-		return total > SimilarNotesListView.MIN_ITEMS_FOR_PROGRESS_BANNER - 1;
-	}
-
-	private shouldRefreshResults(previous: IndexingQueueSnapshot, snapshot: IndexingQueueSnapshot): boolean {
-		const previousBannerKind = getIndexingBannerState(previous).kind;
-		const snapshotBannerKind = getIndexingBannerState(snapshot).kind;
-		if (previousBannerKind !== snapshotBannerKind || previous.fatalError !== snapshot.fatalError) {
-			return true;
-		}
-		if (previous.isRunning && !snapshot.isRunning) {
-			return true;
-		}
-
-		const activePath = this.app.workspace.getActiveFile()?.path;
-		if (activePath && previous.currentNoteId === activePath && snapshot.currentNoteId !== activePath) {
-			return true;
-		}
-
-		if (previous.processed !== snapshot.processed) {
-			return Date.now() - this.lastAutoRefreshAt >= 1500;
-		}
-
-		return false;
-	}
-
 	override onClose(): Promise<void> {
-		if (this.refreshTimer) {
-			window.clearTimeout(this.refreshTimer);
-			this.refreshTimer = undefined;
-		}
-		this.unsubscribeIndexingState?.();
-
+		this.unsubscribeSnapshot?.();
+		this.unsubscribeBanner?.();
 		return Promise.resolve();
 	}
 }

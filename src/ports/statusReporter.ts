@@ -1,5 +1,5 @@
 export interface StatusReporter {
-	update(text: string, timeout?: number): void;
+	update(text: string, timeout?: number | null): void;
 
 	clear(): void;
 }

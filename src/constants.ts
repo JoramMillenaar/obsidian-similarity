@@ -2,6 +2,8 @@ import { EmbeddingModelConfig, EmbeddingModelId, SimilaritySettings } from "./ty
 
 export const MAX_OVERLAP_PERCENT = 50;
 
+export const MIN_DOWNLOAD_PROGRESS_BYTES = 1_000_000;
+
 export const EMBEDDING_MODELS: Record<EmbeddingModelId, EmbeddingModelConfig> = {
 	"xenova-all-MiniLM-L6-v2": {
 		id: "xenova-all-MiniLM-L6-v2",

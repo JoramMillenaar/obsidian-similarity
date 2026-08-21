@@ -1,14 +1,16 @@
-import { App, AnySettingDefinition, Notice, PluginSettingTab, Setting, DropdownComponent } from "obsidian";
+import { App, AnySettingDefinition, DropdownComponent, Notice, PluginSettingTab, Setting } from "obsidian";
 import RelatedNotes from "../main";
 import { parseIgnoredPaths } from "../domain/ignoreRules";
 import { DEFAULT_SETTINGS, EMBEDDING_MODELS, MAX_OVERLAP_PERCENT } from "../constants";
 import { EmbeddingModelId, SimilaritySettings } from "../types";
 import { SettingsRepository } from "../ports";
 import { UpdateSettingsUseCase } from "../app/updateSettings";
+import { ModelRequestSupersededError, ModelSessionSnapshot, ModelStateReader } from "../app/modelSession";
 
 export type SettingsViewDeps = {
 	settingsRepo: SettingsRepository,
 	updateSettings: UpdateSettingsUseCase,
+	modelSession: ModelStateReader,
 }
 
 const EMBEDDING_MODEL_OPTIONS: Record<string, string> = Object.fromEntries(
@@ -31,7 +33,8 @@ export class SettingView extends PluginSettingTab {
 	};
 	private embeddingModelDraft: EmbeddingModelId = DEFAULT_SETTINGS.embeddingModelId;
 	private loaded = false;
-	private saving = false;
+	private previousModelStatus: ModelSessionSnapshot["status"] = "not-loaded";
+	private modelDropdown?: DropdownComponent;
 
 	constructor(
 		app: App,
@@ -40,6 +43,10 @@ export class SettingView extends PluginSettingTab {
 	) {
 		super(app, plugin);
 		void this.preload();
+		this.deps.modelSession.subscribe((snapshot) => {
+			if (this.previousModelStatus !== snapshot.status) this.update?.();
+			this.previousModelStatus = snapshot.status;
+		});
 	}
 
 	private async preload() {
@@ -65,12 +72,12 @@ export class SettingView extends PluginSettingTab {
 		return [
 			{
 				name: "Language",
-				desc: "Determine which language to support. Changing this option may start an optimization process in the background.",
+				desc: "Determine which language to support. Changing this option may start an optimization process in the background. You can pick a different one before it finishes to switch again.",
 				control: {
 					type: "dropdown",
 					key: "embeddingModelId",
 					options: EMBEDDING_MODEL_OPTIONS,
-					disabled: () => !this.loaded || this.saving,
+					disabled: () => !this.loaded,
 				},
 			},
 			{
@@ -139,24 +146,19 @@ export class SettingView extends PluginSettingTab {
 				desc: "Saving updates your similarity results to match these settings.",
 				render: (setting) => {
 					setting.addButton((button) => {
-						button.setButtonText("Save").setCta().setDisabled(!this.loaded).onClick(async () => {
-							button.setDisabled(true);
-							try {
-								const draftIgnored = parseIgnoredPaths(this.ignoredPathsDraft);
-								const validationError = validateIndexingSettings(this.indexingDraft);
-								if (validationError) {
-									new Notice(validationError);
-									return;
-								}
-
-								await this.save({
-									ignoredPaths: draftIgnored,
-									indexing: this.indexingDraft,
-									modelId: this.embeddingModelDraft,
-								});
-							} finally {
-								button.setDisabled(false);
+						button.setButtonText("Save").setCta().setDisabled(!this.loaded).onClick(() => {
+							const draftIgnored = parseIgnoredPaths(this.ignoredPathsDraft);
+							const validationError = validateIndexingSettings(this.indexingDraft);
+							if (validationError) {
+								new Notice(validationError);
+								return;
 							}
+
+							this.save({
+								ignoredPaths: draftIgnored,
+								indexing: this.indexingDraft,
+								modelId: this.embeddingModelDraft,
+							});
 						});
 					});
 				},
@@ -195,39 +197,75 @@ export class SettingView extends PluginSettingTab {
 		this.indexingDraft = {...this.indexingDraft, [key]: value as number};
 	}
 
-	private async save(draft: {
+	/** The model the session fell back to after `requestedId` failed, if it is falling back at all. */
+	private fallbackModelId(requestedId: EmbeddingModelId): EmbeddingModelId | null {
+		const snapshot = this.deps.modelSession.getSnapshot();
+		const activeId = snapshot.status === "ready"
+			? snapshot.modelId
+			: snapshot.status === "loading"
+				? snapshot.targetModelId
+				: null;
+
+		return activeId !== null && activeId !== requestedId ? activeId : null;
+	}
+
+	private revertModelDraft(modelId: EmbeddingModelId): void {
+		this.embeddingModelDraft = modelId;
+		this.modelDropdown?.setValue(modelId);
+		this.update?.();
+	}
+
+	/**
+	 * Fire-and-forget: a model switch can take up to a minute, and the whole point of surfacing
+	 * live status elsewhere (sidebar banner, status bar) is that the user doesn't have to sit and
+	 * wait for it here — they can keep the settings tab interactive, including picking a different
+	 * model before this one finishes, which cancels it.
+	 */
+	private save(draft: {
 		ignoredPaths: string[];
 		indexing: IndexingDraft;
 		modelId: EmbeddingModelId;
-	}): Promise<void> {
+	}): void {
 		const modelChanged = draft.modelId !== this.cachedSettings.embeddingModelId;
+		const modelLabel = EMBEDDING_MODELS[draft.modelId].label;
 
-		if (modelChanged) {
-			this.saving = true;
-			this.refreshDomState?.();
-		}
+		const patch: Partial<SimilaritySettings> = {
+			ignoredPaths: draft.ignoredPaths,
+			...draft.indexing,
+			...(modelChanged ? {embeddingModelId: draft.modelId} : {}),
+		};
 
-		try {
-			await this.deps.updateSettings({
-				ignoredPaths: draft.ignoredPaths,
-				...draft.indexing,
-				...(modelChanged ? {embeddingModelId: draft.modelId} : {}),
+		this.deps.updateSettings(patch)
+			.then(() => {
+				new Notice(modelChanged ? `Switched to ${modelLabel}.` : "Settings saved. Reindexing in the background.");
+			})
+			.catch((error) => {
+				// The user replaced this switch by picking another model; that request reports its own result.
+				if (error instanceof ModelRequestSupersededError) return;
+
+				const message = error instanceof Error ? error.message : String(error);
+				if (!modelChanged) {
+					new Notice(`Could not save settings: ${message}`);
+					return;
+				}
+
+				// A failed switch falls back to whatever was loaded before. Put the dropdown back on
+				// that model too, so the setting keeps showing the language actually in use.
+				const fallbackId = this.fallbackModelId(draft.modelId);
+				if (fallbackId) this.revertModelDraft(fallbackId);
+
+				const kept = fallbackId ? ` Staying on ${EMBEDDING_MODELS[fallbackId].label}.` : "";
+				new Notice(`${message}${kept}`);
+			})
+			.finally(async () => {
+				// Only re-sync what `modelChanged` is compared against. The drafts belong to the user,
+				// who may have edited them while this (up to a minute long) save was in flight.
+				try {
+					this.cachedSettings = await this.deps.settingsRepo.get();
+				} catch (error) {
+					console.error("[Similarity] Could not re-read settings after saving:", error);
+				}
 			});
-			new Notice(
-				modelChanged
-					? `Settings saved. Switched to ${EMBEDDING_MODELS[draft.modelId].label}; reindexing in the background.`
-					: "Settings saved. Reindexing in the background.",
-			);
-		} catch (error) {
-			const message = error instanceof Error ? error.message : String(error);
-			new Notice(
-				modelChanged ? `Could not switch embedding model: ${message}` : `Could not save settings: ${message}`,
-			);
-		} finally {
-			this.applySettings(await this.deps.settingsRepo.get());
-			this.saving = false;
-			this.update?.();
-		}
 	}
 
 	// Legacy fallback for Obsidian < 1.13.0, where `getSettingDefinitions` doesn't exist.
@@ -243,22 +281,20 @@ export class SettingView extends PluginSettingTab {
 		this.applySettings(settings);
 		let draftIgnored = settings.ignoredPaths;
 		let advancedOpen = settings.advancedOpen;
-		let draftModelId = settings.embeddingModelId;
 		const draftIndexing = {...this.indexingDraft};
-		let modelDropdown: DropdownComponent | null = null;
 
 		new Setting(containerEl)
 			.setName("Language")
-			.setDesc("Determine which language to support. Changing this option may start an optimization process in the background.")
+			.setDesc("Determine which language to support. Changing this option may start an optimization process in the background. You can pick a different one before it finishes to switch again.")
 			.addDropdown((dropdown) => {
-				modelDropdown = dropdown;
 				for (const model of Object.values(EMBEDDING_MODELS)) {
 					dropdown.addOption(model.id, model.label);
 				}
-				dropdown.setValue(draftModelId);
+				dropdown.setValue(this.embeddingModelDraft);
 				dropdown.onChange((value) => {
-					draftModelId = value as EmbeddingModelId;
+					this.embeddingModelDraft = value as EmbeddingModelId;
 				});
+				this.modelDropdown = dropdown;
 			});
 
 		new Setting(containerEl)
@@ -340,27 +376,18 @@ export class SettingView extends PluginSettingTab {
 			.setName("Save settings")
 			.setDesc("Saving updates your similarity results to match these settings.")
 			.addButton((button) => {
-				button.setButtonText("Save").setCta().onClick(async () => {
-					button.setDisabled(true);
-					try {
-						const validationError = validateIndexingSettings(draftIndexing);
-						if (validationError) {
-							new Notice(validationError);
-							return;
-						}
-
-						await this.save({
-							ignoredPaths: draftIgnored,
-							indexing: draftIndexing,
-							modelId: draftModelId,
-						});
-						// save() re-reads stored settings, so this reflects what
-						// actually landed if the switch failed part-way.
-						draftModelId = this.cachedSettings.embeddingModelId;
-						modelDropdown?.setValue(draftModelId);
-					} finally {
-						button.setDisabled(false);
+				button.setButtonText("Save").setCta().onClick(() => {
+					const validationError = validateIndexingSettings(draftIndexing);
+					if (validationError) {
+						new Notice(validationError);
+						return;
 					}
+
+					this.save({
+						ignoredPaths: draftIgnored,
+						indexing: draftIndexing,
+						modelId: this.embeddingModelDraft,
+					});
 				});
 			});
 	}

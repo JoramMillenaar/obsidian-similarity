@@ -1,7 +1,6 @@
 import { Plugin } from "obsidian";
 import { KeyedDebouncer } from "./domain/debouncer";
 import { ThrottledIndexStorage } from "./domain/throttledIndexStorage";
-import { ModelSession } from "./domain/modelSession";
 import { ObsidianStatusBar } from "./infra/obsidian/obsidianStatusBar";
 import { ObsidianMarkdownTextExtractor } from "./infra/obsidian/obsidianMarkdownTextExtractor";
 import { ObsidianNoteSource } from "./infra/obsidian/obsidianNoteSource";
@@ -9,38 +8,35 @@ import { ObsidianIndexStorage } from "./infra/obsidian/obsidianIndexStorage";
 import { BinaryEmbeddingFileStore } from "./infra/obsidian/binaryEmbeddingFileStore";
 import { ObsidianModelIndexMetaStore } from "./infra/obsidian/obsidianModelIndexMetaStore";
 import { LegacyEmbeddingFileStore } from "./infra/obsidian/legacyEmbeddingFileStore";
-import { ReloadableEmbedder } from "./infra/embedder/reloadableEmbedder";
-import { MonolithicIndexRepository } from "./infra/index/monolithicIndexRepository";
-import { IndexNoteUseCase, makeIndexNote } from "./app/indexNote";
-import { GetSimilarNotesUseCase, makeGetSimilarNotes } from "./app/getSimilarNotes";
+import { GetSimilarNotesForNoteUseCase, makeGetSimilarNotesForNote } from "./app/getSimilarNotesForNote";
+import { GetSimilarNotesForTextUseCase } from "./app/getSimilarNotesForText";
 import { InsertWikilinkAtCursorUseCase, makeInsertWikilinkAtCursor } from "./app/insertWikilinkAtCursor";
-import { EmbedTextUseCase, makeEmbedText } from "./app/embedText";
+import { MonolithicIndexRepository } from "./infra/index/monolithicIndexRepository";
 import {
 	EmbeddingFileStore,
-	EmbeddingPort,
-	IndexRepository,
 	MarkdownTextExtractor,
 	ModelIndexMetaStore,
 	NoteSource,
 	SettingsRepository,
-	SimilarityView,
+	ActivateSimilarityViewUseCase,
 	StatusReporter,
 } from "./ports";
-import { ObsidianSimilarityView } from "./infra/obsidian/obsidianSimilarityView";
+import { makeActivateSimilarityView } from "./infra/obsidian/obsidianSimilarityView";
 import { ObsidianPluginDataStore } from "./infra/obsidian/obsidianPluginDataStore";
 import { ObsidianSettingsRepository } from "./infra/obsidian/obsidianSettings";
 import { IsIgnoredPath, makeIsIgnoredPath } from "./app/isIgnoredPath";
 import { makeUpdateSettings, UpdateSettingsUseCase } from "./app/updateSettings";
 import { ObsidianActiveEditor } from "./infra/obsidian/obsidianActiveEditor";
 import { GetIndexingStateUseCase, IndexingProgress, SubscribeIndexingStateUseCase } from "./app/indexingProgress";
-import { makeSynchronizeIndex, SynchronizeIndexUseCase } from "./app/synchronizeIndex";
+import { SynchronizeIndexUseCase } from "./app/synchronizeIndex";
 import { GetNoteTextUseCase, makeGetNoteText } from "./app/getNoteText";
-import { makeBuildIndexSyncPlan } from "./app/buildIndexSyncPlan";
-import { LiveNoteSync, makeLiveNoteSync } from "./app/liveNoteSync";
 import { IndexingWorker } from "./app/indexingWorker";
-import { makeChangeEmbeddingModel } from "./app/changeEmbeddingModel";
 import { makeRunLegacyMigrations, RunLegacyMigrationsUseCase } from "./app/legacyMigrations";
-import { DEFAULT_EMBEDDING_MODEL_ID } from "./constants";
+import { makeBuildGeneration } from "./app/generation";
+import { ModelSession } from "./app/modelSession";
+import { makeSimilarNotesFeed, SimilarNotesFeed } from "./app/similarNotesFeed";
+import { makeSimilarSearchFeed, SimilarSearchFeed } from "./app/similarSearchFeed";
+import { BackendState, makeBackendState } from "./app/backendState";
 
 const INDEX_WRITE_THROTTLE_MS = 1000;
 
@@ -53,19 +49,20 @@ export class AppContainer {
 	readonly embeddingFileStore: EmbeddingFileStore;
 	readonly legacyEmbeddingFileStore: LegacyEmbeddingFileStore;
 	readonly indexStorage: ThrottledIndexStorage;
-	readonly embedder: EmbeddingPort;
 	readonly modelSession: ModelSession;
-	readonly indexRepo: IndexRepository;
 	readonly settingsRepo: SettingsRepository;
 	readonly indexingWorker: IndexingWorker;
-	readonly similarityView: SimilarityView;
-	readonly liveNoteSync: LiveNoteSync;
+	readonly activateSimilarityView: ActivateSimilarityViewUseCase;
+	readonly similarNotesFeed: SimilarNotesFeed;
+	readonly similarSearchFeed: SimilarSearchFeed;
+	readonly backendState: BackendState;
 	readonly upsertDebouncer: KeyedDebouncer<string>;
 
 	readonly runLegacyMigrations: RunLegacyMigrationsUseCase;
-	readonly indexNote: IndexNoteUseCase;
+	readonly isIndexEmpty: () => Promise<boolean>;
 	readonly getNoteText: GetNoteTextUseCase;
-	readonly getSimilarNotes: GetSimilarNotesUseCase;
+	readonly getSimilarNotesForNote: GetSimilarNotesForNoteUseCase;
+	readonly getSimilarNotesForText: GetSimilarNotesForTextUseCase;
 	readonly insertWikilinkAtCursor: InsertWikilinkAtCursorUseCase;
 	readonly synchronizeIndex: SynchronizeIndexUseCase;
 	readonly subscribeIndexingState: SubscribeIndexingStateUseCase;
@@ -88,17 +85,9 @@ export class AppContainer {
 			new ObsidianIndexStorage(this.modelIndexMetaStore, this.embeddingFileStore),
 			INDEX_WRITE_THROTTLE_MS,
 		);
-		this.embedder = new ReloadableEmbedder();
-		this.modelSession = new ModelSession(DEFAULT_EMBEDDING_MODEL_ID);
-		this.indexRepo = new MonolithicIndexRepository(this.indexStorage, this.modelSession);
 		const activeEditor = new ObsidianActiveEditor(plugin);
-		this.similarityView = new ObsidianSimilarityView(plugin);
 
-		const indexingProgress = new IndexingProgress();
-		const embedText = makeEmbedText({
-			embedder: this.embedder,
-			settingsRepo: this.settingsRepo,
-		})
+		const indexingProgress = new IndexingProgress({status: this.status});
 
 		this.runLegacyMigrations = makeRunLegacyMigrations({
 			pluginDataStore: this.pluginDataStore,
@@ -117,46 +106,35 @@ export class AppContainer {
 			settingsRepo: this.settingsRepo,
 		});
 
-		this.indexNote = makeIndexNote({
-			getNoteText: this.getNoteText,
-			indexRepo: this.indexRepo,
-			isIgnoredPath: this.isIgnoredPath,
-			embedText
-		});
+		this.getSimilarNotesForNote = async (args) => {
+			const snapshot = this.modelSession.getSnapshot();
+			const modelId = snapshot.status === "ready"
+				? snapshot.modelId
+				: snapshot.status === "loading"
+					? snapshot.targetModelId
+					: (await this.settingsRepo.get()).embeddingModelId;
 
-		this.indexingWorker = new IndexingWorker(this.indexNote);
+			const indexRepo = new MonolithicIndexRepository(this.indexStorage, modelId);
+			return makeGetSimilarNotesForNote({indexRepo})(args);
+		};
+		this.getSimilarNotesForText = (args) => this.modelSession.withGeneration((generation) => generation.getSimilarNotesForText(args));
+		this.synchronizeIndex = () => this.modelSession.withGeneration((generation) => generation.synchronizeIndex());
+		this.isIndexEmpty = () => this.modelSession.withGeneration((generation) => generation.indexRepo.isEmpty());
+
+		this.indexingWorker = new IndexingWorker(
+			(noteId) => this.modelSession.withGeneration((generation) => generation.indexNote(noteId)),
+		);
 		this.indexingWorker.subscribe(indexingProgress.observe);
 		this.indexingWorker.subscribe((event) => {
 			if (event.type === "drained" || event.type === "cleared") return this.indexStorage.flush();
 		});
 		this.indexingWorker.subscribe((event) => {
-			if (event.type === "seeded") return this.similarityView.refreshResults();
+			if (event.type === "seeded") return this.similarNotesFeed.refresh();
 		})
-
-		const embedQuery: EmbedTextUseCase = (text, maxChunkSize) =>
-			this.indexingWorker.submitEmbed(() => embedText(text, maxChunkSize));
-
-		this.getSimilarNotes = makeGetSimilarNotes({
-			indexRepo: this.indexRepo,
-			embedText: embedQuery,
-			getNoteText: this.getNoteText,
-		});
 
 		this.insertWikilinkAtCursor = makeInsertWikilinkAtCursor({
 			activeEditor,
 			noteSource: this.noteSource,
-		});
-
-		const buildIndexSyncPlan = makeBuildIndexSyncPlan({
-			noteSource: this.noteSource,
-			indexRepo: this.indexRepo,
-			settingsRepo: this.settingsRepo,
-		});
-
-		this.synchronizeIndex = makeSynchronizeIndex({
-			indexRepo: this.indexRepo,
-			buildIndexSyncPlan,
-			worker: this.indexingWorker,
 		});
 
 		this.subscribeIndexingState = indexingProgress.subscribeIndexingState;
@@ -165,36 +143,61 @@ export class AppContainer {
 
 		this.upsertDebouncer = new KeyedDebouncer<string>(1100);
 
-		this.liveNoteSync = makeLiveNoteSync({
-			indexRepo: this.indexRepo,
-			requestIndex: (noteId, priority) => this.indexingWorker.submitNote(noteId, priority),
-			promoteIndex: (noteId, priority) => this.indexingWorker.promote(noteId, priority),
-			updateDebouncer: this.upsertDebouncer,
-			onNoteUpdated: () => this.similarityView.refreshResults(),
+		const buildGeneration = makeBuildGeneration({
+			indexStorage: this.indexStorage,
+			noteSource: this.noteSource,
+			getNoteText: this.getNoteText,
+			isIgnoredPath: this.isIgnoredPath,
+			settingsRepo: this.settingsRepo,
+			worker: this.indexingWorker,
+			upsertDebouncer: this.upsertDebouncer,
+			onNoteUpdated: () => this.similarNotesFeed.refresh(),
 		});
 
-		const changeEmbeddingModel = makeChangeEmbeddingModel({
-			embedder: this.embedder,
+		this.modelSession = new ModelSession({
+			buildGeneration,
 			worker: this.indexingWorker,
-			settingsRepo: this.settingsRepo,
 			indexStorage: this.indexStorage,
-			synchronizeIndex: this.synchronizeIndex,
+			settingsRepo: this.settingsRepo,
 			status: this.status,
-			modelSession: this.modelSession,
 		});
 
 		this.updateSettings = makeUpdateSettings({
 			settingsRepo: this.settingsRepo,
 			indexStorage: this.indexStorage,
-			synchronizeIndex: this.synchronizeIndex,
 			modelSession: this.modelSession,
-			changeEmbeddingModel,
+		});
+
+		this.backendState = makeBackendState({
+			modelSession: this.modelSession,
+			subscribeIndexingState: this.subscribeIndexingState,
+		});
+
+		this.similarNotesFeed = makeSimilarNotesFeed({
+			backendState: this.backendState,
+			getSimilarNotesForNote: this.getSimilarNotesForNote,
+			isIndexEmpty: this.isIndexEmpty,
+			isIgnoredPath: this.isIgnoredPath,
+			synchronizeIndex: this.synchronizeIndex,
+			retryModelLoad: () => this.modelSession.retry(),
+		});
+
+		this.activateSimilarityView = makeActivateSimilarityView(plugin);
+
+		this.similarSearchFeed = makeSimilarSearchFeed({
+			backendState: this.backendState,
+			getSimilarNotesForNote: this.getSimilarNotesForNote,
+			getSimilarNotesForText: this.getSimilarNotesForText,
+			isIndexEmpty: this.isIndexEmpty,
+			isIgnoredPath: this.isIgnoredPath,
 		});
 	}
 
 	async shutdown(): Promise<void> {
 		this.indexingWorker.unload();
-		this.embedder.unload();
+		this.modelSession.shutdown();
+		this.similarNotesFeed.dispose();
+		this.backendState.dispose();
 		this.disposeIndexingProgress();
 		this.upsertDebouncer.cancel();
 		await this.indexStorage.flush().catch((error) => {

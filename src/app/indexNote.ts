@@ -50,6 +50,13 @@ export function makeIndexNote(deps: IndexNoteDeps): IndexNoteUseCase {
 			return "removed";
 		}
 
+		if (embedded.metadata.embeddingModelId !== deps.indexRepo.modelId) {
+			console.warn(
+				`[Similarity] Dropped embedding for "${noteId}": computed with ${embedded.metadata.embeddingModelId}, index expects ${deps.indexRepo.modelId}.`,
+			);
+			return "unchanged";
+		}
+
 		const indexedNote = {
 			id: noteId,
 			chunks: toNoteChunks(embedded.chunks, text),
@@ -57,7 +64,7 @@ export function makeIndexNote(deps: IndexNoteDeps): IndexNoteUseCase {
 			updatedAt: new Date().toISOString(),
 		};
 
-		await deps.indexRepo.upsert(indexedNote, embedded.metadata.embeddingModelId);
+		await deps.indexRepo.upsert(indexedNote);
 		return "indexed";
 	}
 }

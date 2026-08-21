@@ -1,5 +1,5 @@
 export type { ActiveEditor } from "./activeEditor";
-export type { EmbeddingPort, EmbedOptions, EmbeddedChunk, EmbeddingMetadata, EmbeddingResult, ModelLoadProgress } from "./embeddingPort";
+export type { EmbeddingPort, LoadEmbeddingPort, EmbedOptions, EmbeddedChunk, EmbeddingMetadata, EmbeddingResult, ModelLoadProgress } from "./embeddingPort";
 export type { EmbeddingFileStore } from "./embeddingFileStore";
 export type { ModelIndexMetaStore } from "./modelIndexMetaStore";
 export type { IndexRepository } from "./indexRepository";
@@ -9,4 +9,4 @@ export type { MarkdownTextExtractor } from "./markdownTextExtractor";
 export type { NoteSource } from "./noteSource";
 export type { SettingsRepository } from "./settingsRepository";
 export type { StatusReporter } from "./statusReporter";
-export type { SimilarityView, ActivateOptions } from "./similarityView";
+export type { ActivateSimilarityViewUseCase, ActivateOptions } from "./similarityView";

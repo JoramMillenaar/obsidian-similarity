@@ -1,0 +1,150 @@
+import { IndexingQueueSnapshot, RelatedNote } from "../types";
+import { GetSimilarNotesForNoteUseCase } from "./getSimilarNotesForNote";
+import { IsIgnoredPath } from "./isIgnoredPath";
+import { backendNoticeFor, SimilarNotesNotice, shouldRefreshOnIndexingChange } from "./similarNotesNotice";
+import { BackendState } from "./backendState";
+import { resolveSimilarNotesForNote } from "./resolveSimilarNotes";
+
+export type { SimilarNotesNotice };
+
+export type SimilarNotesSnapshot = {
+	epoch: number;
+	noteId: string | null;
+	items: RelatedNote[];
+	refining: boolean;
+	notice?: SimilarNotesNotice;
+};
+
+export type Unsubscribe = () => void;
+
+export interface SimilarNotesFeed {
+	getSnapshot(): SimilarNotesSnapshot;
+	subscribe(fn: (snapshot: SimilarNotesSnapshot) => void): Unsubscribe;
+	setActiveNote(noteId: string | null): void;
+	retryIndexing(): Promise<void>;
+	retryModelLoad(): Promise<void>;
+	refresh(): void;
+	dispose(): void;
+}
+
+type SimilarNotesFeedDeps = {
+	backendState: BackendState;
+	getSimilarNotesForNote: GetSimilarNotesForNoteUseCase;
+	isIndexEmpty: () => Promise<boolean>;
+	isIgnoredPath: IsIgnoredPath;
+	synchronizeIndex: () => Promise<void>;
+	retryModelLoad: () => Promise<void>;
+};
+
+const IDLE: SimilarNotesSnapshot = {epoch: 0, noteId: null, items: [], refining: false, notice: {kind: "no-active-note"}};
+
+export function makeSimilarNotesFeed(deps: SimilarNotesFeedDeps): SimilarNotesFeed {
+	const backend = deps.backendState;
+
+	let epoch = 0;
+	let noteId: string | null = null;
+	let snapshot: SimilarNotesSnapshot = IDLE;
+	let indexingState: IndexingQueueSnapshot | undefined = backend.getIndexingState();
+	let modelReady = backend.getModelState().status === "ready";
+	let lastIndexEmpty = false;
+	const listeners = new Set<(snapshot: SimilarNotesSnapshot) => void>();
+
+	function emit(next: SimilarNotesSnapshot) {
+		snapshot = next;
+		for (const listener of listeners) listener(snapshot);
+	}
+
+	async function load(forEpoch: number) {
+		if (forEpoch !== epoch || noteId === null) return;
+		const currentNoteId = noteId;
+
+		const result = await resolveSimilarNotesForNote(
+			{
+				backendState: backend,
+				getSimilarNotesForNote: deps.getSimilarNotesForNote,
+				isIndexEmpty: deps.isIndexEmpty,
+				isIgnoredPath: deps.isIgnoredPath,
+			},
+			currentNoteId,
+		);
+		if (forEpoch !== epoch) return;
+
+		if (result.indexEmpty !== undefined) lastIndexEmpty = result.indexEmpty;
+
+		emit({
+			epoch: forEpoch,
+			noteId: currentNoteId,
+			items: result.items,
+			refining: result.notice?.kind === "warming-up",
+			notice: result.notice,
+		});
+	}
+
+	const BACKEND_NOTICE_KINDS = new Set(["indexing", "empty-index", "fatal-error", undefined]);
+
+	const unsubscribeIndexingState = backend.subscribeIndexingState((next) => {
+		const previous = indexingState;
+		indexingState = next;
+		const movedOffActiveNote = noteId !== null && previous?.currentNoteId === noteId && next.currentNoteId !== noteId;
+		if (movedOffActiveNote) {
+			void load(epoch);
+		} else if (
+			!shouldRefreshOnIndexingChange(previous, next, noteId)
+			&& snapshot.noteId !== null && !snapshot.refining && BACKEND_NOTICE_KINDS.has(snapshot.notice?.kind)
+		) {
+			emit({...snapshot, notice: backendNoticeFor(lastIndexEmpty, next)});
+		}
+	});
+
+	const unsubscribeRefreshSignal = backend.subscribeRefreshSignal(() => {
+		if (noteId !== null) void load(epoch);
+	});
+
+	const unsubscribeModelState = backend.subscribeModelState((next) => {
+		const wasReady = modelReady;
+		modelReady = next.status === "ready";
+
+		if (((modelReady && !wasReady) || next.status === "error") && noteId !== null) {
+			epoch += 1;
+			void load(epoch);
+		} else if (next.status === "loading" && snapshot.notice?.kind === "warming-up") {
+			emit({...snapshot, notice: {kind: "warming-up", progress: next.progress?.progress ?? null}});
+		}
+	});
+
+	return {
+		getSnapshot: () => snapshot,
+		subscribe(fn) {
+			listeners.add(fn);
+			fn(snapshot);
+			return () => listeners.delete(fn);
+		},
+		setActiveNote(next) {
+			if (next === noteId) return;
+			noteId = next;
+			epoch += 1;
+			if (next === null) {
+				emit({epoch, noteId: null, items: [], refining: false, notice: {kind: "no-active-note"}});
+				return;
+			}
+			void load(epoch);
+		},
+		async retryIndexing() {
+			await deps.synchronizeIndex();
+		},
+		async retryModelLoad() {
+			await deps.retryModelLoad();
+		},
+		refresh() {
+			if (noteId === null) return;
+			epoch += 1;
+			void load(epoch);
+		},
+		dispose() {
+			unsubscribeIndexingState();
+			unsubscribeRefreshSignal();
+			unsubscribeModelState();
+			listeners.clear();
+		},
+	};
+}

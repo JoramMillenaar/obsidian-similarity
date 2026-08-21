@@ -3,7 +3,4 @@ export interface ActivateOptions {
 	focus?: boolean;
 }
 
-export interface SimilarityView {
-	activate(options?: ActivateOptions): Promise<void>;
-	refreshResults(): void;
-}
+export type ActivateSimilarityViewUseCase = (options?: ActivateOptions) => Promise<void>;

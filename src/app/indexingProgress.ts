@@ -1,4 +1,5 @@
 import { IndexingQueueSnapshot } from "../types";
+import { StatusReporter } from "../ports";
 import { IndexingWorkerObserver } from "./indexingWorker";
 
 export type HasPendingIndexUseCase = (noteId: string) => boolean;
@@ -9,6 +10,9 @@ export type SubscribeIndexingStateUseCase = (
 
 export type GetIndexingStateUseCase = () => IndexingQueueSnapshot;
 
+type IndexingProgressDeps = {
+	status: StatusReporter;
+};
 
 export class IndexingProgress {
 	private readonly pending = new Set<string>();
@@ -20,6 +24,9 @@ export class IndexingProgress {
 	private failed = 0;
 	private fatalError: string | undefined;
 	private emitScheduled = false;
+
+	constructor(private readonly deps: IndexingProgressDeps) {
+	}
 
 	observe: IndexingWorkerObserver = (event) => {
 		switch (event.type) {
@@ -78,6 +85,7 @@ export class IndexingProgress {
 
 	reportFatalError = (error: unknown) => {
 		this.fatalError = error instanceof Error ? error.message : String(error);
+		this.deps.status.update("Indexing paused after an error. Try restarting Obsidian.", null);
 		this.scheduleEmit();
 	};
 

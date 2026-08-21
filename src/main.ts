@@ -6,7 +6,7 @@ import { SimilarNotesListView, VIEW_TYPE_SIMILARITY } from "./ui/SimilarNotesLis
 import { SettingView } from "./ui/SettingsView";
 import { registerObsidianEvents } from "./infra/obsidian/registerObsidianEvents";
 
-export default class RelatedNotes extends Plugin {
+export default class SimilarNotes extends Plugin {
 	private appContainer!: AppContainer;
 
 	onload(): void {
@@ -16,17 +16,15 @@ export default class RelatedNotes extends Plugin {
 		this.addSettingTab(new SettingView(this.app, this, {
 			settingsRepo: this.appContainer.settingsRepo,
 			updateSettings: this.appContainer.updateSettings,
+			modelSession: this.appContainer.modelSession,
 		}));
 
 		this.registerView(
 			VIEW_TYPE_SIMILARITY,
 			(leaf) =>
 				new SimilarNotesListView(leaf, {
-					indexRepo: this.appContainer.indexRepo,
-					getSimilarNotes: this.appContainer.getSimilarNotes,
-					synchronizeIndex: this.appContainer.synchronizeIndex,
-					subscribeIndexingState: this.appContainer.subscribeIndexingState,
-					isIgnoredPath: this.appContainer.isIgnoredPath,
+					similarNotesFeed: this.appContainer.similarNotesFeed,
+					backendState: this.appContainer.backendState,
 				})
 		);
 		this.registerHoverLinkSource(VIEW_TYPE_SIMILARITY, {
@@ -39,11 +37,9 @@ export default class RelatedNotes extends Plugin {
 			name: "Open semantic search",
 			callback: () => {
 				new SearchModal(this.app, {
-					getSimilarNotes: this.appContainer.getSimilarNotes,
+					similarSearchFeed: this.appContainer.similarSearchFeed,
+					backendState: this.appContainer.backendState,
 					insertWikilinkAtCursor: this.appContainer.insertWikilinkAtCursor,
-					subscribeIndexingState: this.appContainer.subscribeIndexingState,
-					indexRepo: this.appContainer.indexRepo,
-					isIgnoredPath: this.appContainer.isIgnoredPath,
 				}).open();
 			},
 		});
@@ -52,13 +48,14 @@ export default class RelatedNotes extends Plugin {
 			id: "open-similar-notes",
 			name: "Open similar notes",
 			callback: async () => {
-				await this.appContainer.similarityView.activate({reveal: true, focus: true});
+				await this.appContainer.activateSimilarityView({reveal: true, focus: true});
 			},
 		});
 
 		this.app.workspace.onLayoutReady(() => {
 			registerObsidianEvents(this, this.appContainer);
 			void initializePlugin(this.appContainer);
+			this.appContainer.similarNotesFeed.refresh();
 		});
 
 		// if (__DEV__) {

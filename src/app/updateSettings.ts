@@ -1,17 +1,13 @@
 import { SimilaritySettings } from "../types";
 import { IndexStorage, SettingsRepository } from "../ports";
-import { SynchronizeIndexUseCase } from "./synchronizeIndex";
-import { ModelSession } from "../domain/modelSession";
-import { ChangeEmbeddingModelUseCase } from "./changeEmbeddingModel";
+import { ModelNotReadyError, ModelSession } from "./modelSession";
 
 export type UpdateSettingsUseCase = (patch: Partial<SimilaritySettings>) => Promise<void>;
 
 export function makeUpdateSettings(deps: {
 	settingsRepo: SettingsRepository;
 	indexStorage: IndexStorage;
-	synchronizeIndex: SynchronizeIndexUseCase;
 	modelSession: ModelSession;
-	changeEmbeddingModel: ChangeEmbeddingModelUseCase;
 }): UpdateSettingsUseCase {
 	return async function updateSettings(patch) {
 		const {embeddingModelId, ...rest} = patch;
@@ -21,12 +17,17 @@ export function makeUpdateSettings(deps: {
 		}
 
 		if (embeddingModelId !== undefined) {
-			await deps.changeEmbeddingModel(embeddingModelId);
+			await deps.modelSession.requestModel(embeddingModelId);
 			return;
 		}
 
-		await deps.indexStorage.repair(deps.modelSession.current());
-
-		void deps.synchronizeIndex();
+		try {
+			await deps.modelSession.withGeneration(async (generation) => {
+				await deps.indexStorage.repair(generation.modelId);
+				void generation.synchronizeIndex();
+			});
+		} catch (error) {
+			if (!(error instanceof ModelNotReadyError)) throw error;
+		}
 	};
 }

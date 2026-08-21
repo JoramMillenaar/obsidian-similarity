@@ -4,18 +4,58 @@ import { EmbeddingModelConfig, IframeMessage } from "../../types";
 const EMBED_TIMEOUT_MS = 30000;
 const READY_PING_TIMEOUT_MS = 3000;
 const READY_STALL_TIMEOUT_MS = 120000;
+const READY_TOTAL_TIMEOUT_MS = 300000;
+const MAX_PING_BACKOFF_MS = 5000;
 
-type ProgressMessage = { type: 'model-load-progress'; progress: number; file: string };
+type ProgressMessage = { type: 'model-load-progress'; progress: number; file: string; loaded: number; total: number };
+type LoadErrorMessage = { type: 'model-load-error'; message: string; offline: boolean };
 type ResultMessage = { requestId: number; data: EmbeddingResult; error?: string };
+type IncomingMessage = ProgressMessage | LoadErrorMessage | ResultMessage;
 
-function isProgressMessage(message: ProgressMessage | ResultMessage): message is ProgressMessage {
+function isProgressMessage(message: IncomingMessage): message is ProgressMessage {
     return 'type' in message && message.type === 'model-load-progress';
+}
+
+function isLoadErrorMessage(message: IncomingMessage): message is LoadErrorMessage {
+    return 'type' in message && message.type === 'model-load-error';
+}
+
+export class ModelLoadFailedError extends Error {
+    constructor(message: string, readonly offline: boolean) {
+        super(message);
+        this.name = "ModelLoadFailedError";
+    }
+}
+
+function abortError(): Error {
+    return new Error("Embedding iframe load was aborted");
+}
+
+function sleep(ms: number, signal?: AbortSignal): Promise<void> {
+    return new Promise((resolve, reject) => {
+        if (signal?.aborted) {
+            reject(abortError());
+            return;
+        }
+
+        const timer = window.setTimeout(() => {
+            signal?.removeEventListener('abort', onAbort);
+            resolve();
+        }, ms);
+
+        const onAbort = () => {
+            window.clearTimeout(timer);
+            reject(abortError());
+        };
+        signal?.addEventListener('abort', onAbort, {once: true});
+    });
 }
 
 export class IframeMessenger {
     private iframe: HTMLIFrameElement | null = null;
     private requestIdCounter = 0;
     private lastIframeActivityAt = 0;
+    private loadError: ModelLoadFailedError | null = null;
     private pendingRequests = new Map<number, { resolve: (data: EmbeddingResult) => void; reject: (error: Error) => void; timeoutId: number }>();
 
     constructor(
@@ -25,16 +65,12 @@ export class IframeMessenger {
         private onProgress?: (progress: ModelLoadProgress) => void,
     ) {}
 
-    async initialize(): Promise<void> {
+    async initialize(signal?: AbortSignal): Promise<void> {
         if (this.iframe) return;
+        if (signal?.aborted) throw abortError();
 
-        const existingIframe = activeDocument.getElementById(this.iframeId) as HTMLIFrameElement | null;
-        if (existingIframe) {
-            this.iframe = existingIframe;
-            return;
-        }
-
-        this.iframe = activeDocument.body.createEl('iframe', {
+		// deliberately document and not activeDocument to prevent attaching to settings window
+        this.iframe = document.body.createEl('iframe', {
             attr: {
                 id: this.iframeId,
                 style: "display: none;",
@@ -45,7 +81,12 @@ export class IframeMessenger {
         window.removeEventListener('message', this.onMessageReceived);
         window.addEventListener('message', this.onMessageReceived);
 
-        await this.waitForIframeReady();
+        try {
+            await this.waitForIframeReady(signal);
+        } catch (error) {
+            this.unload();
+            throw error;
+        }
     }
 
     private buildSrcdoc(): string {
@@ -59,11 +100,21 @@ export class IframeMessenger {
         if (event.origin !== window.location.origin) return;
         if (event.source !== this.iframe?.contentWindow) return;
 
-        const message = event.data as ProgressMessage | ResultMessage;
+        const message = event.data as IncomingMessage;
         this.lastIframeActivityAt = Date.now();
 
         if (isProgressMessage(message)) {
-            this.onProgress?.({ progress: message.progress, file: message.file });
+            this.onProgress?.({ progress: message.progress, file: message.file, loaded: message.loaded, total: message.total });
+            return;
+        }
+
+        if (isLoadErrorMessage(message)) {
+            this.loadError = new ModelLoadFailedError(message.message, message.offline);
+            for (const [requestId, pending] of this.pendingRequests) {
+                this.pendingRequests.delete(requestId);
+                window.clearTimeout(pending.timeoutId);
+                pending.reject(this.loadError);
+            }
             return;
         }
 
@@ -89,6 +140,7 @@ export class IframeMessenger {
         }
 
         for (let attempt = 0; attempt < retries; attempt++) {
+            if (this.loadError) throw this.loadError;
             const requestId = this.requestIdCounter++;
             const message: IframeMessage = { requestId, payload, maxOverlapPercent, maxChunkSize };
 
@@ -112,24 +164,37 @@ export class IframeMessenger {
         throw new Error(`All ${retries} attempts to send the message failed`);
     }
 
-    private async waitForIframeReady(): Promise<void> {
+    private async waitForIframeReady(signal?: AbortSignal): Promise<void> {
         this.lastIframeActivityAt = Date.now();
 
+        const startedAt = Date.now();
+
         for (let attempt = 0; ; attempt++) {
+            if (signal?.aborted) throw abortError();
+            if (this.loadError) throw this.loadError;
             try {
                 await this.ping();
                 return;
             } catch {
+                if (signal?.aborted) throw abortError();
+                const loadError = this.getLoadError();
+                if (loadError) throw loadError;
+
                 const silentFor = Date.now() - this.lastIframeActivityAt;
-                if (silentFor > READY_STALL_TIMEOUT_MS) {
-                    throw new Error(
-                        `Iframe is not responsive: the embedding model did not load, and the iframe has been silent for ${Math.round(silentFor / 1000)}s`,
+                if (silentFor > READY_STALL_TIMEOUT_MS || Date.now() - startedAt > READY_TOTAL_TIMEOUT_MS) {
+                    throw new ModelLoadFailedError(
+                        `The ${this.modelConfig.label} model did not finish loading. Check your internet connection and try again.`,
+                        !window.navigator.onLine,
                     );
                 }
 				if (attempt) console.warn(`Iframe ping attempt ${attempt + 1} failed. Retrying...`);
-                await new Promise((resolve) => window.setTimeout(resolve, 1000));
+                await sleep(Math.min(1000 * 2 ** attempt, MAX_PING_BACKOFF_MS), signal);
             }
         }
+    }
+
+    private getLoadError(): ModelLoadFailedError | null {
+        return this.loadError;
     }
 
     private ping(): Promise<void> {
@@ -163,7 +228,7 @@ export class IframeMessenger {
         }
         this.pendingRequests.clear();
 
-        activeDocument.getElementById(this.iframeId)?.remove();
+        this.iframe?.remove();
         window.removeEventListener('message', this.onMessageReceived);
         this.iframe = null;
     }
