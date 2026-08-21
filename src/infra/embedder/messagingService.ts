@@ -177,7 +177,8 @@ export class IframeMessenger {
                 return;
             } catch {
                 if (signal?.aborted) throw abortError();
-                if (this.loadError) throw this.loadError;
+                const loadError = this.getLoadError();
+                if (loadError) throw loadError;
 
                 const silentFor = Date.now() - this.lastIframeActivityAt;
                 if (silentFor > READY_STALL_TIMEOUT_MS || Date.now() - startedAt > READY_TOTAL_TIMEOUT_MS) {
@@ -190,6 +191,10 @@ export class IframeMessenger {
                 await sleep(Math.min(1000 * 2 ** attempt, MAX_PING_BACKOFF_MS), signal);
             }
         }
+    }
+
+    private getLoadError(): ModelLoadFailedError | null {
+        return this.loadError;
     }
 
     private ping(): Promise<void> {

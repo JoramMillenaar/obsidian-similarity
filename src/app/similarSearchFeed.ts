@@ -62,6 +62,8 @@ export function makeSimilarSearchFeed(deps: SimilarSearchFeedDeps): SimilarSearc
 			return resolveEmbeddedQuery(text);
 		},
 
-		subscribeRefreshSignal: backend.subscribeRefreshSignal,
+		subscribeRefreshSignal(fn) {
+			return backend.subscribeRefreshSignal(fn);
+		},
 	};
 }

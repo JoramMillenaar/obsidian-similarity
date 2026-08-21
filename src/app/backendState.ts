@@ -27,7 +27,7 @@ export function makeBackendState(deps: BackendStateDeps): BackendState {
 	let indexingState: IndexingQueueSnapshot | undefined;
 	let modelReady = deps.modelSession.getSnapshot().status === "ready";
 	let lastRefreshAt = 0;
-	let refreshTimer: ReturnType<typeof setTimeout> | undefined;
+	let refreshTimer: number | undefined;
 	const refreshListeners = new Set<() => void>();
 	const modelStateListeners = new Set<(snapshot: ModelSessionSnapshot) => void>();
 	const indexingStateListeners = new Set<(snapshot: IndexingQueueSnapshot) => void>();
@@ -40,7 +40,7 @@ export function makeBackendState(deps: BackendStateDeps): BackendState {
 		if (refreshTimer) return;
 		const elapsed = Date.now() - lastRefreshAt;
 		const delay = Math.max(0, refreshThrottleMs - elapsed);
-		refreshTimer = setTimeout(() => {
+		refreshTimer = window.setTimeout(() => {
 			refreshTimer = undefined;
 			lastRefreshAt = Date.now();
 			emitRefresh();
@@ -62,7 +62,7 @@ export function makeBackendState(deps: BackendStateDeps): BackendState {
 		for (const fn of modelStateListeners) fn(next);
 		if (modelReady && !wasReady) {
 			if (refreshTimer) {
-				clearTimeout(refreshTimer);
+				window.clearTimeout(refreshTimer);
 				refreshTimer = undefined;
 			}
 			lastRefreshAt = Date.now();
@@ -91,7 +91,7 @@ export function makeBackendState(deps: BackendStateDeps): BackendState {
 		dispose() {
 			unsubscribeIndexingState();
 			unsubscribeModelState();
-			if (refreshTimer) clearTimeout(refreshTimer);
+			if (refreshTimer) window.clearTimeout(refreshTimer);
 			refreshListeners.clear();
 			modelStateListeners.clear();
 			indexingStateListeners.clear();
