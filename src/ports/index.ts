@@ -2,7 +2,7 @@ export type { ActiveEditor } from "./activeEditor";
 export type { EmbeddingPort, LoadEmbeddingPort, EmbedOptions, EmbeddedChunk, EmbeddingMetadata, EmbeddingResult, ModelLoadProgress } from "./embeddingPort";
 export type { EmbeddingFileStore } from "./embeddingFileStore";
 export type { ModelIndexMetaStore } from "./modelIndexMetaStore";
-export type { IndexRepository } from "./indexRepository";
+export type { IndexRepository, IndexRename } from "./indexRepository";
 export type { IndexStorage } from "./indexStorage";
 export type { PluginDataStore } from "./pluginDataStore";
 export type { MarkdownTextExtractor } from "./markdownTextExtractor";

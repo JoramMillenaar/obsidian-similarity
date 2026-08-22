@@ -46,6 +46,8 @@ async function handleMessage(event: MessageEvent<IframeMessage>): Promise<void> 
 			return;
 		}
 
+		source.postMessage({ type: 'ack', requestId }, window.origin);
+
 		const embeddings = await generateDocumentEmbeddings(payload, maxOverlapPercent, maxChunkSize);
 		source.postMessage({ requestId, data: embeddings }, window.origin);
 	} catch (error) {

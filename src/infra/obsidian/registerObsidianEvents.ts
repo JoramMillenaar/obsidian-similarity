@@ -1,4 +1,4 @@
-import { Plugin, TFile } from "obsidian";
+import { Plugin, TFile, TFolder } from "obsidian";
 import { AppContainer } from "../../appContainer";
 import { LiveNoteSync } from "../../app/liveNoteSync";
 import { ModelNotReadyError } from "../../app/modelSession";
@@ -42,23 +42,33 @@ export function registerObsidianEvents(plugin: Plugin, container: ObsidianEvents
 
 	plugin.registerEvent(
 		plugin.app.vault.on("delete", (file) => {
-			if (!(file instanceof TFile)) return;
-
-			withLiveNoteSync(container, "Delete from index failed", (liveNoteSync) =>
-				liveNoteSync.delete(file.path),
-			);
-
-			container.status.update("Note removed from index", 1500);
+			if (file instanceof TFile) {
+				withLiveNoteSync(container, "Delete from index failed", (liveNoteSync) =>
+					liveNoteSync.delete(file.path),
+				);
+				container.status.update("Note removed from index", 1500);
+			} else if (file instanceof TFolder) {
+				withLiveNoteSync(container, "Deleting a folder from the index failed", (liveNoteSync) =>
+					liveNoteSync.deleteFolder(file.path),
+				);
+				container.status.update("Folder removed from index", 1500);
+			}
 		}),
 	);
 
 	plugin.registerEvent(
 		plugin.app.vault.on("rename", (file, oldPath) => {
-			if (!(file instanceof TFile)) return;
-
-			withLiveNoteSync(container, "Rename note failed", (liveNoteSync) =>
-				liveNoteSync.rename(oldPath, file.path),
-			);
+			if (file instanceof TFile) {
+				withLiveNoteSync(container, "Rename note failed", (liveNoteSync) =>
+					liveNoteSync.rename(oldPath, file.path),
+				);
+			} else if (file instanceof TFolder) {
+				withLiveNoteSync(container, "Renaming a folder failed", (liveNoteSync) =>
+					liveNoteSync.renameFolder(oldPath, file.path),
+				);
+			} else {
+				return;
+			}
 
 			container.status.update("Index updated (rename)", 1500);
 		}),

@@ -1,7 +1,8 @@
 import { EmbeddingResult, ModelLoadProgress } from "../../ports";
 import { EmbeddingModelConfig, IframeMessage } from "../../types";
 
-const EMBED_TIMEOUT_MS = 30000;
+const EMBED_ACK_TIMEOUT_MS = 15000;
+const EMBED_TIMEOUT_MS = 300000;
 const READY_PING_TIMEOUT_MS = 3000;
 const READY_STALL_TIMEOUT_MS = 120000;
 const READY_TOTAL_TIMEOUT_MS = 300000;
@@ -9,8 +10,17 @@ const MAX_PING_BACKOFF_MS = 5000;
 
 type ProgressMessage = { type: 'model-load-progress'; progress: number; file: string; loaded: number; total: number };
 type LoadErrorMessage = { type: 'model-load-error'; message: string; offline: boolean };
+type AckMessage = { type: 'ack'; requestId: number };
 type ResultMessage = { requestId: number; data: EmbeddingResult; error?: string };
-type IncomingMessage = ProgressMessage | LoadErrorMessage | ResultMessage;
+type IncomingMessage = ProgressMessage | LoadErrorMessage | AckMessage | ResultMessage;
+
+type PendingRequest = {
+    resolve: (data: EmbeddingResult) => void;
+    reject: (error: Error) => void;
+    timeoutId: number;
+    extendOnAck: boolean;
+    acked: boolean;
+};
 
 function isProgressMessage(message: IncomingMessage): message is ProgressMessage {
     return 'type' in message && message.type === 'model-load-progress';
@@ -18,6 +28,10 @@ function isProgressMessage(message: IncomingMessage): message is ProgressMessage
 
 function isLoadErrorMessage(message: IncomingMessage): message is LoadErrorMessage {
     return 'type' in message && message.type === 'model-load-error';
+}
+
+function isAckMessage(message: IncomingMessage): message is AckMessage {
+    return 'type' in message && message.type === 'ack';
 }
 
 export class ModelLoadFailedError extends Error {
@@ -56,7 +70,7 @@ export class IframeMessenger {
     private requestIdCounter = 0;
     private lastIframeActivityAt = 0;
     private loadError: ModelLoadFailedError | null = null;
-    private pendingRequests = new Map<number, { resolve: (data: EmbeddingResult) => void; reject: (error: Error) => void; timeoutId: number }>();
+    private pendingRequests = new Map<number, PendingRequest>();
 
     constructor(
         private iframeId: string,
@@ -118,6 +132,11 @@ export class IframeMessenger {
             return;
         }
 
+        if (isAckMessage(message)) {
+            this.acknowledge(message.requestId);
+            return;
+        }
+
         const { requestId, data, error } = message;
         const pending = this.pendingRequests.get(requestId);
 
@@ -134,34 +153,65 @@ export class IframeMessenger {
         pending.resolve(data);
     };
 
+    private acknowledge(requestId: number): void {
+        const pending = this.pendingRequests.get(requestId);
+        if (!pending || pending.acked || !pending.extendOnAck) return;
+
+        pending.acked = true;
+        window.clearTimeout(pending.timeoutId);
+        pending.timeoutId = window.setTimeout(() => {
+            if (!this.pendingRequests.delete(requestId)) return;
+            pending.reject(new Error(`Embedding request '${requestId}' did not finish in time`));
+        }, EMBED_TIMEOUT_MS);
+    }
+
     async sendMessage(payload: string, maxOverlapPercent: number, maxChunkSize?: number, retries = 3): Promise<EmbeddingResult | null> {
         if (!this.iframe || !this.iframe.contentWindow) {
             throw new Error("Could not find the Iframe. Is it loaded'?");
         }
 
+        let lastError: unknown;
+
         for (let attempt = 0; attempt < retries; attempt++) {
             if (this.loadError) throw this.loadError;
+
             const requestId = this.requestIdCounter++;
             const message: IframeMessage = { requestId, payload, maxOverlapPercent, maxChunkSize };
+            const request = this.trackRequest(requestId, EMBED_ACK_TIMEOUT_MS, `Request with ID '${requestId}' was never acknowledged`, true);
+
+            this.iframe?.contentWindow?.postMessage(message, window.origin);
 
             try {
-                return await new Promise<EmbeddingResult>((resolve, reject) => {
-                    const timeoutId = window.setTimeout(() => {
-                        if (this.pendingRequests.has(requestId)) {
-                            this.pendingRequests.delete(requestId);
-                            reject(new Error(`Request with ID '${requestId}' timed out`));
-                        }
-                    }, EMBED_TIMEOUT_MS);
-
-                    this.pendingRequests.set(requestId, { resolve, reject, timeoutId });
-                    this.iframe?.contentWindow?.postMessage(message, window.origin);
-                });
+                return await request.promise;
             } catch (error) {
+                lastError = error;
+                if (request.pending.acked) throw error;
                 console.warn(`Attempt ${attempt + 1} failed: ${error}`);
             }
         }
 
-        throw new Error(`All ${retries} attempts to send the message failed`);
+        throw new Error(`All ${retries} attempts to send the message failed: ${lastError}`);
+    }
+
+    private trackRequest(
+        requestId: number,
+        timeoutMs: number,
+        timeoutMessage: string,
+        extendOnAck: boolean,
+    ): { promise: Promise<EmbeddingResult>; pending: PendingRequest } {
+        let pending!: PendingRequest;
+
+        const promise = new Promise<EmbeddingResult>((resolve, reject) => {
+            const timeoutId = window.setTimeout(() => {
+                if (!this.pendingRequests.delete(requestId)) return;
+                reject(new Error(timeoutMessage));
+            }, timeoutMs);
+
+            pending = { resolve, reject, timeoutId, extendOnAck, acked: false };
+            this.pendingRequests.set(requestId, pending);
+        });
+
+        return { promise, pending };
     }
 
     private async waitForIframeReady(signal?: AbortSignal): Promise<void> {
@@ -197,28 +247,17 @@ export class IframeMessenger {
         return this.loadError;
     }
 
-    private ping(): Promise<void> {
+    private async ping(): Promise<void> {
         if (!this.iframe || !this.iframe.contentWindow) {
-            return Promise.reject(new Error("Iframe is not ready"));
+            throw new Error("Iframe is not ready");
         }
 
-        return new Promise((resolve, reject) => {
-            const requestId = this.requestIdCounter++;
-            const message: IframeMessage = { requestId, payload: "ping" };
+        const requestId = this.requestIdCounter++;
+        const message: IframeMessage = { requestId, payload: "ping" };
+        const { promise } = this.trackRequest(requestId, READY_PING_TIMEOUT_MS, "Ping timed out", false);
 
-            const timeoutId = window.setTimeout(() => {
-                this.pendingRequests.delete(requestId);
-                reject(new Error("Ping timed out"));
-            }, READY_PING_TIMEOUT_MS);
-
-            this.pendingRequests.set(requestId, {
-                resolve: () => resolve(),
-                reject,
-                timeoutId,
-            });
-
-            this.iframe!.contentWindow!.postMessage(message, window.origin);
-        });
+        this.iframe.contentWindow.postMessage(message, window.origin);
+        await promise;
     }
 
     unload(): void {

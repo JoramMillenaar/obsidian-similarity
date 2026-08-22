@@ -10,10 +10,18 @@ export function logError(message: unknown, ...optionalParams: unknown[]) {
 
 export const VIEW_TYPE_SIMILARITY = "similarity";
 
+const LOADING_TEXT = "Loading similar notes...";
+
 type RetryAction = {
 	label: string;
 	run: () => Promise<void>;
 	failureNotice: string;
+};
+
+type MessageState = {
+	text?: string;
+	cls?: string;
+	retry?: RetryAction;
 };
 
 export type SimilarNotesListViewDeps = {
@@ -21,11 +29,22 @@ export type SimilarNotesListViewDeps = {
 	backendState: BackendState;
 };
 
+function signatureForItems(items: SimilarNotesSnapshot["items"]): string {
+	return items.map((item) => `${item.id} ${item.score.toFixed(4)}`).join("|");
+}
+
+function signatureForMessage(message: MessageState): string {
+	return [message.text ?? "", message.cls ?? "", message.retry?.label ?? ""].join("|");
+}
+
 export class SimilarNotesListView extends ItemView {
 	private snapshot: SimilarNotesSnapshot | undefined;
 	private activePath: string | null = null;
 	private bannerEl?: HTMLElement;
-	private bodyEl?: HTMLElement;
+	private listEl?: HTMLElement;
+	private messageEl?: HTMLElement;
+	private renderedItems: string | null = null;
+	private renderedMessage: string | null = null;
 	private unsubscribeSnapshot?: () => void;
 	private unsubscribeBanner?: () => void;
 
@@ -78,13 +97,18 @@ export class SimilarNotesListView extends ItemView {
 		this.containerEl.empty();
 		const root = this.containerEl.createDiv({cls: "tag-container"});
 		this.bannerEl = root.createDiv({cls: "similarity-index-banner is-hidden"});
-		this.bodyEl = root.createDiv();
+		const body = root.createDiv();
+		this.listEl = body.createDiv();
+		this.messageEl = body.createDiv();
 
 		this.registerEvent(
 			this.app.workspace.on("active-leaf-change", () => this.syncActiveNote()),
 		);
 		this.registerEvent(
 			this.app.workspace.on("file-open", () => this.syncActiveNote()),
+		);
+		this.registerEvent(
+			this.app.vault.on("rename", () => this.syncActiveNote()),
 		);
 
 		this.unsubscribeSnapshot = this.deps.similarNotesFeed.subscribe((snapshot) => {
@@ -104,26 +128,23 @@ export class SimilarNotesListView extends ItemView {
 	}
 
 	private renderBody() {
-		const container = this.bodyEl;
-		if (!container) return;
-		container.empty();
-
 		if (!this.snapshot || this.snapshot.noteId !== this.activePath) {
-			container.createDiv({cls: "tree-item-self", text: "Loading similar notes..."});
+			this.renderRelatedList([]);
+			this.renderMessage({text: LOADING_TEXT, cls: "tree-item-self"});
 			return;
 		}
+
+		this.renderRelatedList(this.snapshot.items);
 
 		if (this.snapshot.items.length > 0) {
-			this.renderRelatedList(container, this.snapshot.items);
+			this.renderMessage({});
 			return;
 		}
 
-		const {text, retry} = this.emptyStateFor(this.snapshot);
-		if (text) this.renderMessage(container, text, this.snapshot.notice?.kind === "no-active-note" ? "similar-notes-no-active" : undefined);
-		if (retry) this.renderRetryAction(container, retry);
+		this.renderMessage(this.emptyStateFor(this.snapshot));
 	}
 
-	private emptyStateFor(snapshot: SimilarNotesSnapshot): { text?: string; retry?: RetryAction } {
+	private emptyStateFor(snapshot: SimilarNotesSnapshot): MessageState {
 		const notice = snapshot.notice;
 		if (!notice) return {text: "No related notes were similar enough to display yet."};
 
@@ -148,14 +169,28 @@ export class SimilarNotesListView extends ItemView {
 				},
 			};
 		}
+		if (notice.kind === "no-active-note") {
+			return {text, cls: "empty-message similar-notes-no-active"};
+		}
 		return {text};
 	}
 
-	private renderMessage(container: HTMLElement, text: string, extraCls?: string) {
-		container.createDiv({
-			cls: extraCls ? `empty-message ${extraCls}` : "empty-message",
-			text,
-		});
+	private renderMessage(message: MessageState) {
+		const container = this.messageEl;
+		if (!container) return;
+
+		const signature = signatureForMessage(message);
+		if (signature === this.renderedMessage) return;
+		this.renderedMessage = signature;
+
+		container.empty();
+		if (message.text) {
+			container.createDiv({
+				cls: message.cls ?? "empty-message",
+				text: message.text,
+			});
+		}
+		if (message.retry) this.renderRetryAction(container, message.retry);
 	}
 
 	private renderBanner(banner: BannerState) {
@@ -198,8 +233,15 @@ export class SimilarNotesListView extends ItemView {
 		});
 	}
 
-	private renderRelatedList(container: HTMLElement, related: SimilarNotesSnapshot["items"]) {
-		const list = container.createDiv();
+	private renderRelatedList(related: SimilarNotesSnapshot["items"]) {
+		const list = this.listEl;
+		if (!list) return;
+
+		const signature = signatureForItems(related);
+		if (signature === this.renderedItems) return;
+		this.renderedItems = signature;
+
+		list.empty();
 
 		related.forEach((note) => {
 			const path = note.id;
@@ -208,7 +250,7 @@ export class SimilarNotesListView extends ItemView {
 			const itemSelf = listItem.createDiv({
 				cls: "tree-item-self tag-pane-tag is-clickable",
 			});
-			itemSelf.addEventListener("click", () => this.openNote(path));
+			this.bindOpenOnClick(itemSelf, path);
 			itemSelf.addEventListener("mouseover", (event: MouseEvent) => {
 				this.triggerHoverPreview(event, itemSelf, path);
 			});
@@ -232,6 +274,24 @@ export class SimilarNotesListView extends ItemView {
 				cls: "tag-pane-tag-count tree-item-flair",
 				text: `${Math.round(note.score * 100)}%`,
 			});
+		});
+	}
+
+	private bindOpenOnClick(itemSelf: HTMLElement, path: string) {
+		let openedOnPointerDown = false;
+
+		itemSelf.addEventListener("pointerdown", (event: PointerEvent) => {
+			if (event.button !== 0 || event.pointerType === "touch") return;
+			openedOnPointerDown = true;
+			this.openNote(path);
+		});
+
+		itemSelf.addEventListener("click", () => {
+			if (openedOnPointerDown) {
+				openedOnPointerDown = false;
+				return;
+			}
+			this.openNote(path);
 		});
 	}
 

@@ -1,5 +1,7 @@
 import { EmbeddingModelId, IndexedNote } from "../types";
 
+export type IndexRename = { oldId: string; newId: string };
+
 export interface IndexRepository {
 	readonly modelId: EmbeddingModelId;
 
@@ -15,7 +17,11 @@ export interface IndexRepository {
 
 	remove(noteId: string): Promise<void>;
 
+	removeMany(noteIds: string[]): Promise<void>;
+
 	clear(): Promise<void>;
 
 	rename(oldId: string, newId: string): Promise<void>;
+
+	renameMany(renames: IndexRename[]): Promise<void>;
 }
