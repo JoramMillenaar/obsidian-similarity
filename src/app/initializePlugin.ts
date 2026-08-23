@@ -7,7 +7,7 @@ export async function initializePlugin(app: AppContainer): Promise<void> {
 	try {
 		await app.runLegacyMigrations();
 
-		const {embeddingModelId} = await app.settingsRepo.get();
+		const {embeddingModelId} = app.settingsRepo.get();
 		await app.modelSession.requestModel(embeddingModelId);
 
 		app.status.update("Done", 1500);

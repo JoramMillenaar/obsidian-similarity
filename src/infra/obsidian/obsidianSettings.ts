@@ -1,13 +1,18 @@
 import { SimilaritySettings } from "../../types";
 import { SettingsRepository } from "../../ports";
+import { DEFAULT_SETTINGS } from "../../constants";
 import { ObsidianPluginDataStore } from "./obsidianPluginDataStore";
 
 export class ObsidianSettingsRepository implements SettingsRepository {
 	constructor(private readonly store: ObsidianPluginDataStore) {
 	}
 
-	async get(): Promise<SimilaritySettings> {
-		return (await this.store.read()).settings;
+	get(): SimilaritySettings {
+		const cached = this.store.getCached();
+		if (cached) return cached.settings;
+
+		console.warn("[Similarity] SettingsRepository.get() called before the plugin data store finished loading — using defaults.");
+		return DEFAULT_SETTINGS;
 	}
 
 	async update(settings: SimilaritySettings): Promise<void> {
@@ -24,9 +29,7 @@ export class ObsidianSettingsRepository implements SettingsRepository {
 	private async writeSettings(
 		update: (current: SimilaritySettings) => SimilaritySettings,
 	): Promise<void> {
-		await this.store.update((current) => ({
-			...current,
-			settings: update(current.settings),
-		}));
+		const next = update(this.get());
+		await this.store.write({settings: next});
 	}
 }

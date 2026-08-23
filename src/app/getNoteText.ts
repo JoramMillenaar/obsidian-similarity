@@ -11,7 +11,7 @@ export function makeGetNoteText(deps: {
     const note = await deps.noteSource.getNoteById(noteId);
     if (!note) throw new Error(`Could not find note with noteId '${noteId}`);
 
-    const settings = await deps.settingsRepo.get();
+    const settings = deps.settingsRepo.get();
     const boundedMarkdown = note.markdown.slice(0, settings.maxRawMarkdownChars);
     const extractedText = await deps.markdownTextExtractor.extract(boundedMarkdown);
 	const fullText = `${note.title}\n${extractedText}`;

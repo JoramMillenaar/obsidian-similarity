@@ -42,15 +42,15 @@ export class SettingView extends PluginSettingTab {
 		private readonly deps: SettingsViewDeps,
 	) {
 		super(app, plugin);
-		void this.preload();
+		this.preload();
 		this.deps.modelSession.subscribe((snapshot) => {
 			if (this.previousModelStatus !== snapshot.status) this.update?.();
 			this.previousModelStatus = snapshot.status;
 		});
 	}
 
-	private async preload() {
-		const settings = await this.deps.settingsRepo.get();
+	private preload() {
+		const settings = this.deps.settingsRepo.get();
 		this.applySettings(settings);
 		this.loaded = true;
 		this.update?.();
@@ -257,14 +257,10 @@ export class SettingView extends PluginSettingTab {
 				const kept = fallbackId ? ` Staying on ${EMBEDDING_MODELS[fallbackId].label}.` : "";
 				new Notice(`${message}${kept}`);
 			})
-			.finally(async () => {
+			.finally(() => {
 				// Only re-sync what `modelChanged` is compared against. The drafts belong to the user,
 				// who may have edited them while this (up to a minute long) save was in flight.
-				try {
-					this.cachedSettings = await this.deps.settingsRepo.get();
-				} catch (error) {
-					console.error("[Similarity] Could not re-read settings after saving:", error);
-				}
+				this.cachedSettings = this.deps.settingsRepo.get();
 			});
 	}
 
@@ -273,11 +269,11 @@ export class SettingView extends PluginSettingTab {
 		const {containerEl} = this;
 		containerEl.empty();
 
-		void this.render(containerEl);
+		this.render(containerEl);
 	}
 
-	private async render(containerEl: HTMLElement) {
-		const settings = await this.deps.settingsRepo.get();
+	private render(containerEl: HTMLElement) {
+		const settings = this.deps.settingsRepo.get();
 		this.applySettings(settings);
 		let draftIgnored = settings.ignoredPaths;
 		let advancedOpen = settings.advancedOpen;

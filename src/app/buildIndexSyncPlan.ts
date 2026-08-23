@@ -16,7 +16,7 @@ export function makeBuildIndexSyncPlan(deps: {
 	settingsRepo: SettingsRepository;
 }): BuildIndexSyncPlanUseCase {
 	return async function buildIndexSyncPlan() {
-		const settings = await deps.settingsRepo.get();
+		const settings = deps.settingsRepo.get();
 		const candidates = deps.noteSource
 			.listIndexCandidates()
 			.filter((candidate) => !isPathIgnored(candidate.id, settings.ignoredPaths));

@@ -112,7 +112,7 @@ export class AppContainer {
 				? snapshot.modelId
 				: snapshot.status === "loading"
 					? snapshot.targetModelId
-					: (await this.settingsRepo.get()).embeddingModelId;
+					: this.settingsRepo.get().embeddingModelId;
 
 			const indexRepo = new MonolithicIndexRepository(this.indexStorage, modelId);
 			return makeGetSimilarNotesForNote({indexRepo})(args);

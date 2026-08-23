@@ -3,12 +3,25 @@ import { SimilarityPluginData } from "../../types";
 import { PluginDataStore } from "../../ports";
 import { normalizePluginData } from "../../domain/normalize";
 
+
 export class ObsidianPluginDataStore implements PluginDataStore {
+	private cache: SimilarityPluginData | null = null;
+
 	constructor(private readonly plugin: Plugin) {
 	}
 
+	async load(): Promise<SimilarityPluginData> {
+		this.cache = normalizePluginData(await this.readRaw());
+		return this.cache;
+	}
+
+	getCached(): SimilarityPluginData | null {
+		return this.cache;
+	}
+
 	async read(): Promise<SimilarityPluginData> {
-		return normalizePluginData(await this.readRaw());
+		if (this.cache) return this.cache;
+		return this.load();
 	}
 
 	async readRaw(): Promise<Record<string, unknown>> {
@@ -16,6 +29,7 @@ export class ObsidianPluginDataStore implements PluginDataStore {
 	}
 
 	async write(data: SimilarityPluginData): Promise<void> {
+		this.cache = data;
 		await this.plugin.saveData(data);
 	}
 

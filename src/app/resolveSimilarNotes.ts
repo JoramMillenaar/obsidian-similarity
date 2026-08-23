@@ -28,7 +28,7 @@ export async function resolveSimilarNotesForNote(
 	if (!isMarkdownPath(noteId)) {
 		return {items: [], notice: {kind: "unsupported-file"}};
 	}
-	if (await deps.isIgnoredPath(noteId)) {
+	if (deps.isIgnoredPath(noteId)) {
 		return {items: [], notice: {kind: "ignored-path"}};
 	}
 

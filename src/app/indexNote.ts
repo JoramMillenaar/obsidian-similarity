@@ -24,7 +24,7 @@ export function makeIndexNote(deps: IndexNoteDeps): IndexNoteUseCase {
 			return "removed";
 		}
 
-		if (await deps.isIgnoredPath(noteId)) {
+		if (deps.isIgnoredPath(noteId)) {
 			await deps.indexRepo.remove(noteId);
 			return "removed";
 		}

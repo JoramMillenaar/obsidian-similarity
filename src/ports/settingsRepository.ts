@@ -1,7 +1,7 @@
 import { SimilaritySettings } from "../types";
 
 export interface SettingsRepository {
-	get(): Promise<SimilaritySettings>;
+	get(): SimilaritySettings;
 
 	update(settings: SimilaritySettings): Promise<void>;
 

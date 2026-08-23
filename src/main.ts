@@ -9,9 +9,11 @@ import { registerObsidianEvents } from "./infra/obsidian/registerObsidianEvents"
 export default class SimilarNotes extends Plugin {
 	private appContainer!: AppContainer;
 
-	onload(): void {
+	async onload(): Promise<void> {
 		this.appContainer = new AppContainer(this);
 		this.appContainer.status.update("Loading…");
+
+		await this.appContainer.pluginDataStore.load();
 
 		this.addSettingTab(new SettingView(this.app, this, {
 			settingsRepo: this.appContainer.settingsRepo,
