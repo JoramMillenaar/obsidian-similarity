@@ -1,16 +1,16 @@
 import { App, AnySettingDefinition, DropdownComponent, Notice, PluginSettingTab, Setting } from "obsidian";
 import RelatedNotes from "../main";
-import { parseIgnoredPaths } from "../domain/ignoreRules";
+import { parseIgnoredPaths } from "../core/rules/ignorePaths";
 import { DEFAULT_SETTINGS, EMBEDDING_MODELS, MAX_OVERLAP_PERCENT } from "../constants";
 import { EmbeddingModelId, SimilaritySettings } from "../types";
 import { SettingsRepository } from "../ports";
 import { UpdateSettingsUseCase } from "../app/updateSettings";
-import { ModelRequestSupersededError, ModelSessionSnapshot, ModelStateReader } from "../app/modelSession";
+import { EngineStateReader, EngineStatus, ModelRequestSupersededError } from "../embedding/engine";
 
 export type SettingsViewDeps = {
 	settingsRepo: SettingsRepository,
 	updateSettings: UpdateSettingsUseCase,
-	modelSession: ModelStateReader,
+	engine: EngineStateReader,
 }
 
 const EMBEDDING_MODEL_OPTIONS: Record<string, string> = Object.fromEntries(
@@ -33,7 +33,7 @@ export class SettingView extends PluginSettingTab {
 	};
 	private embeddingModelDraft: EmbeddingModelId = DEFAULT_SETTINGS.embeddingModelId;
 	private loaded = false;
-	private previousModelStatus: ModelSessionSnapshot["status"] = "not-loaded";
+	private previousModelStatus: EngineStatus["kind"] = "idle";
 	private modelDropdown?: DropdownComponent;
 
 	constructor(
@@ -43,9 +43,9 @@ export class SettingView extends PluginSettingTab {
 	) {
 		super(app, plugin);
 		this.preload();
-		this.deps.modelSession.subscribe((snapshot) => {
-			if (this.previousModelStatus !== snapshot.status) this.update?.();
-			this.previousModelStatus = snapshot.status;
+		this.deps.engine.subscribe((status) => {
+			if (this.previousModelStatus !== status.kind) this.update?.();
+			this.previousModelStatus = status.kind;
 		});
 	}
 
@@ -199,12 +199,8 @@ export class SettingView extends PluginSettingTab {
 
 	/** The model the session fell back to after `requestedId` failed, if it is falling back at all. */
 	private fallbackModelId(requestedId: EmbeddingModelId): EmbeddingModelId | null {
-		const snapshot = this.deps.modelSession.getSnapshot();
-		const activeId = snapshot.status === "ready"
-			? snapshot.modelId
-			: snapshot.status === "loading"
-				? snapshot.targetModelId
-				: null;
+		const status = this.deps.engine.status();
+		const activeId = status.kind === "ready" || status.kind === "loading" ? status.modelId : null;
 
 		return activeId !== null && activeId !== requestedId ? activeId : null;
 	}

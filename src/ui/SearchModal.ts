@@ -1,15 +1,15 @@
 import { App, Notice, Platform, SuggestModal, TFile } from "obsidian";
 import { InsertWikilinkAtCursorUseCase } from "../app/insertWikilinkAtCursor";
-import { SimilarSearchFeed, SimilarSearchResult } from "../app/similarSearchFeed";
-import { BackendState } from "../app/backendState";
-import { BannerState, computeBanner, subscribeBanner } from "./backendBanner";
+import { SimilarSearchFeed, SimilarSearchResult } from "../search/similarSearchFeed";
+import { StatusHub } from "../status/statusHub";
+import { BannerState, computeBanner, subscribeBanner } from "./banner";
 import { textForNotice } from "./similarNoticeText";
-import { KeyedDebouncer } from "../domain/debouncer";
+import { KeyedDebouncer } from "../core/util/debounce";
 import { RelatedNote } from "../types";
 
 export type SearchModalDeps = {
 	similarSearchFeed: SimilarSearchFeed;
-	backendState: BackendState;
+	statusHub: StatusHub;
 	insertWikilinkAtCursor: InsertWikilinkAtCursorUseCase;
 }
 
@@ -60,7 +60,7 @@ export class SearchModal extends SuggestModal<RelatedNote> {
 
 	onOpen(): void {
 		void super.onOpen();
-		this.unsubscribeBanner = subscribeBanner(this.deps.backendState, (banner) => this.renderBanner(banner));
+		this.unsubscribeBanner = subscribeBanner(this.deps.statusHub, (banner) => this.renderBanner(banner));
 		this.unsubscribeRefreshSignal = this.deps.similarSearchFeed.subscribeRefreshSignal(() => {
 			this.isAutoRefreshing = true;
 			this.inputEl.dispatchEvent(new Event("input"));
@@ -192,9 +192,9 @@ export class SearchModal extends SuggestModal<RelatedNote> {
 	}
 
 	private isIndexingBusy(): boolean {
-		const indexingState = this.deps.backendState.getIndexingState();
+		const indexingState = this.deps.statusHub.getIndexingState();
 		if (!indexingState) return false;
-		return computeBanner(this.deps.backendState.getModelState(), indexingState).visible;
+		return computeBanner(this.deps.statusHub.getEngineState(), indexingState).visible;
 	}
 
 	private renderBanner(banner: BannerState) {

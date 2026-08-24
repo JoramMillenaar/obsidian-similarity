@@ -1,5 +1,7 @@
 import { EmbeddingModelConfig, EmbeddingModelId, SimilaritySettings } from "./types";
 
+export const VIEW_TYPE_SIMILARITY = "similarity";
+
 export const MAX_OVERLAP_PERCENT = 50;
 
 export const MIN_DOWNLOAD_PROGRESS_BYTES = 1_000_000;

@@ -12,7 +12,7 @@ if you want to view the source, please visit the github repository of this plugi
 const prod = (process.argv[2] === "production");
 
 const iframeBuild = await esbuild.build({
-	entryPoints: ["src/infra/embedder/iframe/iframeContainer.ts"],
+	entryPoints: ["src/embedding/host/frame/bootstrap.ts"],
 	bundle: true,
 	platform: "browser",
 	format: "esm",

@@ -1,7 +1,7 @@
 import { EmbeddingFileStore, ModelIndexMetaStore, PluginDataStore } from "../ports";
-import { normalizeSettings } from "../domain/normalize";
+import { normalizeSettings } from "../core/rules/schema";
 import { IndexMetadata, SCHEMA_VERSION, SimilaritySettings } from "../types";
-import { LegacyEmbeddingFileStore } from "../infra/obsidian/legacyEmbeddingFileStore";
+import { LegacyEmbeddingFileStore } from "../obsidian/legacyEmbeddingFileStore";
 
 
 export type RunLegacyMigrationsUseCase = () => Promise<void>;

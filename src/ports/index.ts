@@ -1,12 +1,7 @@
-export type { ActiveEditor } from "./activeEditor";
+export type { Vault, ActivateOptions } from "./vault";
 export type { EmbeddingPort, LoadEmbeddingPort, EmbedOptions, EmbeddedChunk, EmbeddingMetadata, EmbeddingResult, ModelLoadProgress } from "./embeddingPort";
 export type { EmbeddingFileStore } from "./embeddingFileStore";
 export type { ModelIndexMetaStore } from "./modelIndexMetaStore";
-export type { IndexRepository, IndexRename } from "./indexRepository";
-export type { IndexStorage } from "./indexStorage";
 export type { PluginDataStore } from "./pluginDataStore";
-export type { MarkdownTextExtractor } from "./markdownTextExtractor";
-export type { NoteSource } from "./noteSource";
 export type { SettingsRepository } from "./settingsRepository";
 export type { StatusReporter } from "./statusReporter";
-export type { ActivateSimilarityViewUseCase, ActivateOptions } from "./similarityView";

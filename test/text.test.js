@@ -1,6 +1,6 @@
 const test = require("node:test");
 const assert = require("node:assert");
-const {hashText} = require("../dist/domain/text.js");
+const {hashText} = require("../dist/core/text/hash.js");
 
 test("hashText returns stable hex digest", () => {
         const expected = "429b9d1e";

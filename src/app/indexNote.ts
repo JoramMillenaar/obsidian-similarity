@@ -1,16 +1,16 @@
-import { hashText } from "../domain/text";
-import { isMarkdownPath } from "../domain/markdownPath";
-import { EmbeddedChunk, EmbeddingResult, IndexRepository } from "../ports";
+import { hashText } from "../core/text/hash";
+import { isMarkdownPath } from "../core/rules/markdownPath";
+import { EmbeddedChunk, EmbeddingResult } from "../ports";
 import { NoteChunk } from "../types";
-import { EmbedTextUseCase } from "./embedText";
 import { IsIgnoredPath } from "./isIgnoredPath";
 import { GetNoteTextUseCase } from "./getNoteText";
+import { IndexHandle } from "../indexing/store/indexHandle";
 
 export type IndexNoteDeps = {
 	getNoteText: GetNoteTextUseCase;
-	indexRepo: IndexRepository;
+	index: IndexHandle;
 	isIgnoredPath: IsIgnoredPath;
-	embedText: EmbedTextUseCase;
+	embedText: (text: string) => Promise<EmbeddingResult | null>;
 };
 
 export type IndexNoteOutcome = "indexed" | "removed" | "unchanged";
@@ -20,12 +20,12 @@ export type IndexNoteUseCase = (noteId: string) => Promise<IndexNoteOutcome>;
 export function makeIndexNote(deps: IndexNoteDeps): IndexNoteUseCase {
 	return async function indexNote(noteId: string) {
 		if (!isMarkdownPath(noteId)) {
-			await deps.indexRepo.remove(noteId);
+			deps.index.remove(noteId);
 			return "removed";
 		}
 
 		if (deps.isIgnoredPath(noteId)) {
-			await deps.indexRepo.remove(noteId);
+			deps.index.remove(noteId);
 			return "removed";
 		}
 
@@ -33,38 +33,36 @@ export function makeIndexNote(deps: IndexNoteDeps): IndexNoteUseCase {
 		try {
 			text = await deps.getNoteText(noteId);
 		} catch {
-			await deps.indexRepo.remove(noteId);
+			deps.index.remove(noteId);
 			return "removed";
 		}
 
 		const contentHash = hashText(text);
 
-		const existing = await deps.indexRepo.findById(noteId);
+		const existing = deps.index.get(noteId);
 		if (existing && existing.contentHash === contentHash) {
 			return "unchanged";
 		}
 
 		const embedded: EmbeddingResult | null = await deps.embedText(text);
 		if (!embedded?.chunks.length) {
-			await deps.indexRepo.remove(noteId);
+			deps.index.remove(noteId);
 			return "removed";
 		}
 
-		if (embedded.metadata.embeddingModelId !== deps.indexRepo.modelId) {
+		if (embedded.metadata.embeddingModelId !== deps.index.modelId) {
 			console.warn(
-				`[Similarity] Dropped embedding for "${noteId}": computed with ${embedded.metadata.embeddingModelId}, index expects ${deps.indexRepo.modelId}.`,
+				`[Similarity] Dropped embedding for "${noteId}": computed with ${embedded.metadata.embeddingModelId}, index expects ${deps.index.modelId}.`,
 			);
 			return "unchanged";
 		}
 
-		const indexedNote = {
+		deps.index.upsert({
 			id: noteId,
 			chunks: toNoteChunks(embedded.chunks, text),
 			contentHash,
 			updatedAt: new Date().toISOString(),
-		};
-
-		await deps.indexRepo.upsert(indexedNote);
+		});
 		return "indexed";
 	}
 }
