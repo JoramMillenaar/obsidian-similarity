@@ -1,4 +1,4 @@
-import { App, AnySettingDefinition, DropdownComponent, Notice, PluginSettingTab, Setting } from "obsidian";
+import { App, SettingDefinitionItem, DropdownComponent, Notice, PluginSettingTab, Setting } from "obsidian";
 import RelatedNotes from "../main";
 import { parseIgnoredPaths } from "../core/rules/ignorePaths";
 import { DEFAULT_SETTINGS, EMBEDDING_MODELS, MAX_OVERLAP_PERCENT } from "../constants";
@@ -67,8 +67,7 @@ export class SettingView extends PluginSettingTab {
 		};
 	}
 
-	// Obsidian 1.13.0+: declarative settings. Bypasses `display()` below.
-	getSettingDefinitions(): AnySettingDefinition[] {
+	getSettingDefinitions(): SettingDefinitionItem[] {
 		return [
 			{
 				name: "Language",

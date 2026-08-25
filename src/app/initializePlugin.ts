@@ -9,8 +9,6 @@ export async function initializePlugin(app: AppContainer): Promise<void> {
 
 		const {embeddingModelId} = app.settingsRepo.get();
 
-		// Open the index before loading the model: ranking stored vectors needs no
-		// embedder, so results are available while the model is still downloading.
 		await app.indexer.useModel(embeddingModelId).catch((error) => {
 			console.error("[Similarity] Failed to open the index:", error);
 		});

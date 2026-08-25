@@ -16,7 +16,6 @@ export function makeUpdateSettings(deps: {
 			await deps.settingsRepo.updatePartial(rest);
 		}
 
-		// A model switch re-opens the index and resyncs on its own once it is ready.
 		if (embeddingModelId !== undefined) {
 			await deps.engine.requestModel(embeddingModelId);
 			return;
