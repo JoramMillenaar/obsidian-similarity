@@ -6,7 +6,8 @@ export type IndexUnusableReason =
 	| "missing-sidecar"
 	| "corrupt-sidecar"
 	| "dim-mismatch"
-	| "layout-invalid";
+	| "layout-invalid"
+	| "row-count-mismatch";
 
 export type SidecarState =
 	| {status: "missing"}
@@ -49,6 +50,10 @@ export function checkIndexHealth(args: {
 		return {status: "unusable", reason: "layout-invalid"};
 	}
 
+	if (countClaimedRows(entries) !== args.sidecar.count) {
+		return {status: "unusable", reason: "row-count-mismatch"};
+	}
+
 	const validEntries: NoteIndexMetadata[] = [];
 	const droppedIds: string[] = [];
 	const claimedRows = new Set<number>();
@@ -67,6 +72,14 @@ export function checkIndexHealth(args: {
 	}
 
 	return {status: "checked", validEntries, droppedIds};
+}
+
+function countClaimedRows(entries: unknown[]): number {
+	let count = 0;
+	for (const candidate of entries) {
+		if (isRecord(candidate) && Array.isArray(candidate.chunks)) count += candidate.chunks.length;
+	}
+	return count;
 }
 
 function validateEntry(
