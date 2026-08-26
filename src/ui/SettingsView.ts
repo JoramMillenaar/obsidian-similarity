@@ -44,7 +44,7 @@ export class SettingView extends PluginSettingTab {
 		super(app, plugin);
 		this.preload();
 		this.deps.engine.subscribe((status) => {
-			if (this.previousModelStatus !== status.kind) this.rerender();
+			if (this.previousModelStatus !== status.kind) this.update?.();
 			this.previousModelStatus = status.kind;
 		});
 	}
@@ -53,10 +53,6 @@ export class SettingView extends PluginSettingTab {
 		const settings = this.deps.settingsRepo.get();
 		this.applySettings(settings);
 		this.loaded = true;
-		this.rerender();
-	}
-
-	private rerender(): void {
 		this.update?.();
 	}
 
@@ -190,7 +186,6 @@ export class SettingView extends PluginSettingTab {
 		if (key === "advancedOpen") {
 			this.cachedSettings = {...this.cachedSettings, advancedOpen: value as boolean};
 			await this.deps.settingsRepo.updatePartial({advancedOpen: value as boolean});
-			// eslint-disable-next-line obsidianmd/no-unsupported-api -- 1.13.0+ only, guarded by `?.` like `rerender()`
 			this.refreshDomState?.();
 			return;
 		}
@@ -212,7 +207,7 @@ export class SettingView extends PluginSettingTab {
 	private revertModelDraft(modelId: EmbeddingModelId): void {
 		this.embeddingModelDraft = modelId;
 		this.modelDropdown?.setValue(modelId);
-		this.rerender();
+		this.update?.();
 	}
 
 	/**
