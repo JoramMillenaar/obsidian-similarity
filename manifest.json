@@ -2,7 +2,7 @@
 	"id": "similarity",
 	"name": "Similarity",
 	"author": "Joram Millenaar",
-	"description": "Intelligently suggests related notes—fully local and private, revealing connections in your knowledge vault.",
+	"description": "Search, explore and see related notes based on their meaning. Using a tiny AI running fully on-device: data never leaves your machine, no API keys needed. Great for journaling, or a second brain.",
 	"version": "2.5.2",
 	"minAppVersion": "1.13.0",
 	"authorUrl": "https://github.com/JoramMillenaar",

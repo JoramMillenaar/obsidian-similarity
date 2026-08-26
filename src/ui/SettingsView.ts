@@ -1,4 +1,4 @@
-import { App, SettingDefinitionItem, DropdownComponent, Notice, PluginSettingTab, Setting } from "obsidian";
+import { App, DropdownComponent, Notice, PluginSettingTab, SettingDefinitionItem } from "obsidian";
 import RelatedNotes from "../main";
 import { parseIgnoredPaths } from "../core/rules/ignorePaths";
 import { DEFAULT_SETTINGS, EMBEDDING_MODELS, MAX_OVERLAP_PERCENT } from "../constants";
