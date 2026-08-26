@@ -1,14 +1,17 @@
 import { ItemView, Notice, TFile, WorkspaceLeaf } from "obsidian";
-import { SimilarNotesFeed, SimilarNotesSnapshot } from "../app/similarNotesFeed";
-import { BackendState } from "../app/backendState";
-import { BannerState, subscribeBanner } from "./backendBanner";
+import { SimilarNotesFeed, SimilarNotesSnapshot } from "../search/similarNotesFeed";
+import { StatusHub } from "../status/statusHub";
+import { BannerState, subscribeBanner } from "./banner";
 import { textForNotice } from "./similarNoticeText";
+import { VIEW_TYPE_SIMILARITY } from "../constants";
+
+export { VIEW_TYPE_SIMILARITY };
 
 export function logError(message: unknown, ...optionalParams: unknown[]) {
 	console.error("[Similarity]:", message, ...optionalParams);
 }
 
-export const VIEW_TYPE_SIMILARITY = "similarity";
+
 
 const LOADING_TEXT = "Loading similar notes...";
 
@@ -26,7 +29,7 @@ type MessageState = {
 
 export type SimilarNotesListViewDeps = {
 	similarNotesFeed: SimilarNotesFeed;
-	backendState: BackendState;
+	statusHub: StatusHub;
 };
 
 function signatureForItems(items: SimilarNotesSnapshot["items"]): string {
@@ -115,7 +118,7 @@ export class SimilarNotesListView extends ItemView {
 			this.snapshot = snapshot;
 			this.renderBody();
 		});
-		this.unsubscribeBanner = subscribeBanner(this.deps.backendState, (banner) => this.renderBanner(banner));
+		this.unsubscribeBanner = subscribeBanner(this.deps.statusHub, (banner) => this.renderBanner(banner));
 
 		this.syncActiveNote();
 	}

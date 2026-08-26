@@ -1,16 +1,16 @@
-import { App, AnySettingDefinition, DropdownComponent, Notice, PluginSettingTab, Setting } from "obsidian";
+import { App, SettingDefinitionItem, DropdownComponent, Notice, PluginSettingTab, Setting } from "obsidian";
 import RelatedNotes from "../main";
-import { parseIgnoredPaths } from "../domain/ignoreRules";
+import { parseIgnoredPaths } from "../core/rules/ignorePaths";
 import { DEFAULT_SETTINGS, EMBEDDING_MODELS, MAX_OVERLAP_PERCENT } from "../constants";
 import { EmbeddingModelId, SimilaritySettings } from "../types";
 import { SettingsRepository } from "../ports";
 import { UpdateSettingsUseCase } from "../app/updateSettings";
-import { ModelRequestSupersededError, ModelSessionSnapshot, ModelStateReader } from "../app/modelSession";
+import { EngineStateReader, EngineStatus, ModelRequestSupersededError } from "../embedding/engine";
 
 export type SettingsViewDeps = {
 	settingsRepo: SettingsRepository,
 	updateSettings: UpdateSettingsUseCase,
-	modelSession: ModelStateReader,
+	engine: EngineStateReader,
 }
 
 const EMBEDDING_MODEL_OPTIONS: Record<string, string> = Object.fromEntries(
@@ -33,7 +33,7 @@ export class SettingView extends PluginSettingTab {
 	};
 	private embeddingModelDraft: EmbeddingModelId = DEFAULT_SETTINGS.embeddingModelId;
 	private loaded = false;
-	private previousModelStatus: ModelSessionSnapshot["status"] = "not-loaded";
+	private previousModelStatus: EngineStatus["kind"] = "idle";
 	private modelDropdown?: DropdownComponent;
 
 	constructor(
@@ -42,15 +42,15 @@ export class SettingView extends PluginSettingTab {
 		private readonly deps: SettingsViewDeps,
 	) {
 		super(app, plugin);
-		void this.preload();
-		this.deps.modelSession.subscribe((snapshot) => {
-			if (this.previousModelStatus !== snapshot.status) this.update?.();
-			this.previousModelStatus = snapshot.status;
+		this.preload();
+		this.deps.engine.subscribe((status) => {
+			if (this.previousModelStatus !== status.kind) this.update?.();
+			this.previousModelStatus = status.kind;
 		});
 	}
 
-	private async preload() {
-		const settings = await this.deps.settingsRepo.get();
+	private preload() {
+		const settings = this.deps.settingsRepo.get();
 		this.applySettings(settings);
 		this.loaded = true;
 		this.update?.();
@@ -67,8 +67,7 @@ export class SettingView extends PluginSettingTab {
 		};
 	}
 
-	// Obsidian 1.13.0+: declarative settings. Bypasses `display()` below.
-	getSettingDefinitions(): AnySettingDefinition[] {
+	getSettingDefinitions(): SettingDefinitionItem[] {
 		return [
 			{
 				name: "Language",
@@ -199,12 +198,8 @@ export class SettingView extends PluginSettingTab {
 
 	/** The model the session fell back to after `requestedId` failed, if it is falling back at all. */
 	private fallbackModelId(requestedId: EmbeddingModelId): EmbeddingModelId | null {
-		const snapshot = this.deps.modelSession.getSnapshot();
-		const activeId = snapshot.status === "ready"
-			? snapshot.modelId
-			: snapshot.status === "loading"
-				? snapshot.targetModelId
-				: null;
+		const status = this.deps.engine.status();
+		const activeId = status.kind === "ready" || status.kind === "loading" ? status.modelId : null;
 
 		return activeId !== null && activeId !== requestedId ? activeId : null;
 	}
@@ -257,14 +252,10 @@ export class SettingView extends PluginSettingTab {
 				const kept = fallbackId ? ` Staying on ${EMBEDDING_MODELS[fallbackId].label}.` : "";
 				new Notice(`${message}${kept}`);
 			})
-			.finally(async () => {
+			.finally(() => {
 				// Only re-sync what `modelChanged` is compared against. The drafts belong to the user,
 				// who may have edited them while this (up to a minute long) save was in flight.
-				try {
-					this.cachedSettings = await this.deps.settingsRepo.get();
-				} catch (error) {
-					console.error("[Similarity] Could not re-read settings after saving:", error);
-				}
+				this.cachedSettings = this.deps.settingsRepo.get();
 			});
 	}
 
@@ -273,11 +264,11 @@ export class SettingView extends PluginSettingTab {
 		const {containerEl} = this;
 		containerEl.empty();
 
-		void this.render(containerEl);
+		this.render(containerEl);
 	}
 
-	private async render(containerEl: HTMLElement) {
-		const settings = await this.deps.settingsRepo.get();
+	private render(containerEl: HTMLElement) {
+		const settings = this.deps.settingsRepo.get();
 		this.applySettings(settings);
 		let draftIgnored = settings.ignoredPaths;
 		let advancedOpen = settings.advancedOpen;

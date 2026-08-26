@@ -1,0 +1,177 @@
+import { ChunkMetadata, ModelIndexFile, NoteIndexMetadata, SCHEMA_VERSION } from "../../types";
+import { isBinaryLayoutValid } from "../vector/codec";
+
+export type IndexUnusableReason =
+	| "legacy-schema"
+	| "missing-meta"
+	| "corrupt-meta"
+	| "missing-sidecar"
+	| "corrupt-sidecar"
+	| "dim-mismatch"
+	| "layout-invalid"
+	| "row-count-mismatch";
+
+export type MetaState =
+	| {status: "missing"}
+	| {status: "corrupt"}
+	| {status: "ok"; data: ModelIndexFile};
+
+export type SidecarState =
+	| {status: "missing"}
+	| {status: "corrupt"}
+	| {status: "ok"; dim: number; count: number; byteLength: number};
+
+export type IndexHealth =
+	| {status: "unusable"; reason: IndexUnusableReason}
+	| {status: "checked"; validEntries: NoteIndexMetadata[]; droppedIds: string[]};
+
+export function checkIndexHealth(args: {
+	meta: MetaState;
+	sidecar: SidecarState;
+}): IndexHealth {
+	// Neither file has ever been written for this model — a genuine first run,
+	// not a damaged index. There's nothing to repair or warn about.
+	if (args.meta.status === "missing" && args.sidecar.status === "missing") {
+		return {status: "checked", validEntries: [], droppedIds: []};
+	}
+
+	if (args.meta.status === "corrupt") {
+		return {status: "unusable", reason: "corrupt-meta"};
+	}
+	// The binary exists but nothing describes how to interpret it (or vice
+	// versa isn't reachable here — the joint-missing case above already
+	// returned). Either way the pair no longer agrees, same as a torn write.
+	if (args.meta.status === "missing") {
+		return {status: "unusable", reason: "missing-meta"};
+	}
+
+	const data = args.meta.data;
+
+	// Written by a version whose vectors this code can't interpret. Discarding
+	// beats migrating: the embedding representation has changed too, so the old
+	// vectors would have to be recomputed regardless of how they're stored.
+	if (data.schemaVersion < SCHEMA_VERSION) {
+		return {status: "unusable", reason: "legacy-schema"};
+	}
+
+	const entries = Array.isArray(data.index) ? data.index : [];
+	// An empty index is healthy — there's simply nothing to serve or verify.
+	if (entries.length === 0) {
+		return {status: "checked", validEntries: [], droppedIds: []};
+	}
+
+	if (args.sidecar.status === "missing") {
+		return {status: "unusable", reason: "missing-sidecar"};
+	}
+	if (args.sidecar.status === "corrupt") {
+		return {status: "unusable", reason: "corrupt-sidecar"};
+	}
+	if (args.sidecar.dim !== data.embeddingDim) {
+		return {status: "unusable", reason: "dim-mismatch"};
+	}
+	if (!isBinaryLayoutValid(args.sidecar.byteLength, args.sidecar.dim, args.sidecar.count)) {
+		return {status: "unusable", reason: "layout-invalid"};
+	}
+
+	if (countClaimedRows(entries) !== args.sidecar.count) {
+		return {status: "unusable", reason: "row-count-mismatch"};
+	}
+
+	const validEntries: NoteIndexMetadata[] = [];
+	const droppedIds: string[] = [];
+	const claimedRows = new Set<number>();
+	const seenIds = new Set<string>();
+
+	for (const candidate of entries) {
+		const entry = validateEntry(candidate, args.sidecar.count, claimedRows, seenIds);
+		if (!entry) {
+			droppedIds.push(describeId(candidate));
+			continue;
+		}
+
+		seenIds.add(entry.id);
+		for (const chunk of entry.chunks) claimedRows.add(chunk.row);
+		validEntries.push(entry);
+	}
+
+	return {status: "checked", validEntries, droppedIds};
+}
+
+function countClaimedRows(entries: unknown[]): number {
+	let count = 0;
+	for (const candidate of entries) {
+		if (isRecord(candidate) && Array.isArray(candidate.chunks)) count += candidate.chunks.length;
+	}
+	return count;
+}
+
+function validateEntry(
+	candidate: unknown,
+	rowCount: number,
+	claimedRows: Set<number>,
+	seenIds: Set<string>,
+): NoteIndexMetadata | null {
+	if (!isRecord(candidate)) return null;
+
+	const {id, contentHash, updatedAt, chunks} = candidate;
+	if (!isNonEmptyString(id) || seenIds.has(id)) return null;
+	if (!isNonEmptyString(contentHash) || !isNonEmptyString(updatedAt)) return null;
+	// A v1 entry carries its vector inline and has no chunks at all; a v2 entry
+	// with no chunks points at nothing and can never match a query.
+	if (!Array.isArray(chunks) || chunks.length === 0) return null;
+
+	const rowsInEntry = new Set<number>();
+	const validated: ChunkMetadata[] = [];
+
+	for (const chunk of chunks) {
+		const validChunk = validateChunk(chunk, rowCount, claimedRows, rowsInEntry);
+		if (!validChunk) return null;
+
+		rowsInEntry.add(validChunk.row);
+		validated.push(validChunk);
+	}
+
+	return {id, contentHash, updatedAt, chunks: validated};
+}
+
+function validateChunk(
+	candidate: unknown,
+	rowCount: number,
+	claimedRows: Set<number>,
+	rowsInEntry: Set<number>,
+): ChunkMetadata | null {
+	if (!isRecord(candidate)) return null;
+
+	const {row, start, end, hash} = candidate;
+
+	// The row must address a vector the sidecar actually holds, and must be the
+	// only chunk anywhere claiming it — two chunks sharing a row means one of
+	// them is silently serving the other's vector.
+	if (!isOffset(row) || row >= rowCount) return null;
+	if (claimedRows.has(row) || rowsInEntry.has(row)) return null;
+
+	// Every chunk covers at least one sentence, so an empty or inverted span is
+	// impossible for real data and marks the entry as untrustworthy.
+	if (!isOffset(start) || !isOffset(end) || end <= start) return null;
+	if (!isNonEmptyString(hash)) return null;
+
+	return {row, start, end, hash};
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+	return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function isNonEmptyString(value: unknown): value is string {
+	return typeof value === "string" && value.length > 0;
+}
+
+function isOffset(value: unknown): value is number {
+	return typeof value === "number" && Number.isInteger(value) && value >= 0;
+}
+
+/** Best-effort id for logging a dropped entry, which may be malformed enough to have none. */
+function describeId(candidate: unknown): string {
+	if (isRecord(candidate) && isNonEmptyString(candidate.id)) return candidate.id;
+	return "<unknown>";
+}

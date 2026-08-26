@@ -4,19 +4,21 @@ import { initializePlugin } from "./app/initializePlugin";
 import { AppContainer } from "./appContainer";
 import { SimilarNotesListView, VIEW_TYPE_SIMILARITY } from "./ui/SimilarNotesListView";
 import { SettingView } from "./ui/SettingsView";
-import { registerObsidianEvents } from "./infra/obsidian/registerObsidianEvents";
+import { registerVaultEvents } from "./indexing/vaultEvents";
 
 export default class SimilarNotes extends Plugin {
 	private appContainer!: AppContainer;
 
-	onload(): void {
+	async onload(): Promise<void> {
 		this.appContainer = new AppContainer(this);
 		this.appContainer.status.update("Loading…");
+
+		await this.appContainer.pluginDataStore.load();
 
 		this.addSettingTab(new SettingView(this.app, this, {
 			settingsRepo: this.appContainer.settingsRepo,
 			updateSettings: this.appContainer.updateSettings,
-			modelSession: this.appContainer.modelSession,
+			engine: this.appContainer.engine,
 		}));
 
 		this.registerView(
@@ -24,7 +26,7 @@ export default class SimilarNotes extends Plugin {
 			(leaf) =>
 				new SimilarNotesListView(leaf, {
 					similarNotesFeed: this.appContainer.similarNotesFeed,
-					backendState: this.appContainer.backendState,
+					statusHub: this.appContainer.statusHub,
 				})
 		);
 		this.registerHoverLinkSource(VIEW_TYPE_SIMILARITY, {
@@ -38,7 +40,7 @@ export default class SimilarNotes extends Plugin {
 			callback: () => {
 				new SearchModal(this.app, {
 					similarSearchFeed: this.appContainer.similarSearchFeed,
-					backendState: this.appContainer.backendState,
+					statusHub: this.appContainer.statusHub,
 					insertWikilinkAtCursor: this.appContainer.insertWikilinkAtCursor,
 				}).open();
 			},
@@ -48,12 +50,17 @@ export default class SimilarNotes extends Plugin {
 			id: "open-similar-notes",
 			name: "Open similar notes",
 			callback: async () => {
-				await this.appContainer.activateSimilarityView({reveal: true, focus: true});
+				await this.appContainer.vault.activateSimilarityView({reveal: true, focus: true});
 			},
 		});
 
 		this.app.workspace.onLayoutReady(() => {
-			registerObsidianEvents(this, this.appContainer);
+			registerVaultEvents(this, {
+				indexer: this.appContainer.indexer,
+				engine: this.appContainer.engine,
+				status: this.appContainer.status,
+				onActiveNoteChanged: () => this.appContainer.similarNotesFeed.refresh(),
+			});
 			void initializePlugin(this.appContainer);
 			this.appContainer.similarNotesFeed.refresh();
 		});

@@ -1,7 +1,7 @@
 import { EmbeddingFileStore, ModelIndexMetaStore, PluginDataStore } from "../ports";
-import { normalizeSettings } from "../domain/normalize";
+import { normalizeSettings } from "../core/rules/schema";
 import { IndexMetadata, SCHEMA_VERSION, SimilaritySettings } from "../types";
-import { LegacyEmbeddingFileStore } from "../infra/obsidian/legacyEmbeddingFileStore";
+import { LegacyEmbeddingFileStore } from "../obsidian/legacyEmbeddingFileStore";
 
 
 export type RunLegacyMigrationsUseCase = () => Promise<void>;
@@ -25,7 +25,7 @@ export function makeRunLegacyMigrations(deps: LegacyMigrationsDeps): RunLegacyMi
 
 		if (legacySchemaVersion >= SCHEMA_VERSION && legacyIndex.length > 0) {
 			const buffer = await deps.legacyEmbeddingFileStore.read();
-			const alreadyMigrated = buffer && await deps.modelIndexStore.read(settings.embeddingModelId);
+			const alreadyMigrated = buffer && await deps.modelIndexStore.read(settings.embeddingModelId).catch(() => null);
 
 			if (buffer && !alreadyMigrated) {
 				console.warn(`[Similarity] Migrating legacy index into per-model files for "${settings.embeddingModelId}".`);

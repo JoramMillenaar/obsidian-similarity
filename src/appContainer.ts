@@ -1,93 +1,75 @@
 import { Plugin } from "obsidian";
-import { KeyedDebouncer } from "./domain/debouncer";
-import { ThrottledIndexStorage } from "./domain/throttledIndexStorage";
-import { ObsidianStatusBar } from "./infra/obsidian/obsidianStatusBar";
-import { ObsidianMarkdownTextExtractor } from "./infra/obsidian/obsidianMarkdownTextExtractor";
-import { ObsidianNoteSource } from "./infra/obsidian/obsidianNoteSource";
-import { ObsidianIndexStorage } from "./infra/obsidian/obsidianIndexStorage";
-import { BinaryEmbeddingFileStore } from "./infra/obsidian/binaryEmbeddingFileStore";
-import { ObsidianModelIndexMetaStore } from "./infra/obsidian/obsidianModelIndexMetaStore";
-import { LegacyEmbeddingFileStore } from "./infra/obsidian/legacyEmbeddingFileStore";
-import { GetSimilarNotesForNoteUseCase, makeGetSimilarNotesForNote } from "./app/getSimilarNotesForNote";
-import { GetSimilarNotesForTextUseCase } from "./app/getSimilarNotesForText";
-import { InsertWikilinkAtCursorUseCase, makeInsertWikilinkAtCursor } from "./app/insertWikilinkAtCursor";
-import { MonolithicIndexRepository } from "./infra/index/monolithicIndexRepository";
+import { ObsidianStatusBar } from "./obsidian/obsidianStatusBar";
+import { ObsidianVault } from "./obsidian/obsidianVault";
+import { BinaryEmbeddingFileStore } from "./obsidian/binaryEmbeddingFileStore";
+import { ObsidianModelIndexMetaStore } from "./obsidian/obsidianModelIndexMetaStore";
+import { LegacyEmbeddingFileStore } from "./obsidian/legacyEmbeddingFileStore";
+import { ObsidianPluginDataStore } from "./obsidian/obsidianPluginDataStore";
+import { ObsidianSettingsRepository } from "./obsidian/obsidianSettings";
+import { loadEmbeddingProvider } from "./embedding/host/iframeHost";
 import {
 	EmbeddingFileStore,
-	MarkdownTextExtractor,
 	ModelIndexMetaStore,
-	NoteSource,
 	SettingsRepository,
-	ActivateSimilarityViewUseCase,
 	StatusReporter,
+	Vault,
 } from "./ports";
-import { makeActivateSimilarityView } from "./infra/obsidian/obsidianSimilarityView";
-import { ObsidianPluginDataStore } from "./infra/obsidian/obsidianPluginDataStore";
-import { ObsidianSettingsRepository } from "./infra/obsidian/obsidianSettings";
+import { EmbeddingEngine } from "./embedding/engine";
+import { Indexer } from "./indexing/indexer";
+import { IndexRegistry } from "./indexing/store/indexRegistry";
+import { makeStatusHub, StatusHub } from "./status/statusHub";
+import { GetSimilarNotesForNoteUseCase, makeGetSimilarNotesForNote } from "./search/getSimilarNotesForNote";
+import { GetSimilarNotesForTextUseCase, makeGetSimilarNotesForText } from "./search/getSimilarNotesForText";
+import { makeSimilarNotesFeed, SimilarNotesFeed } from "./search/similarNotesFeed";
+import { makeSimilarSearchFeed, SimilarSearchFeed } from "./search/similarSearchFeed";
+import { InsertWikilinkAtCursorUseCase, makeInsertWikilinkAtCursor } from "./app/insertWikilinkAtCursor";
 import { IsIgnoredPath, makeIsIgnoredPath } from "./app/isIgnoredPath";
-import { makeUpdateSettings, UpdateSettingsUseCase } from "./app/updateSettings";
-import { ObsidianActiveEditor } from "./infra/obsidian/obsidianActiveEditor";
-import { GetIndexingStateUseCase, IndexingProgress, SubscribeIndexingStateUseCase } from "./app/indexingProgress";
-import { SynchronizeIndexUseCase } from "./app/synchronizeIndex";
 import { GetNoteTextUseCase, makeGetNoteText } from "./app/getNoteText";
-import { IndexingWorker } from "./app/indexingWorker";
+import { makeUpdateSettings, UpdateSettingsUseCase } from "./app/updateSettings";
 import { makeRunLegacyMigrations, RunLegacyMigrationsUseCase } from "./app/legacyMigrations";
-import { makeBuildGeneration } from "./app/generation";
-import { ModelSession } from "./app/modelSession";
-import { makeSimilarNotesFeed, SimilarNotesFeed } from "./app/similarNotesFeed";
-import { makeSimilarSearchFeed, SimilarSearchFeed } from "./app/similarSearchFeed";
-import { BackendState, makeBackendState } from "./app/backendState";
 
 const INDEX_WRITE_THROTTLE_MS = 1000;
 
 export class AppContainer {
 	readonly status: StatusReporter;
-	readonly noteSource: NoteSource;
-	readonly markdownTextExtractor: MarkdownTextExtractor;
+	readonly vault: Vault;
 	readonly pluginDataStore: ObsidianPluginDataStore;
 	readonly modelIndexMetaStore: ModelIndexMetaStore;
 	readonly embeddingFileStore: EmbeddingFileStore;
 	readonly legacyEmbeddingFileStore: LegacyEmbeddingFileStore;
-	readonly indexStorage: ThrottledIndexStorage;
-	readonly modelSession: ModelSession;
 	readonly settingsRepo: SettingsRepository;
-	readonly indexingWorker: IndexingWorker;
-	readonly activateSimilarityView: ActivateSimilarityViewUseCase;
+
+	readonly engine: EmbeddingEngine;
+	readonly indexer: Indexer;
+	readonly statusHub: StatusHub;
+
 	readonly similarNotesFeed: SimilarNotesFeed;
 	readonly similarSearchFeed: SimilarSearchFeed;
-	readonly backendState: BackendState;
-	readonly upsertDebouncer: KeyedDebouncer<string>;
-
+	readonly insertWikilinkAtCursor: InsertWikilinkAtCursorUseCase;
+	readonly updateSettings: UpdateSettingsUseCase;
 	readonly runLegacyMigrations: RunLegacyMigrationsUseCase;
-	readonly isIndexEmpty: () => Promise<boolean>;
+
 	readonly getNoteText: GetNoteTextUseCase;
+	readonly isIgnoredPath: IsIgnoredPath;
 	readonly getSimilarNotesForNote: GetSimilarNotesForNoteUseCase;
 	readonly getSimilarNotesForText: GetSimilarNotesForTextUseCase;
-	readonly insertWikilinkAtCursor: InsertWikilinkAtCursorUseCase;
-	readonly synchronizeIndex: SynchronizeIndexUseCase;
-	readonly subscribeIndexingState: SubscribeIndexingStateUseCase;
-	readonly getIndexingState: GetIndexingStateUseCase;
-	readonly isIgnoredPath: IsIgnoredPath;
-	readonly updateSettings: UpdateSettingsUseCase;
+	readonly isIndexEmpty: () => Promise<boolean>;
 
-	private readonly disposeIndexingProgress: () => void;
+	private readonly registry: IndexRegistry;
 
 	constructor(plugin: Plugin) {
 		this.status = new ObsidianStatusBar(plugin);
-		this.noteSource = new ObsidianNoteSource(plugin);
-		this.markdownTextExtractor = new ObsidianMarkdownTextExtractor(plugin);
+		this.vault = new ObsidianVault(plugin);
 		this.pluginDataStore = new ObsidianPluginDataStore(plugin);
 		this.modelIndexMetaStore = new ObsidianModelIndexMetaStore(plugin);
 		this.embeddingFileStore = new BinaryEmbeddingFileStore(plugin);
 		this.legacyEmbeddingFileStore = new LegacyEmbeddingFileStore(plugin);
 		this.settingsRepo = new ObsidianSettingsRepository(this.pluginDataStore);
-		this.indexStorage = new ThrottledIndexStorage(
-			new ObsidianIndexStorage(this.modelIndexMetaStore, this.embeddingFileStore),
-			INDEX_WRITE_THROTTLE_MS,
-		);
-		const activeEditor = new ObsidianActiveEditor(plugin);
 
-		const indexingProgress = new IndexingProgress({status: this.status});
+		this.registry = new IndexRegistry(
+			{metaStore: this.modelIndexMetaStore, binaryStore: this.embeddingFileStore},
+			{throttleMs: INDEX_WRITE_THROTTLE_MS},
+		);
 
 		this.runLegacyMigrations = makeRunLegacyMigrations({
 			pluginDataStore: this.pluginDataStore,
@@ -96,111 +78,81 @@ export class AppContainer {
 			legacyEmbeddingFileStore: this.legacyEmbeddingFileStore,
 		});
 
-		this.isIgnoredPath = makeIsIgnoredPath({
-			settingsRepo: this.settingsRepo,
-		});
+		this.isIgnoredPath = makeIsIgnoredPath({settingsRepo: this.settingsRepo});
 
 		this.getNoteText = makeGetNoteText({
-			noteSource: this.noteSource,
-			markdownTextExtractor: this.markdownTextExtractor,
+			vault: this.vault,
 			settingsRepo: this.settingsRepo,
 		});
 
-		this.getSimilarNotesForNote = async (args) => {
-			const snapshot = this.modelSession.getSnapshot();
-			const modelId = snapshot.status === "ready"
-				? snapshot.modelId
-				: snapshot.status === "loading"
-					? snapshot.targetModelId
-					: (await this.settingsRepo.get()).embeddingModelId;
-
-			const indexRepo = new MonolithicIndexRepository(this.indexStorage, modelId);
-			return makeGetSimilarNotesForNote({indexRepo})(args);
-		};
-		this.getSimilarNotesForText = (args) => this.modelSession.withGeneration((generation) => generation.getSimilarNotesForText(args));
-		this.synchronizeIndex = () => this.modelSession.withGeneration((generation) => generation.synchronizeIndex());
-		this.isIndexEmpty = () => this.modelSession.withGeneration((generation) => generation.indexRepo.isEmpty());
-
-		this.indexingWorker = new IndexingWorker(
-			(noteId) => this.modelSession.withGeneration((generation) => generation.indexNote(noteId)),
-		);
-		this.indexingWorker.subscribe(indexingProgress.observe);
-		this.indexingWorker.subscribe((event) => {
-			if (event.type === "drained" || event.type === "cleared") return this.indexStorage.flush();
-		});
-		this.indexingWorker.subscribe((event) => {
-			if (event.type === "seeded") return this.similarNotesFeed.refresh();
-		})
-
-		this.insertWikilinkAtCursor = makeInsertWikilinkAtCursor({
-			activeEditor,
-			noteSource: this.noteSource,
-		});
-
-		this.subscribeIndexingState = indexingProgress.subscribeIndexingState;
-		this.getIndexingState = indexingProgress.getSnapshot;
-		this.disposeIndexingProgress = indexingProgress.dispose;
-
-		this.upsertDebouncer = new KeyedDebouncer<string>(1100);
-
-		const buildGeneration = makeBuildGeneration({
-			indexStorage: this.indexStorage,
-			noteSource: this.noteSource,
-			getNoteText: this.getNoteText,
-			isIgnoredPath: this.isIgnoredPath,
-			settingsRepo: this.settingsRepo,
-			worker: this.indexingWorker,
-			upsertDebouncer: this.upsertDebouncer,
-			onNoteUpdated: () => this.similarNotesFeed.refresh(),
-		});
-
-		this.modelSession = new ModelSession({
-			buildGeneration,
-			worker: this.indexingWorker,
-			indexStorage: this.indexStorage,
+		this.engine = new EmbeddingEngine({
+			loadEmbedder: loadEmbeddingProvider,
 			settingsRepo: this.settingsRepo,
 			status: this.status,
 		});
 
-		this.updateSettings = makeUpdateSettings({
+		this.indexer = new Indexer({
+			engine: this.engine,
+			registry: this.registry,
+			vault: this.vault,
+			getNoteText: this.getNoteText,
+			isIgnoredPath: this.isIgnoredPath,
 			settingsRepo: this.settingsRepo,
-			indexStorage: this.indexStorage,
-			modelSession: this.modelSession,
+			status: this.status,
+			onChanged: () => this.similarNotesFeed.refresh(),
 		});
 
-		this.backendState = makeBackendState({
-			modelSession: this.modelSession,
-			subscribeIndexingState: this.subscribeIndexingState,
-		});
+		this.statusHub = makeStatusHub({engine: this.engine, indexer: this.indexer});
+
+		this.getSimilarNotesForNote = async (args) => {
+			const index = this.indexer.index();
+			if (!index) return [];
+			return makeGetSimilarNotesForNote({index})(args);
+		};
+
+		this.getSimilarNotesForText = async (args) => {
+			const index = this.indexer.index();
+			if (!index) return [];
+			return makeGetSimilarNotesForText({
+				index,
+				embed: (text) => this.engine.embed(text, {priority: "high"}),
+			})(args);
+		};
+
+		this.isIndexEmpty = async () => this.indexer.index()?.isEmpty() ?? true;
 
 		this.similarNotesFeed = makeSimilarNotesFeed({
-			backendState: this.backendState,
+			statusHub: this.statusHub,
 			getSimilarNotesForNote: this.getSimilarNotesForNote,
 			isIndexEmpty: this.isIndexEmpty,
 			isIgnoredPath: this.isIgnoredPath,
-			synchronizeIndex: this.synchronizeIndex,
-			retryModelLoad: () => this.modelSession.retry(),
+			synchronizeIndex: () => this.indexer.syncAll(),
+			retryModelLoad: () => this.engine.retry(),
 		});
 
-		this.activateSimilarityView = makeActivateSimilarityView(plugin);
-
 		this.similarSearchFeed = makeSimilarSearchFeed({
-			backendState: this.backendState,
+			statusHub: this.statusHub,
 			getSimilarNotesForNote: this.getSimilarNotesForNote,
 			getSimilarNotesForText: this.getSimilarNotesForText,
 			isIndexEmpty: this.isIndexEmpty,
 			isIgnoredPath: this.isIgnoredPath,
 		});
+
+		this.updateSettings = makeUpdateSettings({
+			settingsRepo: this.settingsRepo,
+			engine: this.engine,
+			resync: () => this.indexer.syncAll(),
+		});
+
+		this.insertWikilinkAtCursor = makeInsertWikilinkAtCursor({vault: this.vault});
 	}
 
 	async shutdown(): Promise<void> {
-		this.indexingWorker.unload();
-		this.modelSession.shutdown();
+		this.engine.dispose();
+		await this.indexer.dispose();
 		this.similarNotesFeed.dispose();
-		this.backendState.dispose();
-		this.disposeIndexingProgress();
-		this.upsertDebouncer.cancel();
-		await this.indexStorage.flush().catch((error) => {
+		this.statusHub.dispose();
+		await this.registry.close().catch((error) => {
 			console.error("[Similarity] Failed to flush index on shutdown:", error);
 		});
 		this.status.clear();

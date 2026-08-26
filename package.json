@@ -1,6 +1,6 @@
 {
 	"name": "similarity",
-	"version": "2.5.1",
+	"version": "2.5.2",
 	"description": "Intelligently suggests related notes—fully local and private, revealing connections in your knowledge vault.",
 	"main": "main.js",
 	"scripts": {
@@ -19,7 +19,7 @@
 		"@typescript-eslint/eslint-plugin": "5.29.0",
 		"@typescript-eslint/parser": "5.29.0",
 		"esbuild": "0.17.3",
-		"obsidian": "latest",
+		"obsidian": "1.13.1",
 		"tslib": "2.4.0",
 		"typescript": "4.7.4"
 	},

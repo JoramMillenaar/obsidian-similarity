@@ -1,4 +1,4 @@
-import { SimilarNotesNotice } from "../app/similarNotesNotice";
+import { SimilarNotesNotice } from "../status/notices";
 
 export function textForNotice(notice: SimilarNotesNotice): string {
 	switch (notice.kind) {

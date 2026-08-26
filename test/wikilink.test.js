@@ -4,7 +4,7 @@ const {
 	formatWikilink,
 	getWikilinkTarget,
 	stripMarkdownExtension,
-} = require("../dist/domain/wikilink.js");
+} = require("../dist/core/text/wikilink.js");
 
 test("stripMarkdownExtension removes only the markdown suffix", () => {
 	assert.strictEqual(stripMarkdownExtension("test.md"), "test");

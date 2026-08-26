@@ -1,13 +1,12 @@
 import { SettingsRepository } from "../ports";
-import { isPathIgnored } from "../domain/ignoreRules";
+import { isPathIgnored } from "../core/rules/ignorePaths";
 
-export type IsIgnoredPath = (path: string) => Promise<boolean>;
+export type IsIgnoredPath = (path: string) => boolean;
 
 export function makeIsIgnoredPath(deps: {
 	settingsRepo: SettingsRepository;
 }): IsIgnoredPath {
-	return async (path: string): Promise<boolean> => {
-		const settings = await deps.settingsRepo.get();
-		return isPathIgnored(path, settings.ignoredPaths);
+	return (path: string): boolean => {
+		return isPathIgnored(path, deps.settingsRepo.get().ignoredPaths);
 	};
 }
