@@ -10,6 +10,10 @@ function okSidecar(count, dim = DIM) {
 	return {status: "ok", dim, count, byteLength: 16 + count * dim};
 }
 
+function okMeta(index, overrides = {}) {
+	return {status: "ok", data: {schemaVersion: SCHEMA_VERSION, embeddingDim: DIM, index, ...overrides}};
+}
+
 function entry(id, rows, overrides = {}) {
 	return {
 		id,
@@ -22,9 +26,7 @@ function entry(id, rows, overrides = {}) {
 
 function healthy(entries, sidecarCount) {
 	return checkIndexHealth({
-		schemaVersion: SCHEMA_VERSION,
-		embeddingDim: DIM,
-		entries,
+		meta: okMeta(entries),
 		sidecar: okSidecar(sidecarCount),
 	});
 }
@@ -82,9 +84,7 @@ test("a malformed entry mixed with valid ones is still dropped individually when
 
 test("legacy schema is unusable regardless of row counts", () => {
 	const result = checkIndexHealth({
-		schemaVersion: 1,
-		embeddingDim: DIM,
-		entries: [entry("a.md", [0])],
+		meta: okMeta([entry("a.md", [0])], {schemaVersion: 1}),
 		sidecar: okSidecar(1),
 	});
 
@@ -93,9 +93,7 @@ test("legacy schema is unusable regardless of row counts", () => {
 
 test("a missing sidecar is unusable when entries exist", () => {
 	const result = checkIndexHealth({
-		schemaVersion: SCHEMA_VERSION,
-		embeddingDim: DIM,
-		entries: [entry("a.md", [0])],
+		meta: okMeta([entry("a.md", [0])]),
 		sidecar: {status: "missing"},
 	});
 
@@ -104,9 +102,7 @@ test("a missing sidecar is unusable when entries exist", () => {
 
 test("a corrupt sidecar is unusable when entries exist", () => {
 	const result = checkIndexHealth({
-		schemaVersion: SCHEMA_VERSION,
-		embeddingDim: DIM,
-		entries: [entry("a.md", [0])],
+		meta: okMeta([entry("a.md", [0])]),
 		sidecar: {status: "corrupt"},
 	});
 
@@ -115,9 +111,7 @@ test("a corrupt sidecar is unusable when entries exist", () => {
 
 test("a dimension mismatch is unusable, checked before row counts", () => {
 	const result = checkIndexHealth({
-		schemaVersion: SCHEMA_VERSION,
-		embeddingDim: DIM,
-		entries: [entry("a.md", [0])],
+		meta: okMeta([entry("a.md", [0])]),
 		sidecar: okSidecar(1, DIM + 1),
 	});
 
@@ -126,11 +120,59 @@ test("a dimension mismatch is unusable, checked before row counts", () => {
 
 test("an invalid binary layout is unusable, checked before row counts", () => {
 	const result = checkIndexHealth({
-		schemaVersion: SCHEMA_VERSION,
-		embeddingDim: DIM,
-		entries: [entry("a.md", [0])],
+		meta: okMeta([entry("a.md", [0])]),
 		sidecar: {status: "ok", dim: DIM, count: 1, byteLength: 3},
 	});
 
 	assert.deepStrictEqual(result, {status: "unusable", reason: "layout-invalid"});
+});
+
+// --- meta-side coverage added for step 2 of the hardening plan ---
+//
+// Before this step, openIndex read the meta file with `files.metaStore.read()`,
+// which swallowed a JSON.parse failure to `null` — identical to "file doesn't
+// exist". checkIndexHealth then defaulted a missing/unreadable meta's
+// schemaVersion to 1, which is always < SCHEMA_VERSION, so:
+//   (a) a vault that had never been indexed logged a misleading
+//       "Index discarded (legacy-schema)" warning on every first run, and
+//   (b) a genuinely corrupt meta file was indistinguishable from a fresh one,
+//       hiding a real repair signal behind a routine one.
+// MetaState now carries missing/corrupt/ok explicitly, mirroring SidecarState.
+
+test("a genuinely fresh vault (no meta, no sidecar) is healthy, not discarded", () => {
+	const result = checkIndexHealth({
+		meta: {status: "missing"},
+		sidecar: {status: "missing"},
+	});
+
+	assert.deepStrictEqual(result, {status: "checked", validEntries: [], droppedIds: []});
+});
+
+test("meta missing but a sidecar file exists is unusable, not treated as fresh", () => {
+	// An inconsistent state (e.g. the meta write of a torn write never landed
+	// at all) — the binary can't be interpreted without meta describing it.
+	const result = checkIndexHealth({
+		meta: {status: "missing"},
+		sidecar: okSidecar(1),
+	});
+
+	assert.deepStrictEqual(result, {status: "unusable", reason: "missing-meta"});
+});
+
+test("corrupt meta is unusable and distinct from a missing file, even with no sidecar", () => {
+	const result = checkIndexHealth({
+		meta: {status: "corrupt"},
+		sidecar: {status: "missing"},
+	});
+
+	assert.deepStrictEqual(result, {status: "unusable", reason: "corrupt-meta"});
+});
+
+test("corrupt meta is unusable even when the sidecar looks fine", () => {
+	const result = checkIndexHealth({
+		meta: {status: "corrupt"},
+		sidecar: okSidecar(1),
+	});
+
+	assert.deepStrictEqual(result, {status: "unusable", reason: "corrupt-meta"});
 });

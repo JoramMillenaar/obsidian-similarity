@@ -25,7 +25,7 @@ export function makeRunLegacyMigrations(deps: LegacyMigrationsDeps): RunLegacyMi
 
 		if (legacySchemaVersion >= SCHEMA_VERSION && legacyIndex.length > 0) {
 			const buffer = await deps.legacyEmbeddingFileStore.read();
-			const alreadyMigrated = buffer && await deps.modelIndexStore.read(settings.embeddingModelId);
+			const alreadyMigrated = buffer && await deps.modelIndexStore.read(settings.embeddingModelId).catch(() => null);
 
 			if (buffer && !alreadyMigrated) {
 				console.warn(`[Similarity] Migrating legacy index into per-model files for "${settings.embeddingModelId}".`);

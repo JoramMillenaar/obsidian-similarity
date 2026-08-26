@@ -1,13 +1,20 @@
-import { ChunkMetadata, NoteIndexMetadata, SCHEMA_VERSION } from "../../types";
+import { ChunkMetadata, ModelIndexFile, NoteIndexMetadata, SCHEMA_VERSION } from "../../types";
 import { isBinaryLayoutValid } from "../vector/codec";
 
 export type IndexUnusableReason =
 	| "legacy-schema"
+	| "missing-meta"
+	| "corrupt-meta"
 	| "missing-sidecar"
 	| "corrupt-sidecar"
 	| "dim-mismatch"
 	| "layout-invalid"
 	| "row-count-mismatch";
+
+export type MetaState =
+	| {status: "missing"}
+	| {status: "corrupt"}
+	| {status: "ok"; data: ModelIndexFile};
 
 export type SidecarState =
 	| {status: "missing"}
@@ -19,19 +26,35 @@ export type IndexHealth =
 	| {status: "checked"; validEntries: NoteIndexMetadata[]; droppedIds: string[]};
 
 export function checkIndexHealth(args: {
-	schemaVersion: number;
-	embeddingDim: number;
-	entries: unknown;
+	meta: MetaState;
 	sidecar: SidecarState;
 }): IndexHealth {
+	// Neither file has ever been written for this model — a genuine first run,
+	// not a damaged index. There's nothing to repair or warn about.
+	if (args.meta.status === "missing" && args.sidecar.status === "missing") {
+		return {status: "checked", validEntries: [], droppedIds: []};
+	}
+
+	if (args.meta.status === "corrupt") {
+		return {status: "unusable", reason: "corrupt-meta"};
+	}
+	// The binary exists but nothing describes how to interpret it (or vice
+	// versa isn't reachable here — the joint-missing case above already
+	// returned). Either way the pair no longer agrees, same as a torn write.
+	if (args.meta.status === "missing") {
+		return {status: "unusable", reason: "missing-meta"};
+	}
+
+	const data = args.meta.data;
+
 	// Written by a version whose vectors this code can't interpret. Discarding
 	// beats migrating: the embedding representation has changed too, so the old
 	// vectors would have to be recomputed regardless of how they're stored.
-	if (args.schemaVersion < SCHEMA_VERSION) {
+	if (data.schemaVersion < SCHEMA_VERSION) {
 		return {status: "unusable", reason: "legacy-schema"};
 	}
 
-	const entries = Array.isArray(args.entries) ? args.entries : [];
+	const entries = Array.isArray(data.index) ? data.index : [];
 	// An empty index is healthy — there's simply nothing to serve or verify.
 	if (entries.length === 0) {
 		return {status: "checked", validEntries: [], droppedIds: []};
@@ -43,7 +66,7 @@ export function checkIndexHealth(args: {
 	if (args.sidecar.status === "corrupt") {
 		return {status: "unusable", reason: "corrupt-sidecar"};
 	}
-	if (args.sidecar.dim !== args.embeddingDim) {
+	if (args.sidecar.dim !== data.embeddingDim) {
 		return {status: "unusable", reason: "dim-mismatch"};
 	}
 	if (!isBinaryLayoutValid(args.sidecar.byteLength, args.sidecar.dim, args.sidecar.count)) {

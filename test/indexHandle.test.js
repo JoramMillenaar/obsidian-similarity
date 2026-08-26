@@ -37,11 +37,15 @@ function makeFiles() {
 	let meta = null;
 	let binary = null;
 	let writes = 0;
+	let metaCorrupt = false;
 
 	return {
 		writeCount: () => writes,
 		metaStore: {
-			read: async () => meta,
+			read: async () => {
+				if (metaCorrupt) throw new Error("Unexpected token in JSON");
+				return meta;
+			},
 			write: async (_modelId, data) => {
 				meta = data;
 				writes++;
@@ -55,6 +59,9 @@ function makeFiles() {
 		},
 		corruptSidecar: () => {
 			binary = new ArrayBuffer(8);
+		},
+		corruptMeta: () => {
+			metaCorrupt = true;
 		},
 	};
 }
@@ -159,6 +166,25 @@ test("a corrupt sidecar is discarded rather than served", async () => {
 	const second = await openIndex(files, MODEL_ID, {throttleMs: THROTTLE_MS});
 
 	assert.strictEqual(second.isEmpty(), true);
+});
+
+test("a corrupt meta file is discarded rather than served, and does not crash openIndex", async () => {
+	const files = makeFiles();
+	const first = await openWith(files, ["a.md"]);
+	await first.close();
+
+	files.corruptMeta();
+	const second = await openIndex(files, MODEL_ID, {throttleMs: THROTTLE_MS});
+
+	assert.strictEqual(second.isEmpty(), true);
+});
+
+test("a genuinely fresh vault opens quietly, without eagerly writing empty files", async () => {
+	const files = makeFiles();
+	const index = await openIndex(files, MODEL_ID, {throttleMs: THROTTLE_MS});
+
+	assert.strictEqual(index.isEmpty(), true);
+	assert.strictEqual(files.writeCount(), 0, "a first-ever open must not write stub files to disk");
 });
 
 test("query ranks the closest note first and can exclude the query note", async () => {

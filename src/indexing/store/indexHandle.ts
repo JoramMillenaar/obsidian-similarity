@@ -2,7 +2,7 @@ import { Embedding, EmbeddingModelId, IndexedNote, RelatedNote, SCHEMA_VERSION }
 import { EmbeddingFileStore, ModelIndexMetaStore } from "../../ports";
 import { DecodedEmbeddings, decodeEmbeddings, encodeEmbeddings } from "../../core/vector/codec";
 import { packForStorage, unpackFromStorage } from "../../core/vector/packing";
-import { checkIndexHealth, SidecarState } from "../../core/rules/health";
+import { checkIndexHealth, MetaState, SidecarState } from "../../core/rules/health";
 import { rankSimilarNotes } from "../../core/vector/similarity";
 import { EMBEDDING_MODELS } from "../../constants";
 
@@ -227,7 +227,6 @@ type SidecarRead = {
 };
 
 async function readSidecar(files: IndexFiles, modelId: EmbeddingModelId): Promise<SidecarRead> {
-	// TODO: this is odd. Is it supposed to be here?
 	const buffer = await files.binaryStore.read(modelId);
 	if (!buffer) return {state: {status: "missing"}, decoded: null};
 
@@ -242,6 +241,15 @@ async function readSidecar(files: IndexFiles, modelId: EmbeddingModelId): Promis
 	}
 }
 
+async function readMeta(files: IndexFiles, modelId: EmbeddingModelId): Promise<MetaState> {
+	try {
+		const data = await files.metaStore.read(modelId);
+		return data ? {status: "ok", data} : {status: "missing"};
+	} catch {
+		return {status: "corrupt"};
+	}
+}
+
 export async function openIndex(
 	files: IndexFiles,
 	modelId: EmbeddingModelId,
@@ -250,15 +258,10 @@ export async function openIndex(
 	const dim = EMBEDDING_MODELS[modelId].dim;
 	const throttleMs = options.throttleMs ?? DEFAULT_WRITE_THROTTLE_MS;
 
-	const data = await files.metaStore.read(modelId);
+	const meta = await readMeta(files, modelId);
 	const {state, decoded} = await readSidecar(files, modelId);
 
-	const health = checkIndexHealth({
-		schemaVersion: data?.schemaVersion ?? 1,
-		embeddingDim: data?.embeddingDim ?? 0,
-		entries: data?.index ?? [],
-		sidecar: state,
-	});
+	const health = checkIndexHealth({meta, sidecar: state});
 
 	if (health.status === "unusable") {
 		console.warn(`[Similarity] Index discarded (${health.reason}) — rebuilding from scratch.`);

@@ -17,12 +17,8 @@ export class ObsidianModelIndexMetaStore implements ModelIndexMetaStore {
 		const path = this.pathFor(modelId);
 		if (!(await adapter.exists(path))) return null;
 
-		try {
-			const raw = JSON.parse(await adapter.read(path)) as Partial<ModelIndexFile>;
-			return normalizeModelIndexFile(raw);
-		} catch {
-			return null;
-		}
+		const raw = JSON.parse(await adapter.read(path)) as Partial<ModelIndexFile>;
+		return normalizeModelIndexFile(raw);
 	}
 
 	async write(modelId: EmbeddingModelId, data: ModelIndexFile): Promise<void> {
