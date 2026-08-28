@@ -33,6 +33,7 @@ export class EmbeddingModel {
 	#pipeline: FeatureExtractionPipeline | null = null;
 	#device: Device = 'wasm';
 	#queue: Promise<unknown> = Promise.resolve(); // serialize all inference calls
+	#disposed = false;
 	readonly config: EmbeddingModelConfig;
 	ready: Promise<void>;
 
@@ -52,8 +53,9 @@ export class EmbeddingModel {
 			);
 		}
 
+		let loaded: FeatureExtractionPipeline;
 		try {
-			this.#pipeline = await pipeline('feature-extraction', this.config.repoId, {
+			loaded = await pipeline('feature-extraction', this.config.repoId, {
 				device: this.#device,
 				dtype: webgpuAvailable ? 'fp16' : 'q8',
 				progress_callback: onProgress ? (info: ProgressInfo) => {
@@ -65,6 +67,24 @@ export class EmbeddingModel {
 		} catch (error) {
 			throw new Error(describeLoadFailure(error, this.config));
 		}
+
+		if (this.#disposed) {
+			await loaded.dispose();
+			return;
+		}
+		this.#pipeline = loaded;
+	}
+
+	async dispose(): Promise<void> {
+		if (this.#disposed) return;
+		this.#disposed = true;
+
+		const loaded = this.#pipeline;
+		if (!loaded) return;
+		this.#pipeline = null;
+
+		await this.#queue.catch(() => undefined);
+		await loaded.dispose();
 	}
 
 	countTokens = (text: string): number => {
@@ -77,6 +97,7 @@ export class EmbeddingModel {
 		return new Promise((resolve, reject) => {
 			this.#queue = this.#queue.then(async () => {
 				try {
+					if (this.#disposed) return reject(new Error("model has been disposed"));
 					if (!this.#pipeline) return reject(new Error("pipeline not yet initialized"));
 					const result: { data: Float32Array } = await this.#pipeline(input, {
 						pooling: this.config.pooling,

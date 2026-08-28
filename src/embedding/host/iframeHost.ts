@@ -11,8 +11,8 @@ class EmbeddingProvider implements EmbeddingPort {
 		return await this.iframeMessenger.sendMessage(text, options.maxOverlapPercent, options.maxChunkSize);
 	}
 
-	unload(): void {
-		this.iframeMessenger.unload();
+	unload(): Promise<void> {
+		return this.iframeMessenger.unload();
 	}
 }
 

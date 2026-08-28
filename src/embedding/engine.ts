@@ -156,7 +156,7 @@ export class EmbeddingEngine {
 		this.abortController = null;
 		this.pending = null;
 		this.cancelQueued("The embedding engine has been disposed.");
-		if (this.state.status === "ready") this.state.embedder.unload();
+		if (this.state.status === "ready") void this.state.embedder.unload();
 		this.state = {status: "idle"};
 		this.listeners.clear();
 	}
@@ -233,7 +233,7 @@ export class EmbeddingEngine {
 
 		this.cancelQueued("The embedding model is being switched.");
 		await this.inFlight;
-		outgoing?.unload();
+		await outgoing?.unload();
 
 		if (epoch !== this.epoch) throw new ModelRequestSupersededError(modelId);
 
@@ -255,7 +255,7 @@ export class EmbeddingEngine {
 		}
 
 		if (epoch !== this.epoch) {
-			embedder.unload();
+			void embedder.unload();
 			throw new ModelRequestSupersededError(modelId);
 		}
 
@@ -307,7 +307,7 @@ export class EmbeddingEngine {
 			try {
 				const restored = await this.load(previousModelId, previousConfig, epoch, signal);
 				if (epoch !== this.epoch) {
-					restored.unload();
+					void restored.unload();
 					throw new ModelRequestSupersededError(modelId);
 				}
 

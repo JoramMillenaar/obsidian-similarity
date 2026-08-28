@@ -4,6 +4,7 @@ import { EmbeddingModelConfig, IframeMessage } from "../../types";
 const EMBED_ACK_TIMEOUT_MS = 15000;
 const EMBED_TIMEOUT_MS = 300000;
 const READY_PING_TIMEOUT_MS = 3000;
+const DISPOSE_TIMEOUT_MS = 10000;
 const READY_STALL_TIMEOUT_MS = 120000;
 const READY_TOTAL_TIMEOUT_MS = 300000;
 const MAX_PING_BACKOFF_MS = 5000;
@@ -70,6 +71,7 @@ export class IframeMessenger {
     private requestIdCounter = 0;
     private lastIframeActivityAt = 0;
     private loadError: ModelLoadFailedError | null = null;
+    private unloaded = false;
     private pendingRequests = new Map<number, PendingRequest>();
 
     constructor(
@@ -98,7 +100,7 @@ export class IframeMessenger {
         try {
             await this.waitForIframeReady(signal);
         } catch (error) {
-            this.unload();
+            await this.unload();
             throw error;
         }
     }
@@ -260,7 +262,31 @@ export class IframeMessenger {
         await promise;
     }
 
-    unload(): void {
+    async unload(): Promise<void> {
+        if (this.unloaded) return;
+        this.unloaded = true;
+
+        await this.requestFrameDispose();
+        this.detach();
+    }
+
+    private async requestFrameDispose(): Promise<void> {
+        const contentWindow = this.iframe?.contentWindow;
+        if (!contentWindow || this.loadError) return;
+
+        const requestId = this.requestIdCounter++;
+        const {promise} = this.trackRequest(requestId, DISPOSE_TIMEOUT_MS, "Frame dispose timed out", false);
+        const message: IframeMessage = {requestId, payload: "dispose"};
+        contentWindow.postMessage(message, window.origin);
+
+        try {
+            await promise;
+        } catch (error) {
+            console.warn(`[Similarity] The embedding frame did not confirm disposal: ${error}`);
+        }
+    }
+
+    private detach(): void {
         for (const pending of this.pendingRequests.values()) {
             window.clearTimeout(pending.timeoutId);
             pending.reject(new Error("Embedding iframe was unloaded"));

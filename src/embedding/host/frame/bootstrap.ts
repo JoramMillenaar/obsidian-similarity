@@ -33,6 +33,16 @@ async function handleMessage(event: MessageEvent<IframeMessage>): Promise<void> 
 	const source = event.source as Window;
 
 	try {
+		if (payload === 'dispose') {
+			await model.dispose();
+			// TODO: odd response format, no?
+			source.postMessage(
+				{requestId, data: {chunks: [], metadata: {embeddingModelId: model.config.id, maxOverlapPercent: 0}}},
+				window.origin
+			);
+			return;
+		}
+
 		if (payload === 'ping') {
 			await model.ready;
 			source.postMessage(
