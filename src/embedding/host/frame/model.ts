@@ -20,6 +20,20 @@ async function isModelCached(repoId: string): Promise<boolean> {
 	}
 }
 
+type GpuAdapterLike = { features: { has(feature: string): boolean } };
+type GpuLike = { requestAdapter(): Promise<GpuAdapterLike | null> };
+
+async function supportsWebGpuF16(): Promise<boolean> {
+	const gpu = (navigator as Navigator & { gpu?: GpuLike }).gpu;
+	if (gpu == null) return false;
+	try {
+		const adapter = await gpu.requestAdapter();
+		return adapter?.features.has('shader-f16') ?? false;
+	} catch {
+		return false;
+	}
+}
+
 function describeLoadFailure(error: unknown, config: EmbeddingModelConfig): string {
 	const detail = error instanceof Error ? error.message : String(error);
 	const looksLikeNetwork = !navigator.onLine || /failed to fetch|network|load model file/i.test(detail);
@@ -42,8 +56,8 @@ export class EmbeddingModel {
 	}
 
 	async #initialize(onProgress?: ModelLoadProgressCallback): Promise<void> {
-		const webgpuAvailable = (navigator as Navigator & { gpu?: unknown }).gpu != null;
-		this.#device = webgpuAvailable ? 'webgpu' : 'wasm';
+		const useWebGpu = await supportsWebGpuF16();
+		this.#device = useWebGpu ? 'webgpu' : 'wasm';
 
 		if (!navigator.onLine && !(await isModelCached(this.config.repoId))) {
 			throw new Error(
@@ -55,7 +69,7 @@ export class EmbeddingModel {
 		try {
 			this.#pipeline = await pipeline('feature-extraction', this.config.repoId, {
 				device: this.#device,
-				dtype: webgpuAvailable ? 'fp16' : 'q8',
+				dtype: useWebGpu ? 'fp16' : 'q8',
 				progress_callback: onProgress ? (info: ProgressInfo) => {
 					if (info.status === 'progress') {
 						onProgress({ progress: info.progress, file: info.file, loaded: info.loaded, total: info.total });
