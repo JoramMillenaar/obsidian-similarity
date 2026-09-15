@@ -1,6 +1,6 @@
-import { chunkText } from '../../../core/text/chunking';
-import { normalizeEmbedding, quantizeEmbedding } from '../../../core/vector/similarity';
-import { EmbeddedChunk, EmbeddingResult } from '../../../ports/embeddingPort';
+import { chunkText } from '../../core/text/chunking';
+import { normalizeEmbedding, quantizeEmbedding } from '../../core/vector/similarity';
+import { EmbeddedChunk, EmbeddingResult } from '../../ports/embeddingPort';
 import { EmbeddingModel } from './model';
 
 // Reserve two tokens for the [CLS]/[SEP] specials the tokenizer adds on top

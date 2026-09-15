@@ -11,18 +11,26 @@ if you want to view the source, please visit the github repository of this plugi
 
 const prod = (process.argv[2] === "production");
 
-const iframeBuild = await esbuild.build({
-	entryPoints: ["src/embedding/host/frame/bootstrap.ts"],
+const workerBuild = await esbuild.build({
+	entryPoints: ["src/embedding/host/worker/bootstrap.ts"],
 	bundle: true,
 	platform: "browser",
-	format: "esm",
+	format: "iife",
 	target: "esnext",
 	write: false,
 	minify: prod,
 });
-const iframeScript = iframeBuild.outputFiles[0].text;
-const iframeHtml = `<script type="module">\n${iframeScript}\n</script>\n`;
-const iframeCodeString = JSON.stringify(iframeHtml);
+// Obsidian's BrowserWindow sets `nodeIntegrationInWorker: true` (with `contextIsolation: false`),
+// so a Worker created here still gets a real Node `process` global, injected as a plain mutable
+// property (not a locked-down proxy). @huggingface/transformers treats `process.release.name === 'node'`
+// as proof it's running server-side and restricts itself to the `cpu` execution provider, hiding
+// WebGPU/WASM device support in the process. Stripping `process` from *this worker's own* global
+// scope only (nothing else runs in it) before any bundled module evaluates makes the library correctly
+// detect a browser-like environment instead. This must run before the bundle's own module graph
+// evaluates (import hoisting would otherwise run transformers.js's env detection first), so it's
+// prepended as raw text ahead of the bundle rather than written as part of bootstrap.ts.
+const workerEnvironmentShim = `try { delete self.process; } catch (e) { try { self.process = undefined; } catch (e2) {} }\n`;
+const workerCodeString = JSON.stringify(workerEnvironmentShim + workerBuild.outputFiles[0].text);
 
 const context = await esbuild.context({
 	banner: {
@@ -54,7 +62,7 @@ const context = await esbuild.context({
 	outfile: "main.js",
 	minify: prod,
 	define: {
-		__IFRAME_CONTENTS_PLACEHOLDER__: iframeCodeString, // Inline the bundled Iframe code
+		__WORKER_CONTENTS_PLACEHOLDER__: workerCodeString, // Inline the bundled embedding worker code
 		__DEV__: JSON.stringify(!prod), // Dev-only features; folds to `false` in production so they're tree-shaken out
 	},
 });

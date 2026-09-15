@@ -1,5 +1,5 @@
 import { env, pipeline, FeatureExtractionPipeline, ProgressInfo } from '@huggingface/transformers';
-import { EmbeddingModelConfig } from '../../../types';
+import { EmbeddingModelConfig } from '../../types';
 
 env.allowLocalModels = false;
 

@@ -1,0 +1,62 @@
+import { EmbeddingModel } from '../model';
+import { makeGenerateDocumentEmbeddings, GenerateDocumentEmbeddings } from '../embedDocument';
+import { WorkerRequest, WorkerResponse } from './protocol';
+
+let model: EmbeddingModel | null = null;
+let generateDocumentEmbeddings: GenerateDocumentEmbeddings | null = null;
+
+function post(message: WorkerResponse): void {
+	(self as unknown as { postMessage(message: WorkerResponse): void }).postMessage(message);
+}
+
+async function handleInit(config: WorkerRequest & { type: 'init' }): Promise<void> {
+	model = new EmbeddingModel(config.config, (progress) => {
+		post({
+			type: 'model-load-progress',
+			progress: progress.progress,
+			file: progress.file,
+			loaded: progress.loaded,
+			total: progress.total,
+		});
+	});
+	generateDocumentEmbeddings = makeGenerateDocumentEmbeddings(model);
+
+	try {
+		await model.ready;
+		post({type: 'ready', device: model.getDevice()});
+	} catch (error) {
+		post({
+			type: 'model-load-error',
+			message: error instanceof Error ? error.message : String(error),
+			offline: !navigator.onLine,
+		});
+	}
+}
+
+async function handleEmbed(message: WorkerRequest & { type: 'embed' }): Promise<void> {
+	const {requestId, payload, maxOverlapPercent, maxChunkSize} = message;
+	post({type: 'ack', requestId});
+
+	try {
+		if (!generateDocumentEmbeddings) throw new Error("Embedding model has not been initialized");
+		const data = await generateDocumentEmbeddings(payload, maxOverlapPercent, maxChunkSize);
+		post({type: 'embed-result', requestId, data});
+	} catch (error) {
+		post({requestId, type: 'embed-error', message: error instanceof Error ? error.message : String(error)});
+	}
+}
+
+async function handleDispose(message: WorkerRequest & { type: 'dispose' }): Promise<void> {
+	await model?.dispose();
+	post({type: 'disposed', requestId: message.requestId});
+}
+
+async function handleMessage(message: WorkerRequest): Promise<void> {
+	if (message.type === 'init') return handleInit(message);
+	if (message.type === 'embed') return handleEmbed(message);
+	if (message.type === 'dispose') return handleDispose(message);
+}
+
+self.addEventListener('message', (event: MessageEvent<WorkerRequest>) => {
+	void handleMessage(event.data);
+});

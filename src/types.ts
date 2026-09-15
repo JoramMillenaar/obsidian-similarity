@@ -48,13 +48,6 @@ export type RelatedNote = {
 	score: number;
 };
 
-export interface IframeMessage {
-	requestId: number;
-	payload: string;
-	maxOverlapPercent?: number;
-	maxChunkSize?: number;
-}
-
 export type IndexingQueueSnapshot = {
 	isRunning: boolean;
 	currentNoteId?: string;
