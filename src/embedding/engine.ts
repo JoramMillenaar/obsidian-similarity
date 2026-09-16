@@ -1,77 +1,44 @@
 import { EmbeddingModelConfig, EmbeddingModelId } from "../types";
-import { EmbeddingPort, EmbeddingResult, LoadEmbeddingPort, ModelLoadProgress, SettingsRepository, StatusReporter } from "../ports";
+import { EmbeddingPort, EmbeddingResult, LoadEmbeddingPort, SettingsRepository, StatusReporter } from "../ports";
 import { EMBEDDING_MODELS, MIN_DOWNLOAD_PROGRESS_BYTES } from "../constants";
-import { Priority } from "../core/util/priorityQueue";
+import { ModelNotReadyError, ModelRequestSupersededError } from "./errors";
+import {
+	EngineState,
+	EngineStatus,
+	Job,
+	LoadPhase,
+	PendingModelRequest,
+	Priority,
+	Unsubscribe,
+} from "./types";
 
-export type { Priority };
-
-export type LoadPhase = "downloading" | "finalizing";
-
-export type EngineStatus =
-	| { kind: "idle" }
-	| { kind: "loading"; modelId: EmbeddingModelId; progress: number | null; phase: LoadPhase }
-	| { kind: "ready"; modelId: EmbeddingModelId }
-	| { kind: "error"; modelId: EmbeddingModelId; message: string; offline: boolean };
-
-export type Unsubscribe = () => void;
-
-export type EngineStateReader = {
-	status(): EngineStatus;
-	subscribe(listener: (status: EngineStatus) => void): Unsubscribe;
-};
-
-export class ModelNotReadyError extends Error {
-	constructor(readonly status: EngineStatus["kind"]) {
-		super(
-			status === "idle"
-				? "No embedding model is loaded yet."
-				: status === "error"
-					? "The embedding model failed to load."
-					: "A model switch is in progress.",
-		);
-	}
-}
-
-export class ModelRequestSupersededError extends Error {
-	constructor(readonly requestedModelId: EmbeddingModelId) {
-		super(`Loading ${requestedModelId} was superseded by a newer model request.`);
-	}
-}
-
-type EngineState =
-	| { status: "idle" }
-	| { status: "loading"; modelId: EmbeddingModelId; epoch: number; progress: ModelLoadProgress | null; phase: LoadPhase }
-	| { status: "error"; modelId: EmbeddingModelId; message: string; offline: boolean; epoch: number }
-	| { status: "ready"; modelId: EmbeddingModelId; embedder: EmbeddingPort; epoch: number };
-
-type Job = {
-	priority: Priority;
-	sequence: number;
-	run: (embedder: EmbeddingPort) => Promise<unknown>;
-	settle: () => void;
-	cancel: (error: unknown) => void;
-};
-
-type PendingRequest = { modelId: EmbeddingModelId; promise: Promise<void> };
+export type { EngineStatus, LoadPhase, Unsubscribe, EngineStateReader, Priority } from "./types";
+export { ModelNotReadyError, ModelRequestSupersededError } from "./errors";
 
 const RANK: Record<Priority, number> = {high: 2, medium: 1, low: 0};
 
+/** Collaborators the engine needs to load models, read settings, and report progress to the user. */
 export type EmbeddingEngineDeps = {
 	loadEmbedder: LoadEmbeddingPort;
 	settingsRepo: SettingsRepository;
 	status: StatusReporter;
 };
 
+/** Per-call tuning for {@link EmbeddingEngine.embed}. */
 export type EmbedOptions = {
 	priority?: Priority;
 	maxChunkSize?: number;
 };
 
+/**
+ * Owns the lifecycle of the active embedding model (loading, switching, recovering from
+ * failure) and serializes embed requests against it through a priority queue.
+ */
 export class EmbeddingEngine {
 	private state: EngineState = {status: "idle"};
 	private epoch = 0;
 	private abortController: AbortController | null = null;
-	private pending: PendingRequest | null = null;
+	private pending: PendingModelRequest | null = null;
 	private disposed = false;
 
 	private readonly queue: Job[] = [];
@@ -84,6 +51,7 @@ export class EmbeddingEngine {
 	constructor(private readonly deps: EmbeddingEngineDeps) {
 	}
 
+	/** Current model/loading state, for callers that just need a snapshot. */
 	status(): EngineStatus {
 		const state = this.state;
 		if (state.status === "ready") return {kind: "ready", modelId: state.modelId};
@@ -101,6 +69,7 @@ export class EmbeddingEngine {
 		return {kind: "idle"};
 	}
 
+	/** Registers a listener for status changes; it is invoked immediately with the current status. */
 	subscribe(listener: (status: EngineStatus) => void): Unsubscribe {
 		this.listeners.add(listener);
 		listener(this.status());
@@ -109,6 +78,7 @@ export class EmbeddingEngine {
 		};
 	}
 
+	/** Queues `text` for embedding by the ready model, resolving with `null` if it produced no chunks. */
 	embed(text: string, options: EmbedOptions = {}): Promise<EmbeddingResult | null> {
 		if (this.disposed) return Promise.reject(new Error("The embedding engine has been disposed."));
 		if (this.state.status !== "ready") return Promise.reject(new ModelNotReadyError(this.state.status));
@@ -132,11 +102,12 @@ export class EmbeddingEngine {
 		});
 	}
 
+	/** Loads and switches to `modelId`, superseding any in-flight switch and falling back to the previous model on failure. */
 	requestModel(modelId: EmbeddingModelId): Promise<void> {
 		if (this.state.status === "ready" && this.state.modelId === modelId) return Promise.resolve();
 		if (this.pending?.modelId === modelId) return this.pending.promise;
 
-		const pending: PendingRequest = {modelId, promise: Promise.resolve()};
+		const pending: PendingModelRequest = {modelId, promise: Promise.resolve()};
 		pending.promise = this.runRequest(modelId).finally(() => {
 			if (this.pending === pending) this.pending = null;
 		});
@@ -144,11 +115,13 @@ export class EmbeddingEngine {
 		return pending.promise;
 	}
 
+	/** Re-attempts loading the model that's currently in an error state; a no-op otherwise. */
 	retry(): Promise<void> {
 		if (this.state.status !== "error") return Promise.resolve();
 		return this.requestModel(this.state.modelId);
 	}
 
+	/** Tears down the engine: cancels queued work, unloads the active model, and stops accepting new requests. */
 	dispose(): void {
 		this.disposed = true;
 		this.epoch++;
@@ -242,7 +215,7 @@ export class EmbeddingEngine {
 
 		let embedder: EmbeddingPort;
 		try {
-			embedder = await this.load(modelId, config, epoch, controller.signal);
+			embedder = await this.load(config, epoch, controller.signal);
 		} catch (error) {
 			if (epoch !== this.epoch) throw new ModelRequestSupersededError(modelId);
 
@@ -269,7 +242,6 @@ export class EmbeddingEngine {
 	}
 
 	private load(
-		modelId: EmbeddingModelId,
 		config: EmbeddingModelConfig,
 		epoch: number,
 		signal: AbortSignal,
@@ -305,7 +277,7 @@ export class EmbeddingEngine {
 			this.deps.status.update(`Restoring ${previousConfig.label} model…`);
 
 			try {
-				const restored = await this.load(previousModelId, previousConfig, epoch, signal);
+				const restored = await this.load(previousConfig, epoch, signal);
 				if (epoch !== this.epoch) {
 					void restored.unload();
 					throw new ModelRequestSupersededError(modelId);
@@ -331,7 +303,7 @@ export class EmbeddingEngine {
 			status: "error",
 			modelId,
 			message,
-			offline: typeof navigator !== "undefined" && navigator.onLine === false,
+			offline: typeof navigator !== "undefined" && !navigator.onLine,
 			epoch,
 		};
 		this.notify();

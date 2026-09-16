@@ -1,11 +1,8 @@
 import { env, pipeline, FeatureExtractionPipeline, ProgressInfo } from '@huggingface/transformers';
 import { EmbeddingModelConfig } from '../../types';
+import { Device, ModelLoadProgressCallback } from './types';
 
 env.allowLocalModels = false;
-
-export type Device = 'wasm' | 'webgpu';
-export type ModelLoadProgress = { progress: number; file: string; loaded: number; total: number };
-export type ModelLoadProgressCallback = (progress: ModelLoadProgress) => void;
 
 const TRANSFORMERS_CACHE = 'transformers-cache';
 const cacheKeyFor = (repoId: string, file: string) => `https://huggingface.co/${repoId}/resolve/main/${file}`;
@@ -29,6 +26,7 @@ function describeLoadFailure(error: unknown, config: EmbeddingModelConfig): stri
 	return `Could not load the ${config.label} model: ${detail}`;
 }
 
+/** Wraps a single loaded transformers.js feature-extraction pipeline: loads it, runs serialized inference, and disposes it. */
 export class EmbeddingModel {
 	#pipeline: FeatureExtractionPipeline | null = null;
 	#device: Device = 'wasm';
@@ -75,6 +73,7 @@ export class EmbeddingModel {
 		this.#pipeline = loaded;
 	}
 
+	/** Releases the underlying pipeline once any in-flight `embed` call has settled. Safe to call more than once. */
 	async dispose(): Promise<void> {
 		if (this.#disposed) return;
 		this.#disposed = true;
@@ -87,12 +86,13 @@ export class EmbeddingModel {
 		await loaded.dispose();
 	}
 
+	/** Token count for `text` under this model's tokenizer, excluding special tokens. */
 	countTokens = (text: string): number => {
 		if (!this.#pipeline) throw new Error("pipeline not yet initialized");
 		return this.#pipeline.tokenizer.encode(text, {add_special_tokens: false}).length;
 	};
 
-	// Serialized single-text inference — each call waits for the previous.
+	/** Runs inference for `input`, queued behind any prior call so requests are serialized. */
 	embed(input: string): Promise<Float32Array | null> {
 		return new Promise((resolve, reject) => {
 			this.#queue = this.#queue.then(async () => {
@@ -111,6 +111,7 @@ export class EmbeddingModel {
 		});
 	}
 
+	/** The compute backend ('wasm' or 'webgpu') this model ended up loading on. */
 	getDevice(): Device {
 		return this.#device;
 	}

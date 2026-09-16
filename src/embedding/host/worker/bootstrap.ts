@@ -2,6 +2,11 @@ import { EmbeddingModel } from '../model';
 import { makeGenerateDocumentEmbeddings, GenerateDocumentEmbeddings } from '../embedDocument';
 import { WorkerRequest, WorkerResponse } from './protocol';
 
+/**
+ * Entry point bundled into the embedding Worker. Owns the worker-side model instance and
+ * dispatches `WorkerRequest` messages from the host, replying with `WorkerResponse` messages.
+ */
+
 let model: EmbeddingModel | null = null;
 let generateDocumentEmbeddings: GenerateDocumentEmbeddings | null = null;
 
@@ -9,6 +14,7 @@ function post(message: WorkerResponse): void {
 	(self as unknown as { postMessage(message: WorkerResponse): void }).postMessage(message);
 }
 
+/** Creates the worker-side model and reports 'ready' or 'model-load-error' once loading settles. */
 async function handleInit(config: WorkerRequest & { type: 'init' }): Promise<void> {
 	model = new EmbeddingModel(config.config, (progress) => {
 		post({
@@ -33,6 +39,7 @@ async function handleInit(config: WorkerRequest & { type: 'init' }): Promise<voi
 	}
 }
 
+/** Acks the embed request, then generates and posts back its embeddings (or an error). */
 async function handleEmbed(message: WorkerRequest & { type: 'embed' }): Promise<void> {
 	const {requestId, payload, maxOverlapPercent, maxChunkSize} = message;
 	post({type: 'ack', requestId});
@@ -46,11 +53,13 @@ async function handleEmbed(message: WorkerRequest & { type: 'embed' }): Promise<
 	}
 }
 
+/** Disposes the worker-side model and confirms with a 'disposed' response. */
 async function handleDispose(message: WorkerRequest & { type: 'dispose' }): Promise<void> {
 	await model?.dispose();
 	post({type: 'disposed', requestId: message.requestId});
 }
 
+/** Routes an incoming `WorkerRequest` to its handler by type. */
 async function handleMessage(message: WorkerRequest): Promise<void> {
 	if (message.type === 'init') return handleInit(message);
 	if (message.type === 'embed') return handleEmbed(message);

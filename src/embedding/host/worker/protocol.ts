@@ -1,11 +1,13 @@
 import { EmbeddingModelConfig } from "../../../types";
-import { EmbeddingResult } from "../../../ports/embeddingPort";
+import { EmbeddingResult } from "../../../ports";
 
+/** Messages the host sends to the embedding worker. */
 export type WorkerRequest =
 	| { type: 'init'; config: EmbeddingModelConfig }
 	| { type: 'embed'; requestId: number; payload: string; maxOverlapPercent?: number; maxChunkSize?: number }
 	| { type: 'dispose'; requestId: number };
 
+/** Messages the embedding worker posts back to the host. */
 export type WorkerResponse =
 	| { type: 'model-load-progress'; progress: number; file: string; loaded: number; total: number }
 	| { type: 'model-load-error'; message: string; offline: boolean }
