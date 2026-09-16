@@ -17,6 +17,22 @@ async function isModelCached(repoId: string): Promise<boolean> {
 	}
 }
 
+type GpuAdapterLike = { features: { has(feature: string): boolean } };
+type GpuLike = { requestAdapter(): Promise<GpuAdapterLike | null> };
+
+// WebGPU support doesn't imply shader-f16 support; it's an optional feature some adapters lack.
+// Credit to @MikailuReeves for flagging this and suggesting the fix.
+async function supportsWebGpuF16(): Promise<boolean> {
+	const gpu = (navigator as Navigator & { gpu?: GpuLike }).gpu;
+	if (gpu == null) return false;
+	try {
+		const adapter = await gpu.requestAdapter();
+		return adapter?.features.has('shader-f16') ?? false;
+	} catch {
+		return false;
+	}
+}
+
 function describeLoadFailure(error: unknown, config: EmbeddingModelConfig): string {
 	const detail = error instanceof Error ? error.message : String(error);
 	const looksLikeNetwork = !navigator.onLine || /failed to fetch|network|load model file/i.test(detail);
@@ -42,6 +58,7 @@ export class EmbeddingModel {
 
 	async #initialize(onProgress?: ModelLoadProgressCallback): Promise<void> {
 		const webgpuAvailable = (navigator as Navigator & { gpu?: unknown }).gpu != null;
+		const f16Available = webgpuAvailable && (await supportsWebGpuF16());
 		this.#device = webgpuAvailable ? 'webgpu' : 'wasm';
 
 		if (!navigator.onLine && !(await isModelCached(this.config.repoId))) {
@@ -55,7 +72,7 @@ export class EmbeddingModel {
 		try {
 			loaded = await pipeline('feature-extraction', this.config.repoId, {
 				device: this.#device,
-				dtype: webgpuAvailable ? 'fp16' : 'q8',
+				dtype: webgpuAvailable ? (f16Available ? 'fp16' : 'fp32') : 'q8',
 				progress_callback: onProgress ? (info: ProgressInfo) => {
 					if (info.status === 'progress') {
 						onProgress({ progress: info.progress, file: info.file, loaded: info.loaded, total: info.total });
