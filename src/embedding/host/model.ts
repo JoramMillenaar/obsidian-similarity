@@ -1,11 +1,8 @@
 import { env, pipeline, FeatureExtractionPipeline, ProgressInfo } from '@huggingface/transformers';
-import { EmbeddingModelConfig } from '../../../types';
+import { EmbeddingModelConfig } from '../../types';
+import { Device, ModelLoadProgressCallback } from './types';
 
 env.allowLocalModels = false;
-
-export type Device = 'wasm' | 'webgpu';
-export type ModelLoadProgress = { progress: number; file: string; loaded: number; total: number };
-export type ModelLoadProgressCallback = (progress: ModelLoadProgress) => void;
 
 const TRANSFORMERS_CACHE = 'transformers-cache';
 const cacheKeyFor = (repoId: string, file: string) => `https://huggingface.co/${repoId}/resolve/main/${file}`;
@@ -20,6 +17,22 @@ async function isModelCached(repoId: string): Promise<boolean> {
 	}
 }
 
+type GpuAdapterLike = { features: { has(feature: string): boolean } };
+type GpuLike = { requestAdapter(): Promise<GpuAdapterLike | null> };
+
+// WebGPU support doesn't imply shader-f16 support; it's an optional feature some adapters lack.
+// Credit to @MikailuReeves for flagging this and suggesting the fix.
+async function supportsWebGpuF16(): Promise<boolean> {
+	const gpu = (navigator as Navigator & { gpu?: GpuLike }).gpu;
+	if (gpu == null) return false;
+	try {
+		const adapter = await gpu.requestAdapter();
+		return adapter?.features.has('shader-f16') ?? false;
+	} catch {
+		return false;
+	}
+}
+
 function describeLoadFailure(error: unknown, config: EmbeddingModelConfig): string {
 	const detail = error instanceof Error ? error.message : String(error);
 	const looksLikeNetwork = !navigator.onLine || /failed to fetch|network|load model file/i.test(detail);
@@ -29,10 +42,12 @@ function describeLoadFailure(error: unknown, config: EmbeddingModelConfig): stri
 	return `Could not load the ${config.label} model: ${detail}`;
 }
 
+/** Wraps a single loaded transformers.js feature-extraction pipeline: loads it, runs serialized inference, and disposes it. */
 export class EmbeddingModel {
 	#pipeline: FeatureExtractionPipeline | null = null;
 	#device: Device = 'wasm';
 	#queue: Promise<unknown> = Promise.resolve(); // serialize all inference calls
+	#disposed = false;
 	readonly config: EmbeddingModelConfig;
 	ready: Promise<void>;
 
@@ -43,6 +58,7 @@ export class EmbeddingModel {
 
 	async #initialize(onProgress?: ModelLoadProgressCallback): Promise<void> {
 		const webgpuAvailable = (navigator as Navigator & { gpu?: unknown }).gpu != null;
+		const f16Available = webgpuAvailable && (await supportsWebGpuF16());
 		this.#device = webgpuAvailable ? 'webgpu' : 'wasm';
 
 		if (!navigator.onLine && !(await isModelCached(this.config.repoId))) {
@@ -52,10 +68,11 @@ export class EmbeddingModel {
 			);
 		}
 
+		let loaded: FeatureExtractionPipeline;
 		try {
-			this.#pipeline = await pipeline('feature-extraction', this.config.repoId, {
+			loaded = await pipeline('feature-extraction', this.config.repoId, {
 				device: this.#device,
-				dtype: webgpuAvailable ? 'fp16' : 'q8',
+				dtype: webgpuAvailable ? (f16Available ? 'fp16' : 'fp32') : 'q8',
 				progress_callback: onProgress ? (info: ProgressInfo) => {
 					if (info.status === 'progress') {
 						onProgress({ progress: info.progress, file: info.file, loaded: info.loaded, total: info.total });
@@ -65,22 +82,47 @@ export class EmbeddingModel {
 		} catch (error) {
 			throw new Error(describeLoadFailure(error, this.config));
 		}
+
+		if (this.#disposed) {
+			await loaded.dispose();
+			return;
+		}
+		this.#pipeline = loaded;
 	}
 
+	/** Releases the underlying pipeline once any in-flight `embed` call has settled. Safe to call more than once. */
+	async dispose(): Promise<void> {
+		if (this.#disposed) return;
+		this.#disposed = true;
+
+		const loaded = this.#pipeline;
+		if (!loaded) return;
+		this.#pipeline = null;
+
+		await this.#queue.catch(() => undefined);
+		await loaded.dispose();
+	}
+
+	/** Token count for `text` under this model's tokenizer, excluding special tokens. */
 	countTokens = (text: string): number => {
 		if (!this.#pipeline) throw new Error("pipeline not yet initialized");
 		return this.#pipeline.tokenizer.encode(text, {add_special_tokens: false}).length;
 	};
 
-	// Serialized single-text inference — each call waits for the previous.
-	embed(input: string): Promise<Float32Array | null> {
+	/**
+	 * Runs inference for `input`, queued behind any prior call so requests are serialized.
+	 * Not normalized here — `embedDocument.ts` always L2-normalizes the result itself right
+	 * before quantizing, so normalizing again at the pipeline level would just redo that work.
+	 */
+	embed(input: string): Promise<Float32Array> {
 		return new Promise((resolve, reject) => {
 			this.#queue = this.#queue.then(async () => {
 				try {
+					if (this.#disposed) return reject(new Error("model has been disposed"));
 					if (!this.#pipeline) return reject(new Error("pipeline not yet initialized"));
 					const result: { data: Float32Array } = await this.#pipeline(input, {
 						pooling: this.config.pooling,
-						normalize: true
+						normalize: false,
 					});
 					resolve(result.data);
 				} catch (err) {
@@ -90,6 +132,7 @@ export class EmbeddingModel {
 		});
 	}
 
+	/** The compute backend ('wasm' or 'webgpu') this model ended up loading on. */
 	getDevice(): Device {
 		return this.#device;
 	}

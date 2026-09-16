@@ -65,6 +65,7 @@ test("the banner reflects model-download state with no note-specific context", (
 		message: "Setting up...",
 		processed: 40,
 		total: 100,
+		wasmWarning: false,
 	});
 
 	engine.push({kind: "ready", modelId: "m1"});
@@ -98,6 +99,26 @@ test("a small indexing run does not raise a banner, a large one does", () => {
 	indexer.push({...IDLE_INDEXING, isRunning: true, pending: 40, processed: 2, total: 42});
 	assert.strictEqual(seen[seen.length - 1].visible, true);
 	assert.strictEqual(seen[seen.length - 1].total, 42);
+
+	hub.dispose();
+});
+
+test("a wasm device raises a warning alongside a visible indexing banner, not while idle", () => {
+	const {hub, engine, indexer} = makeHub({
+		engine: makeFakeEngine({kind: "ready", modelId: "m1", device: "wasm"}),
+	});
+
+	const seen = [];
+	subscribeBanner(hub, (banner) => seen.push(banner));
+
+	assert.strictEqual(seen[seen.length - 1].wasmWarning, false, "no warning while idle, even on wasm");
+
+	indexer.push({...IDLE_INDEXING, isRunning: true, pending: 40, processed: 2, total: 42});
+	assert.strictEqual(seen[seen.length - 1].visible, true);
+	assert.strictEqual(seen[seen.length - 1].wasmWarning, true);
+
+	engine.push({kind: "ready", modelId: "m1", device: "webgpu"});
+	assert.strictEqual(seen[seen.length - 1].wasmWarning, false, "no warning on webgpu");
 
 	hub.dispose();
 });

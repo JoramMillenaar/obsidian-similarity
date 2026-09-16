@@ -6,7 +6,7 @@ import { ObsidianModelIndexMetaStore } from "./obsidian/obsidianModelIndexMetaSt
 import { LegacyEmbeddingFileStore } from "./obsidian/legacyEmbeddingFileStore";
 import { ObsidianPluginDataStore } from "./obsidian/obsidianPluginDataStore";
 import { ObsidianSettingsRepository } from "./obsidian/obsidianSettings";
-import { loadEmbeddingProvider } from "./embedding/host/iframeHost";
+import { loadEmbeddingProvider } from "./embedding/host/workerProvider";
 import {
 	EmbeddingFileStore,
 	ModelIndexMetaStore,

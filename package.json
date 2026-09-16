@@ -1,6 +1,6 @@
 {
 	"name": "similarity",
-	"version": "2.5.2",
+	"version": "2.6.0",
 	"description": "Search, explore and see related notes based on their meaning. Using a tiny AI running fully on-device: data never leaves your machine, no API keys needed. Great for journalling, or a second brain.",
 	"main": "main.js",
 	"scripts": {
@@ -24,7 +24,7 @@
 		"typescript": "4.7.4"
 	},
 	"dependencies": {
-		"@huggingface/transformers": "^3.5.0",
+		"@huggingface/transformers": "^4.2.0",
 		"@types/p-limit": "^2.1.0",
 		"@types/turndown": "^5.0.5",
 		"p-limit": "^6.1.0",
@@ -32,6 +32,6 @@
 		"uuid": "^11.1.1"
 	},
 	"overrides": {
-		"sharp": "^0.35.3"
+		"sharp": "^0.35.4"
 	}
 }

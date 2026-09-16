@@ -3,6 +3,7 @@ import { InsertWikilinkAtCursorUseCase } from "../app/insertWikilinkAtCursor";
 import { SimilarSearchFeed, SimilarSearchResult } from "../search/similarSearchFeed";
 import { StatusHub } from "../status/statusHub";
 import { BannerState, computeBanner, subscribeBanner } from "./banner";
+import { WASM_WARNING_MESSAGE } from "../status/notices";
 import { textForNotice } from "./similarNoticeText";
 import { KeyedDebouncer } from "../core/util/debounce";
 import { RelatedNote } from "../types";
@@ -219,6 +220,13 @@ export class SearchModal extends SuggestModal<RelatedNote> {
 			cls: "similarity-index-banner-message",
 			text: banner.message,
 		});
+
+		if (banner.wasmWarning) {
+			this.bannerEl.createDiv({
+				cls: "similarity-index-banner-gpu-warning",
+				text: WASM_WARNING_MESSAGE,
+			});
+		}
 
 		if (banner.total > 0) {
 			const progressRow = this.bannerEl.createDiv({cls: "similarity-index-banner-progress"});
