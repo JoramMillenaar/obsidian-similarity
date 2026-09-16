@@ -55,7 +55,9 @@ class WorkerMessenger {
 		if (signal?.aborted) throw abortError();
 
 		const blob = new Blob([this.workerScript], {type: 'application/javascript'});
-		const worker = new Worker(URL.createObjectURL(blob));
+		const url = URL.createObjectURL(blob);
+		const worker = new Worker(url);
+		URL.revokeObjectURL(url);
 		this.worker = worker;
 		worker.addEventListener('message', this.onMessageReceived);
 

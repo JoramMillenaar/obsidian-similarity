@@ -53,10 +53,15 @@ async function handleEmbed(message: WorkerRequest & { type: 'embed' }): Promise<
 	}
 }
 
-/** Disposes the worker-side model and confirms with a 'disposed' response. */
+/** Disposes the worker-side model and confirms with a 'disposed' response, even if disposal itself fails. */
 async function handleDispose(message: WorkerRequest & { type: 'dispose' }): Promise<void> {
-	await model?.dispose();
-	post({type: 'disposed', requestId: message.requestId});
+	try {
+		await model?.dispose();
+	} catch (error) {
+		console.error("[Similarity] Worker failed to dispose the embedding model:", error);
+	} finally {
+		post({type: 'disposed', requestId: message.requestId});
+	}
 }
 
 /** Routes an incoming `WorkerRequest` to its handler by type. */

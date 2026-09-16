@@ -29,7 +29,8 @@ export function makeGenerateDocumentEmbeddings(model: EmbeddingModel): GenerateD
 			throw new Error(`maxChunkSize (${maxChunkSize}) exceeds the model's max chunk size (${chunkTokenBudget})`);
 		}
 
-		const chunks = chunkText(text, model.countTokens, chunkTokenBudget, maxOverlapPercent);
+		const effectiveChunkBudget = maxChunkSize ?? chunkTokenBudget;
+		const chunks = chunkText(text, model.countTokens, effectiveChunkBudget, maxOverlapPercent);
 
 		const embedded: EmbeddedChunk[] = [];
 		for (const chunk of chunks) {

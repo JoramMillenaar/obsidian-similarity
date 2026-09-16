@@ -46,6 +46,8 @@ export class EmbeddingEngine {
 	private running: Promise<void> | null = null;
 	private inFlight: Promise<void> | null = null;
 
+	private loadGate: Promise<void> = Promise.resolve();
+
 	private readonly listeners = new Set<(status: EngineStatus) => void>();
 
 	constructor(private readonly deps: EmbeddingEngineDeps) {
@@ -208,37 +210,52 @@ export class EmbeddingEngine {
 		await this.inFlight;
 		await outgoing?.unload();
 
-		if (epoch !== this.epoch) throw new ModelRequestSupersededError(modelId);
+		const previousGate = this.loadGate;
+		let releaseGate!: () => void;
+		this.loadGate = new Promise<void>((resolve) => {
+			releaseGate = resolve;
+		});
+		let gateOwnedByRecovery = false;
 
-		const config = EMBEDDING_MODELS[modelId];
-		this.deps.status.update(`Loading ${config.label} model…`);
-
-		let embedder: EmbeddingPort;
 		try {
-			embedder = await this.load(config, epoch, controller.signal);
-		} catch (error) {
+			await previousGate;
+
 			if (epoch !== this.epoch) throw new ModelRequestSupersededError(modelId);
 
-			void this.recoverFromFailedLoad(modelId, previousModelId, error, epoch, controller.signal)
-				.catch((recoveryError) => {
-					if (recoveryError instanceof ModelRequestSupersededError) return;
-					console.error("[Similarity] Recovering from a failed model load failed:", recoveryError);
-				});
-			throw error;
+			const config = EMBEDDING_MODELS[modelId];
+			this.deps.status.update(`Loading ${config.label} model…`);
+
+			let embedder: EmbeddingPort;
+			try {
+				embedder = await this.load(config, epoch, controller.signal);
+			} catch (error) {
+				if (epoch !== this.epoch) throw new ModelRequestSupersededError(modelId);
+
+				gateOwnedByRecovery = true;
+				void this.recoverFromFailedLoad(modelId, previousModelId, error, epoch, controller.signal)
+					.catch((recoveryError) => {
+						if (recoveryError instanceof ModelRequestSupersededError) return;
+						console.error("[Similarity] Recovering from a failed model load failed:", recoveryError);
+					})
+					.finally(releaseGate);
+				throw error;
+			}
+
+			if (epoch !== this.epoch) {
+				await embedder.unload();
+				throw new ModelRequestSupersededError(modelId);
+			}
+
+			const label = outgoing ? "Switched to" : "Loaded";
+			this.state = {status: "ready", modelId, embedder, epoch};
+			this.notify();
+			await this.deps.settingsRepo.updatePartial({embeddingModelId: modelId});
+
+			this.deps.status.update(`${label} ${config.label}.`, 4000);
+			this.ensureRunning();
+		} finally {
+			if (!gateOwnedByRecovery) releaseGate();
 		}
-
-		if (epoch !== this.epoch) {
-			void embedder.unload();
-			throw new ModelRequestSupersededError(modelId);
-		}
-
-		const label = outgoing ? "Switched to" : "Loaded";
-		this.state = {status: "ready", modelId, embedder, epoch};
-		this.notify();
-		await this.deps.settingsRepo.updatePartial({embeddingModelId: modelId});
-
-		this.deps.status.update(`${label} ${config.label}.`, 4000);
-		this.ensureRunning();
 	}
 
 	private load(
@@ -279,7 +296,7 @@ export class EmbeddingEngine {
 			try {
 				const restored = await this.load(previousConfig, epoch, signal);
 				if (epoch !== this.epoch) {
-					void restored.unload();
+					await restored.unload();
 					throw new ModelRequestSupersededError(modelId);
 				}
 
