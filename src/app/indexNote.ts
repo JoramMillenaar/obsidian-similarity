@@ -31,7 +31,7 @@ export function makeIndexNote(deps: IndexNoteDeps): IndexNoteUseCase {
 
 		let text: string;
 		try {
-			text = await deps.getNoteText(noteId);
+			({text} = await deps.getNoteText(noteId));
 		} catch {
 			deps.index.remove(noteId);
 			return "removed";

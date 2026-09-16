@@ -75,6 +75,13 @@ export interface SimilaritySettings {
 	maxExtractedChars: number;
 	maxOverlapPercent: number;
 	embeddingModelId: EmbeddingModelId;
+	/**
+	 * The character caps in effect as of the last completed sync pass. Used to notice when
+	 * `maxRawMarkdownChars`/`maxExtractedChars` have been raised since, so previously-truncated
+	 * notes can be reconsidered — see `syncPlan.ts`. Not shown in the settings UI.
+	 */
+	lastAppliedMaxRawMarkdownChars: number;
+	lastAppliedMaxExtractedChars: number;
 }
 export const SCHEMA_VERSION = 2;
 

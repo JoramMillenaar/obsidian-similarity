@@ -59,7 +59,11 @@ export class EmbeddingEngine {
 	/** Current model/loading state, for callers that just need a snapshot. */
 	status(): EngineStatus {
 		const state = this.state;
-		if (state.status === "ready") return {kind: "ready", modelId: state.modelId};
+		if (state.status === "ready") {
+			return state.embedder.device !== undefined
+				? {kind: "ready", modelId: state.modelId, device: state.embedder.device}
+				: {kind: "ready", modelId: state.modelId};
+		}
 		if (state.status === "loading") {
 			return {
 				kind: "loading",

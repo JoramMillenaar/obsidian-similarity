@@ -304,7 +304,7 @@ class WorkerMessenger {
 
 /** Adapts a `WorkerMessenger` to the `EmbeddingPort` interface the engine consumes. */
 class WorkerEmbeddingProvider implements EmbeddingPort {
-	constructor(private readonly messenger: WorkerMessenger) {}
+	constructor(private readonly messenger: WorkerMessenger, readonly device: Device) {}
 
 	async embed(text: string, options: EmbedOptions): Promise<EmbeddingResult | null> {
 		return await this.messenger.sendMessage(text, options.maxOverlapPercent, options.maxChunkSize);
@@ -322,6 +322,6 @@ export const loadEmbeddingProvider: LoadEmbeddingPort = async (
 	signal?: AbortSignal,
 ): Promise<EmbeddingPort> => {
 	const messenger = new WorkerMessenger(__WORKER_CONTENTS_PLACEHOLDER__, config, onProgress);
-	await messenger.initialize(signal);
-	return new WorkerEmbeddingProvider(messenger);
+	const device = await messenger.initialize(signal);
+	return new WorkerEmbeddingProvider(messenger, device);
 };

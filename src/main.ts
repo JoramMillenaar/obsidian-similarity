@@ -27,6 +27,7 @@ export default class SimilarNotes extends Plugin {
 				new SimilarNotesListView(leaf, {
 					similarNotesFeed: this.appContainer.similarNotesFeed,
 					statusHub: this.appContainer.statusHub,
+					getNoteText: this.appContainer.getNoteText,
 				})
 		);
 		this.registerHoverLinkSource(VIEW_TYPE_SIMILARITY, {

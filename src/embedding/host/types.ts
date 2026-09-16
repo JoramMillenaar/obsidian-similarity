@@ -1,7 +1,6 @@
-import { EmbeddingResult, ModelLoadProgress } from "../../ports";
+import { Device, EmbeddingResult, ModelLoadProgress } from "../../ports";
 
-/** Compute backend a model ran inference on. */
-export type Device = 'wasm' | 'webgpu';
+export type { Device };
 
 /** Called with download/init progress while a model loads. */
 export type ModelLoadProgressCallback = (progress: ModelLoadProgress) => void;

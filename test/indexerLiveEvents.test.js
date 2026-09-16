@@ -77,7 +77,7 @@ async function makeHarness(indexed = []) {
 		},
 		getNoteText: async (noteId) => {
 			indexedCalls.push(noteId);
-			return `text for ${noteId}`;
+			return {text: `text for ${noteId}`, truncated: false};
 		},
 		isIgnoredPath: () => false,
 		settingsRepo: {get: () => ({ignoredPaths: [], maxOverlapPercent: 0})},

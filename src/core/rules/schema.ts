@@ -10,6 +10,15 @@ export function normalizeSettings(
 	const maxExtractedChars = value?.maxExtractedChars;
 	const maxOverlapPercent = value?.maxOverlapPercent;
 	const embeddingModelId = value?.embeddingModelId;
+	const lastAppliedMaxRawMarkdownChars = value?.lastAppliedMaxRawMarkdownChars;
+	const lastAppliedMaxExtractedChars = value?.lastAppliedMaxExtractedChars;
+
+	const normalizedMaxRawMarkdownChars = typeof maxRawMarkdownChars === "number" && maxRawMarkdownChars > 0
+		? maxRawMarkdownChars
+		: DEFAULT_SETTINGS.maxRawMarkdownChars;
+	const normalizedMaxExtractedChars = typeof maxExtractedChars === "number" && maxExtractedChars > 0
+		? maxExtractedChars
+		: DEFAULT_SETTINGS.maxExtractedChars;
 
 	return {
 		ignoredPaths: Array.isArray(ignored)
@@ -18,18 +27,23 @@ export function normalizeSettings(
 		advancedOpen: typeof advancedOpen === "boolean"
 			? advancedOpen
 			: DEFAULT_SETTINGS.advancedOpen,
-		maxRawMarkdownChars: typeof maxRawMarkdownChars === "number" && maxRawMarkdownChars > 0
-			? maxRawMarkdownChars
-			: DEFAULT_SETTINGS.maxRawMarkdownChars,
-		maxExtractedChars: typeof maxExtractedChars === "number" && maxExtractedChars > 0
-			? maxExtractedChars
-			: DEFAULT_SETTINGS.maxExtractedChars,
+		maxRawMarkdownChars: normalizedMaxRawMarkdownChars,
+		maxExtractedChars: normalizedMaxExtractedChars,
 		maxOverlapPercent: typeof maxOverlapPercent === "number" && maxOverlapPercent >= 0
 			? Math.min(maxOverlapPercent, MAX_OVERLAP_PERCENT)
 			: DEFAULT_SETTINGS.maxOverlapPercent,
 		embeddingModelId: typeof embeddingModelId === "string" && embeddingModelId in EMBEDDING_MODELS
 			? embeddingModelId
 			: DEFAULT_SETTINGS.embeddingModelId,
+		// Missing (e.g. upgrading from before this field existed) defaults to the currently
+		// configured cap, not the factory default — otherwise upgrading with an already-customized
+		// cap would look like an increase and trigger a spurious resync-recheck pass.
+		lastAppliedMaxRawMarkdownChars: typeof lastAppliedMaxRawMarkdownChars === "number" && lastAppliedMaxRawMarkdownChars > 0
+			? lastAppliedMaxRawMarkdownChars
+			: normalizedMaxRawMarkdownChars,
+		lastAppliedMaxExtractedChars: typeof lastAppliedMaxExtractedChars === "number" && lastAppliedMaxExtractedChars > 0
+			? lastAppliedMaxExtractedChars
+			: normalizedMaxExtractedChars,
 	};
 }
 

@@ -12,6 +12,8 @@ export type IndexEntry = {
 	id: string;
 	updatedAt: string;
 	contentHash: string;
+	/** Character offset where the note's last chunk ends — a note truncated by a character cap has this sitting at the cap. */
+	lastChunkEnd: number;
 };
 
 export type IndexStats = {
@@ -105,7 +107,8 @@ class ResidentIndex implements IndexHandle {
 	entries(): IndexEntry[] {
 		const out: IndexEntry[] = [];
 		for (const note of this.byId.values()) {
-			out.push({id: note.id, updatedAt: note.updatedAt, contentHash: note.contentHash});
+			const lastChunkEnd = note.chunks.reduce((max, chunk) => Math.max(max, chunk.end), 0);
+			out.push({id: note.id, updatedAt: note.updatedAt, contentHash: note.contentHash, lastChunkEnd});
 		}
 		return out;
 	}

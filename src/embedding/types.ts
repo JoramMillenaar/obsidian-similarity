@@ -1,5 +1,5 @@
 import { EmbeddingModelId } from "../types";
-import { EmbeddingPort, ModelLoadProgress } from "../ports";
+import { Device, EmbeddingPort, ModelLoadProgress } from "../ports";
 import { Priority } from "../core/util/priorityQueue";
 
 export type { Priority };
@@ -11,7 +11,7 @@ export type LoadPhase = "downloading" | "finalizing";
 export type EngineStatus =
 	| { kind: "idle" }
 	| { kind: "loading"; modelId: EmbeddingModelId; progress: number | null; phase: LoadPhase }
-	| { kind: "ready"; modelId: EmbeddingModelId }
+	| { kind: "ready"; modelId: EmbeddingModelId; device?: Device }
 	| { kind: "error"; modelId: EmbeddingModelId; message: string; offline: boolean };
 
 /** Cancels a subscription created via `EngineStateReader.subscribe`. */

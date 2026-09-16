@@ -2,8 +2,10 @@ import { ItemView, Notice, TFile, WorkspaceLeaf } from "obsidian";
 import { SimilarNotesFeed, SimilarNotesSnapshot } from "../search/similarNotesFeed";
 import { StatusHub } from "../status/statusHub";
 import { BannerState, subscribeBanner } from "./banner";
+import { WASM_WARNING_MESSAGE } from "../status/notices";
 import { textForNotice } from "./similarNoticeText";
 import { VIEW_TYPE_SIMILARITY } from "../constants";
+import { GetNoteTextUseCase } from "../app/getNoteText";
 
 export { VIEW_TYPE_SIMILARITY };
 
@@ -30,7 +32,10 @@ type MessageState = {
 export type SimilarNotesListViewDeps = {
 	similarNotesFeed: SimilarNotesFeed;
 	statusHub: StatusHub;
+	getNoteText: GetNoteTextUseCase;
 };
+
+const TRUNCATION_NOTICE_TEXT = "Only part of this large note was used for the search.";
 
 function signatureForItems(items: SimilarNotesSnapshot["items"]): string {
 	return items.map((item) => `${item.id} ${item.score.toFixed(4)}`).join("|");
@@ -44,10 +49,12 @@ export class SimilarNotesListView extends ItemView {
 	private snapshot: SimilarNotesSnapshot | undefined;
 	private activePath: string | null = null;
 	private bannerEl?: HTMLElement;
+	private truncationNoticeEl?: HTMLElement;
 	private listEl?: HTMLElement;
 	private messageEl?: HTMLElement;
 	private renderedItems: string | null = null;
 	private renderedMessage: string | null = null;
+	private truncationCheckId = 0;
 	private unsubscribeSnapshot?: () => void;
 	private unsubscribeBanner?: () => void;
 
@@ -100,6 +107,7 @@ export class SimilarNotesListView extends ItemView {
 		this.containerEl.empty();
 		const root = this.containerEl.createDiv({cls: "tag-container"});
 		this.bannerEl = root.createDiv({cls: "similarity-index-banner is-hidden"});
+		this.truncationNoticeEl = root.createDiv({cls: "similarity-truncation-notice is-hidden"});
 		const body = root.createDiv();
 		this.listEl = body.createDiv();
 		this.messageEl = body.createDiv();
@@ -128,6 +136,51 @@ export class SimilarNotesListView extends ItemView {
 		this.activePath = active?.path ?? null;
 		this.deps.similarNotesFeed.setActiveNote(this.activePath);
 		this.renderBody();
+		this.checkTruncation(this.activePath);
+	}
+
+	private checkTruncation(noteId: string | null) {
+		const checkId = ++this.truncationCheckId;
+		if (!noteId) {
+			this.renderTruncationNotice(false);
+			return;
+		}
+
+		this.deps.getNoteText(noteId).then(
+			({truncated}) => {
+				if (checkId !== this.truncationCheckId) return;
+				this.renderTruncationNotice(truncated);
+			},
+			() => {
+				if (checkId !== this.truncationCheckId) return;
+				this.renderTruncationNotice(false);
+			},
+		);
+	}
+
+	private renderTruncationNotice(visible: boolean) {
+		const container = this.truncationNoticeEl;
+		if (!container) return;
+
+		container.toggleClass("is-hidden", !visible);
+		if (!visible) return;
+		if (container.childElementCount > 0) return;
+
+		container.createDiv({
+			cls: "similarity-truncation-notice-message",
+			text: TRUNCATION_NOTICE_TEXT,
+		});
+		const link = container.createEl("a", {
+			cls: "similarity-truncation-notice-link",
+			text: "Raise the character limits in the settings",
+		});
+		link.addEventListener("click", (event) => {
+			event.preventDefault();
+			// `app.setting` is undocumented but stable Obsidian API for opening the settings modal.
+			const app = this.app as unknown as {setting?: {open(): void; openTabById(id: string): void}};
+			app.setting?.open();
+			app.setting?.openTabById("similarity");
+		});
 	}
 
 	private renderBody() {
@@ -208,6 +261,13 @@ export class SimilarNotesListView extends ItemView {
 			cls: "similarity-index-banner-message",
 			text: banner.message,
 		});
+
+		if (banner.wasmWarning) {
+			bannerEl.createDiv({
+				cls: "similarity-index-banner-gpu-warning",
+				text: WASM_WARNING_MESSAGE,
+			});
+		}
 
 		if (banner.total > 0) {
 			const progressRow = bannerEl.createDiv({cls: "similarity-index-banner-progress"});

@@ -270,6 +270,19 @@ export class Indexer {
 				handle.removeMany(plan.idsToRemoveFromIndex);
 				this.setBacklog(plan.idsToSeed);
 				await this.whenDrained();
+
+				// Record the caps this pass just synced against, so a future increase can be
+				// noticed even if the notes affected weren't touched again in the meantime.
+				const settings = this.deps.settingsRepo.get();
+				if (
+					settings.lastAppliedMaxRawMarkdownChars !== settings.maxRawMarkdownChars ||
+					settings.lastAppliedMaxExtractedChars !== settings.maxExtractedChars
+				) {
+					await this.deps.settingsRepo.updatePartial({
+						lastAppliedMaxRawMarkdownChars: settings.maxRawMarkdownChars,
+						lastAppliedMaxExtractedChars: settings.maxExtractedChars,
+					});
+				}
 			} catch (error) {
 				console.error("[Similarity] Failed to refresh indexing queue:", error);
 			}

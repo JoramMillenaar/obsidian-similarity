@@ -1,5 +1,8 @@
 import { Embedding, EmbeddingModelConfig, EmbeddingModelId } from "../types";
 
+/** Compute backend a model ran inference on. */
+export type Device = 'wasm' | 'webgpu';
+
 export interface EmbedOptions {
 	maxOverlapPercent: number;
 	maxChunkSize?: number;
@@ -30,6 +33,9 @@ export type ModelLoadProgress = {
 };
 
 export interface EmbeddingPort {
+	/** Compute backend this port's model is running on, when known. */
+	readonly device?: Device;
+
 	embed(text: string, options: EmbedOptions): Promise<EmbeddingResult | null>;
 
 	unload(): Promise<void>;

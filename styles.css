@@ -66,6 +66,37 @@
 	white-space: nowrap;
 }
 
+.similarity-index-banner-gpu-warning {
+	color: var(--text-warning);
+	font-size: var(--font-ui-smaller);
+	line-height: 1.4;
+}
+
+.similarity-truncation-notice {
+	margin-bottom: 12px;
+	padding: 10px 12px;
+	border: 1px solid var(--background-modifier-border);
+	border-radius: 10px;
+	background: var(--background-secondary);
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+}
+
+.similarity-truncation-notice.is-hidden {
+	display: none;
+}
+
+.similarity-truncation-notice-message {
+	color: var(--text-muted);
+	font-size: var(--font-ui-small);
+	line-height: 1.4;
+}
+
+.similarity-truncation-notice-link {
+	font-size: var(--font-ui-smaller);
+}
+
 .suggestion-note {
 	color: var(--text-muted);
 	font-size: var(--font-smallest);

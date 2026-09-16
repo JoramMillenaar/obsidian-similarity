@@ -23,10 +23,12 @@ export type BannerState = {
 	message: string;
 	processed: number;
 	total: number;
+	wasmWarning: boolean;
 };
 
 const MIN_ITEMS_FOR_INDEXING_BANNER = 8;
-const HIDDEN_BANNER: BannerState = {visible: false, message: "", processed: 0, total: 0};
+const HIDDEN_BANNER: BannerState = {visible: false, message: "", processed: 0, total: 0, wasmWarning: false};
+export const WASM_WARNING_MESSAGE = "No GPU found. Setting up will be slower than usual.";
 
 /** The notice for a note we can serve — model and index state only, nothing per-note. */
 export function backendNoticeFor(
@@ -79,10 +81,11 @@ function modelDownloadBanner(engine: EngineStatus): BannerState {
 		message: "Setting up...",
 		processed: Math.round(engine.progress),
 		total: 100,
+		wasmWarning: false,
 	};
 }
 
-function indexingBanner(indexing: IndexingQueueSnapshot): BannerState {
+function indexingBanner(indexing: IndexingQueueSnapshot, engine: EngineStatus): BannerState {
 	const hidden = {...HIDDEN_BANNER, processed: indexing.processed, total: indexing.total};
 	if (indexing.fatalError || !(indexing.isRunning || indexing.pending > 0)) return hidden;
 	if (indexing.total <= MIN_ITEMS_FOR_INDEXING_BANNER - 1) return hidden;
@@ -92,10 +95,11 @@ function indexingBanner(indexing: IndexingQueueSnapshot): BannerState {
 		message: "Optimizing your experience. Results may shift as more notes are processed.",
 		processed: indexing.processed,
 		total: indexing.total,
+		wasmWarning: engine.kind === "ready" && engine.device === "wasm",
 	};
 }
 
 export function computeBanner(engine: EngineStatus, indexing: IndexingQueueSnapshot): BannerState {
 	const download = modelDownloadBanner(engine);
-	return download.visible ? download : indexingBanner(indexing);
+	return download.visible ? download : indexingBanner(indexing, engine);
 }
