@@ -16,14 +16,13 @@ function post(message: WorkerResponse): void {
 
 /** Creates the worker-side model and reports 'ready' or 'model-load-error' once loading settles. */
 async function handleInit(config: WorkerRequest & { type: 'init' }): Promise<void> {
+	if (model) {
+		console.error("[Similarity] Worker received a second 'init' message; ignoring it.");
+		return;
+	}
+
 	model = new EmbeddingModel(config.config, (progress) => {
-		post({
-			type: 'model-load-progress',
-			progress: progress.progress,
-			file: progress.file,
-			loaded: progress.loaded,
-			total: progress.total,
-		});
+		post({type: 'model-load-progress', ...progress});
 	});
 	generateDocumentEmbeddings = makeGenerateDocumentEmbeddings(model);
 

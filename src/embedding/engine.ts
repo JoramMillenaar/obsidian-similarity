@@ -24,8 +24,12 @@ export type EmbeddingEngineDeps = {
 	status: StatusReporter;
 };
 
-/** Per-call tuning for {@link EmbeddingEngine.embed}. */
-export type EmbedOptions = {
+/**
+ * Per-call tuning for {@link EmbeddingEngine.embed}. Distinct from `ports`' `EmbedOptions`
+ * (the lower-level, `EmbeddingPort`-facing shape) — named differently so the two don't get
+ * imported interchangeably.
+ */
+export type EmbedRequestOptions = {
 	priority?: Priority;
 	maxChunkSize?: number;
 };
@@ -42,7 +46,6 @@ export class EmbeddingEngine {
 	private disposed = false;
 
 	private readonly queue: Job[] = [];
-	private sequence = 0;
 	private running: Promise<void> | null = null;
 	private inFlight: Promise<void> | null = null;
 
@@ -81,7 +84,7 @@ export class EmbeddingEngine {
 	}
 
 	/** Queues `text` for embedding by the ready model, resolving with `null` if it produced no chunks. */
-	embed(text: string, options: EmbedOptions = {}): Promise<EmbeddingResult | null> {
+	embed(text: string, options: EmbedRequestOptions = {}): Promise<EmbeddingResult | null> {
 		if (this.disposed) return Promise.reject(new Error("The embedding engine has been disposed."));
 		if (this.state.status !== "ready") return Promise.reject(new ModelNotReadyError(this.state.status));
 
@@ -90,7 +93,6 @@ export class EmbeddingEngine {
 		return new Promise<EmbeddingResult | null>((resolve, reject) => {
 			this.enqueue({
 				priority: options.priority ?? "medium",
-				sequence: this.sequence++,
 				run: async (embedder) => {
 					const result = await embedder.embed(text, {
 						maxOverlapPercent,
@@ -98,7 +100,6 @@ export class EmbeddingEngine {
 					});
 					resolve(result && result.chunks.length > 0 ? result : null);
 				},
-				settle: () => undefined,
 				cancel: reject,
 			});
 		});
@@ -182,7 +183,6 @@ export class EmbeddingEngine {
 
 			try {
 				await run;
-				job.settle();
 			} finally {
 				this.inFlight = null;
 			}
@@ -263,8 +263,13 @@ export class EmbeddingEngine {
 		epoch: number,
 		signal: AbortSignal,
 	): Promise<EmbeddingPort> {
+		let largestFileTotal = 0;
+
 		return this.deps.loadEmbedder(config, (progress) => {
 			if (progress.total < MIN_DOWNLOAD_PROGRESS_BYTES) return;
+
+			if (progress.total < largestFileTotal) return;
+			largestFileTotal = progress.total;
 
 			const phase: LoadPhase = progress.progress >= 100 ? "finalizing" : "downloading";
 			if (epoch === this.epoch && this.state.status === "loading") {

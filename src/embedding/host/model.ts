@@ -92,8 +92,12 @@ export class EmbeddingModel {
 		return this.#pipeline.tokenizer.encode(text, {add_special_tokens: false}).length;
 	};
 
-	/** Runs inference for `input`, queued behind any prior call so requests are serialized. */
-	embed(input: string): Promise<Float32Array | null> {
+	/**
+	 * Runs inference for `input`, queued behind any prior call so requests are serialized.
+	 * Not normalized here — `embedDocument.ts` always L2-normalizes the result itself right
+	 * before quantizing, so normalizing again at the pipeline level would just redo that work.
+	 */
+	embed(input: string): Promise<Float32Array> {
 		return new Promise((resolve, reject) => {
 			this.#queue = this.#queue.then(async () => {
 				try {
@@ -101,7 +105,7 @@ export class EmbeddingModel {
 					if (!this.#pipeline) return reject(new Error("pipeline not yet initialized"));
 					const result: { data: Float32Array } = await this.#pipeline(input, {
 						pooling: this.config.pooling,
-						normalize: true
+						normalize: false,
 					});
 					resolve(result.data);
 				} catch (err) {

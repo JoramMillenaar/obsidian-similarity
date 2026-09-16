@@ -11,6 +11,7 @@ export class ModelNotReadyError extends Error {
 					? "The embedding model failed to load."
 					: "A model switch is in progress.",
 		);
+		this.name = "ModelNotReadyError";
 	}
 }
 
@@ -18,5 +19,6 @@ export class ModelNotReadyError extends Error {
 export class ModelRequestSupersededError extends Error {
 	constructor(readonly requestedModelId: EmbeddingModelId) {
 		super(`Loading ${requestedModelId} was superseded by a newer model request.`);
+		this.name = "ModelRequestSupersededError";
 	}
 }

@@ -33,9 +33,7 @@ export type EngineState =
 /** A single queued embed request awaiting the ready embedder. */
 export type Job = {
 	priority: Priority;
-	sequence: number;
 	run: (embedder: EmbeddingPort) => Promise<unknown>;
-	settle: () => void;
 	cancel: (error: unknown) => void;
 };
 

@@ -35,7 +35,7 @@ export function makeGenerateDocumentEmbeddings(model: EmbeddingModel): GenerateD
 		const embedded: EmbeddedChunk[] = [];
 		for (const chunk of chunks) {
 			const data = await model.embed(chunk.text);
-			if (data && data.length) {
+			if (data.length) {
 				embedded.push({ embedding: quantizeEmbedding(normalizeEmbedding(data)), start: chunk.start, end: chunk.end });
 			}
 		}

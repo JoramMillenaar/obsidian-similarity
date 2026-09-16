@@ -1,5 +1,6 @@
 import { EmbeddingModelConfig } from "../../../types";
-import { EmbeddingResult } from "../../../ports";
+import { EmbeddingResult, ModelLoadProgress } from "../../../ports";
+import { Device } from "../types";
 
 /** Messages the host sends to the embedding worker. */
 export type WorkerRequest =
@@ -9,9 +10,9 @@ export type WorkerRequest =
 
 /** Messages the embedding worker posts back to the host. */
 export type WorkerResponse =
-	| { type: 'model-load-progress'; progress: number; file: string; loaded: number; total: number }
+	| ({ type: 'model-load-progress' } & ModelLoadProgress)
 	| { type: 'model-load-error'; message: string; offline: boolean }
-	| { type: 'ready'; device: string }
+	| { type: 'ready'; device: Device }
 	| { type: 'ack'; requestId: number }
 	| { type: 'embed-result'; requestId: number; data: EmbeddingResult }
 	| { type: 'embed-error'; requestId: number; message: string }

@@ -1,7 +1,7 @@
 import { EmbeddingPort, EmbedOptions, EmbeddingResult, LoadEmbeddingPort, ModelLoadProgress } from "../../ports";
 import { EmbeddingModelConfig } from "../../types";
 import { WorkerRequest, WorkerResponse } from "./worker/protocol";
-import { Device, PendingWorkerRequest } from "./types";
+import { Device, PendingDisposeRequest, PendingWorkerRequest } from "./types";
 import { ModelLoadFailedError } from "./errors";
 
 /**
@@ -11,7 +11,9 @@ import { ModelLoadFailedError } from "./errors";
  *   - Calling the model directly on the main thread blocks the UI. WASM inference is
  *     synchronous; there is no way to `await` your way out of it once it's running.
  *   - An earlier version of this used a same-origin `<iframe>` instead of a Worker, on the
- *     assumption that it ran in some kind of isolated context.
+ *     mistaken assumption that it ran in some kind of isolated context. It doesn't: an iframe
+ *     still shares the page's main JS thread and event loop, so synchronous WASM inference
+ *     inside it blocked the UI exactly as badly as running it directly would have.
  *
  * There's a second, Obsidian-specific gotcha this depends on: Obsidian's BrowserWindow sets
  * `nodeIntegrationInWorker: true` (confirmed by extracting Obsidian's own app.asar), unlike
@@ -40,8 +42,10 @@ class WorkerMessenger {
 	private worker: Worker | null = null;
 	private requestIdCounter = 0;
 	private loadError: ModelLoadFailedError | null = null;
+	private crashError: Error | null = null;
 	private unloaded = false;
 	private readonly pendingRequests = new Map<number, PendingWorkerRequest>();
+	private readonly pendingDisposals = new Map<number, PendingDisposeRequest>();
 
 	constructor(
 		private readonly workerScript: string,
@@ -60,6 +64,7 @@ class WorkerMessenger {
 		URL.revokeObjectURL(url);
 		this.worker = worker;
 		worker.addEventListener('message', this.onMessageReceived);
+		worker.addEventListener('error', this.onWorkerFatalError);
 
 		try {
 			return await this.waitForReady(signal);
@@ -96,7 +101,7 @@ class WorkerMessenger {
 				const message = event.data;
 				if (message.type === 'ready') {
 					cleanup();
-					resolve(message.device as Device);
+					resolve(message.device);
 				} else if (message.type === 'model-load-error') {
 					cleanup();
 					const error = new ModelLoadFailedError(message.message, message.offline);
@@ -158,12 +163,30 @@ class WorkerMessenger {
 		}
 
 		if (message.type === 'disposed') {
-			const pending = this.pendingRequests.get(message.requestId);
+			const pending = this.pendingDisposals.get(message.requestId);
 			if (!pending) return;
-			this.pendingRequests.delete(message.requestId);
+			this.pendingDisposals.delete(message.requestId);
 			window.clearTimeout(pending.timeoutId);
-			pending.resolve({chunks: [], metadata: {embeddingModelId: this.modelConfig.id, maxOverlapPercent: 0}});
+			pending.resolve();
 		}
+	};
+
+	/** Fired for an uncaught error in the worker at any point after it's been created, not just while loading. */
+	private onWorkerFatalError = (event: ErrorEvent): void => {
+		const error = new Error(`Embedding worker crashed: ${event.message}`);
+		this.crashError = error;
+
+		for (const pending of this.pendingRequests.values()) {
+			window.clearTimeout(pending.timeoutId);
+			pending.reject(error);
+		}
+		this.pendingRequests.clear();
+
+		for (const pending of this.pendingDisposals.values()) {
+			window.clearTimeout(pending.timeoutId);
+			pending.reject(error);
+		}
+		this.pendingDisposals.clear();
 	};
 
 	private acknowledge(requestId: number): void {
@@ -207,6 +230,7 @@ class WorkerMessenger {
 
 		for (let attempt = 0; attempt < retries; attempt++) {
 			if (this.loadError) throw this.loadError;
+			if (this.crashError) throw this.crashError;
 
 			const requestId = this.requestIdCounter++;
 			const message: WorkerRequest = {requestId, type: 'embed', payload, maxOverlapPercent, maxChunkSize};
@@ -219,7 +243,7 @@ class WorkerMessenger {
 			} catch (error) {
 				lastError = error;
 				if (request.pending.acked) throw error;
-				console.warn(`Attempt ${attempt + 1} failed: ${error}`);
+				console.warn(`[Similarity] Attempt ${attempt + 1} to send an embed request failed: ${error}`);
 			}
 		}
 
@@ -237,10 +261,17 @@ class WorkerMessenger {
 
 	private async requestDispose(): Promise<void> {
 		const worker = this.worker;
-		if (!worker || this.loadError) return;
+		if (!worker || this.loadError || this.crashError) return;
 
 		const requestId = this.requestIdCounter++;
-		const {promise} = this.trackRequest(requestId, DISPOSE_TIMEOUT_MS, "Worker dispose timed out", false);
+		const promise = new Promise<void>((resolve, reject) => {
+			const timeoutId = window.setTimeout(() => {
+				if (!this.pendingDisposals.delete(requestId)) return;
+				reject(new Error("Worker dispose timed out"));
+			}, DISPOSE_TIMEOUT_MS);
+
+			this.pendingDisposals.set(requestId, {resolve, reject, timeoutId});
+		});
 		const message: WorkerRequest = {requestId, type: 'dispose'};
 		worker.postMessage(message);
 
@@ -258,7 +289,14 @@ class WorkerMessenger {
 		}
 		this.pendingRequests.clear();
 
+		for (const pending of this.pendingDisposals.values()) {
+			window.clearTimeout(pending.timeoutId);
+			pending.reject(new Error("Embedding worker was unloaded"));
+		}
+		this.pendingDisposals.clear();
+
 		this.worker?.removeEventListener('message', this.onMessageReceived);
+		this.worker?.removeEventListener('error', this.onWorkerFatalError);
 		this.worker?.terminate();
 		this.worker = null;
 	}
