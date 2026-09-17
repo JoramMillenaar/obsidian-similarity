@@ -1,7 +1,7 @@
-import { App, DropdownComponent, Notice, PluginSettingTab, SettingDefinitionItem } from "obsidian";
+import { App, Notice, PluginSettingTab, SettingDefinitionItem } from "obsidian";
 import RelatedNotes from "../main";
 import { parseIgnoredPaths } from "../core/rules/ignorePaths";
-import { DEFAULT_SETTINGS, EMBEDDING_MODELS, MAX_OVERLAP_PERCENT } from "../constants";
+import { EMBEDDING_MODELS, MAX_OVERLAP_PERCENT } from "../constants";
 import { EmbeddingModelId, SimilaritySettings } from "../types";
 import { SettingsRepository } from "../ports";
 import { UpdateSettingsUseCase } from "../app/updateSettings";
@@ -17,24 +17,11 @@ const EMBEDDING_MODEL_OPTIONS: Record<string, string> = Object.fromEntries(
 	Object.values(EMBEDDING_MODELS).map((model) => [model.id, model.label]),
 );
 
-type IndexingDraft = {
-	maxRawMarkdownChars: number;
-	maxExtractedChars: number;
-	maxOverlapPercent: number;
-};
+type NumericSettingKey = "maxRawMarkdownChars" | "maxExtractedChars" | "maxOverlapPercent";
 
 export class SettingView extends PluginSettingTab {
-	private cachedSettings: SimilaritySettings = DEFAULT_SETTINGS;
-	private ignoredPathsDraft = "";
-	private indexingDraft: IndexingDraft = {
-		maxRawMarkdownChars: DEFAULT_SETTINGS.maxRawMarkdownChars,
-		maxExtractedChars: DEFAULT_SETTINGS.maxExtractedChars,
-		maxOverlapPercent: DEFAULT_SETTINGS.maxOverlapPercent,
-	};
-	private embeddingModelDraft: EmbeddingModelId = DEFAULT_SETTINGS.embeddingModelId;
-	private loaded = false;
+	private ignoredPathsDraft: string;
 	private previousModelStatus: EngineStatus["kind"] = "idle";
-	private modelDropdown?: DropdownComponent;
 
 	constructor(
 		app: App,
@@ -42,29 +29,11 @@ export class SettingView extends PluginSettingTab {
 		private readonly deps: SettingsViewDeps,
 	) {
 		super(app, plugin);
-		this.preload();
+		this.ignoredPathsDraft = this.deps.settingsRepo.get().ignoredPaths.join("\n");
 		this.deps.engine.subscribe((status) => {
-			if (this.previousModelStatus !== status.kind) this.update?.();
+			if (this.previousModelStatus !== status.kind) this.update();
 			this.previousModelStatus = status.kind;
 		});
-	}
-
-	private preload() {
-		const settings = this.deps.settingsRepo.get();
-		this.applySettings(settings);
-		this.loaded = true;
-		this.update?.();
-	}
-
-	private applySettings(settings: SimilaritySettings) {
-		this.cachedSettings = settings;
-		this.ignoredPathsDraft = settings.ignoredPaths.join("\n");
-		this.embeddingModelDraft = settings.embeddingModelId;
-		this.indexingDraft = {
-			maxRawMarkdownChars: settings.maxRawMarkdownChars,
-			maxExtractedChars: settings.maxExtractedChars,
-			maxOverlapPercent: settings.maxOverlapPercent,
-		};
 	}
 
 	getSettingDefinitions(): SettingDefinitionItem[] {
@@ -76,28 +45,51 @@ export class SettingView extends PluginSettingTab {
 					type: "dropdown",
 					key: "embeddingModelId",
 					options: EMBEDDING_MODEL_OPTIONS,
-					disabled: () => !this.loaded,
 				},
 			},
 			{
 				name: "Ignored paths/folders",
 				desc: "One entry per line. Folder paths ignore everything under that folder. Append .md to a filename to ignore a specific note.",
-				control: {
-					type: "textarea",
-					key: "ignoredPathsDraft",
-					placeholder: "Templates\nArchive/2023\nScratch.md",
-					rows: 8,
-					disabled: () => !this.loaded,
+				render: (setting) => {
+					setting.addTextArea((text) => {
+						text
+							.setPlaceholder("Templates\nArchive/2023\nScratch.md")
+							.setValue(this.ignoredPathsDraft)
+							.onChange((value) => {
+								this.ignoredPathsDraft = value;
+							});
+						text.inputEl.rows = 8;
+						text.inputEl.cols = 40;
+					});
+				},
+			},
+			{
+				name: "Apply ignored paths",
+				desc: "Reindexes your vault to match the list above.",
+				render: (setting) => {
+					setting.addButton((button) => {
+						button.setButtonText("Apply").onClick(() => {
+							const ignoredPaths = parseIgnoredPaths(this.ignoredPathsDraft);
+							this.deps.updateSettings({ignoredPaths})
+								.then(() => {
+									new Notice("Ignored paths updated. Reindexing in the background.");
+								})
+								.catch((error) => {
+									const message = error instanceof Error ? error.message : String(error);
+									new Notice(`Could not update ignored paths: ${message}`);
+								});
+						});
+					});
 				},
 			},
 			{
 				name: "Show advanced settings",
-				control: {type: "toggle", key: "advancedOpen", disabled: () => !this.loaded},
+				control: {type: "toggle", key: "advancedOpen"},
 			},
 			{
 				type: "group",
 				heading: "Advanced",
-				visible: () => this.cachedSettings.advancedOpen,
+				visible: () => this.deps.settingsRepo.get().advancedOpen,
 				items: [
 					{
 						name: "Max raw markdown characters",
@@ -106,7 +98,6 @@ export class SettingView extends PluginSettingTab {
 							type: "number",
 							key: "maxRawMarkdownChars",
 							min: 1,
-							disabled: () => !this.loaded,
 							validate: (value) =>
 								value <= 0 ? "Max raw markdown characters must be greater than 0." : undefined,
 						},
@@ -118,7 +109,6 @@ export class SettingView extends PluginSettingTab {
 							type: "number",
 							key: "maxExtractedChars",
 							min: 1,
-							disabled: () => !this.loaded,
 							validate: (value) =>
 								value <= 0 ? "Max extracted characters must be greater than 0." : undefined,
 						},
@@ -131,7 +121,6 @@ export class SettingView extends PluginSettingTab {
 							key: "maxOverlapPercent",
 							min: 0,
 							max: MAX_OVERLAP_PERCENT,
-							disabled: () => !this.loaded,
 							validate: (value) =>
 								value < 0 || value > MAX_OVERLAP_PERCENT
 									? `Max sentence overlap must be between 0 and ${MAX_OVERLAP_PERCENT}.`
@@ -140,138 +129,56 @@ export class SettingView extends PluginSettingTab {
 					},
 				],
 			},
-			{
-				name: "Save settings",
-				desc: "Saving updates your similarity results to match these settings.",
-				render: (setting) => {
-					setting.addButton((button) => {
-						button.setButtonText("Save").setCta().setDisabled(!this.loaded).onClick(() => {
-							const draftIgnored = parseIgnoredPaths(this.ignoredPathsDraft);
-							const validationError = validateIndexingSettings(this.indexingDraft);
-							if (validationError) {
-								new Notice(validationError);
-								return;
-							}
-
-							this.save({
-								ignoredPaths: draftIgnored,
-								indexing: this.indexingDraft,
-								modelId: this.embeddingModelDraft,
-							});
-						});
-					});
-				},
-			},
 		];
 	}
 
 	getControlValue(key: string): unknown {
-		if (key === "ignoredPathsDraft") {
-			return this.ignoredPathsDraft;
-		}
+		const settings = this.deps.settingsRepo.get();
+
 		if (key === "advancedOpen") {
-			return this.cachedSettings.advancedOpen;
+			return settings.advancedOpen;
 		}
 		if (key === "embeddingModelId") {
-			return this.embeddingModelDraft;
+			const status = this.deps.engine.status();
+			return status.kind === "ready" || status.kind === "loading" ? status.modelId : settings.embeddingModelId;
 		}
-		return this.indexingDraft[key as keyof IndexingDraft];
+		return settings[key as NumericSettingKey];
 	}
 
 	async setControlValue(key: string, value: unknown): Promise<void> {
-		if (key === "ignoredPathsDraft") {
-			this.ignoredPathsDraft = value as string;
-			return;
-		}
 		if (key === "advancedOpen") {
-			this.cachedSettings = {...this.cachedSettings, advancedOpen: value as boolean};
 			await this.deps.settingsRepo.updatePartial({advancedOpen: value as boolean});
-			this.refreshDomState?.();
+			this.refreshDomState();
 			return;
 		}
 		if (key === "embeddingModelId") {
-			this.embeddingModelDraft = value as EmbeddingModelId;
+			await this.switchModel(value as EmbeddingModelId);
 			return;
 		}
-		this.indexingDraft = {...this.indexingDraft, [key]: value as number};
-	}
-
-	/** The model the session fell back to after `requestedId` failed, if it is falling back at all. */
-	private fallbackModelId(requestedId: EmbeddingModelId): EmbeddingModelId | null {
-		const status = this.deps.engine.status();
-		const activeId = status.kind === "ready" || status.kind === "loading" ? status.modelId : null;
-
-		return activeId !== null && activeId !== requestedId ? activeId : null;
-	}
-
-	private revertModelDraft(modelId: EmbeddingModelId): void {
-		this.embeddingModelDraft = modelId;
-		this.modelDropdown?.setValue(modelId);
-		this.update?.();
+		await this.deps.updateSettings({[key]: value as number} as Partial<SimilaritySettings>);
 	}
 
 	/**
 	 * Fire-and-forget: a model switch can take up to a minute, and the whole point of surfacing
 	 * live status elsewhere (sidebar banner, status bar) is that the user doesn't have to sit and
 	 * wait for it here — they can keep the settings tab interactive, including picking a different
-	 * model before this one finishes, which cancels it.
+	 * model before this one finishes, which cancels it. The dropdown itself always reflects
+	 * `engine.status()`, so a failed switch's fallback shows up without any manual reverting.
 	 */
-	private save(draft: {
-		ignoredPaths: string[];
-		indexing: IndexingDraft;
-		modelId: EmbeddingModelId;
-	}): void {
-		const modelChanged = draft.modelId !== this.cachedSettings.embeddingModelId;
-		const modelLabel = EMBEDDING_MODELS[draft.modelId].label;
+	private async switchModel(modelId: EmbeddingModelId): Promise<void> {
+		const modelLabel = EMBEDDING_MODELS[modelId].label;
 
-		const patch: Partial<SimilaritySettings> = {
-			ignoredPaths: draft.ignoredPaths,
-			...draft.indexing,
-			...(modelChanged ? {embeddingModelId: draft.modelId} : {}),
-		};
+		try {
+			await this.deps.updateSettings({embeddingModelId: modelId});
+			new Notice(`Switched to ${modelLabel}.`);
+		} catch (error) {
+			// The user replaced this switch by picking another model; that request reports its own result.
+			if (error instanceof ModelRequestSupersededError) return;
 
-		this.deps.updateSettings(patch)
-			.then(() => {
-				new Notice(modelChanged ? `Switched to ${modelLabel}.` : "Settings saved. Reindexing in the background.");
-			})
-			.catch((error) => {
-				// The user replaced this switch by picking another model; that request reports its own result.
-				if (error instanceof ModelRequestSupersededError) return;
-
-				const message = error instanceof Error ? error.message : String(error);
-				if (!modelChanged) {
-					new Notice(`Could not save settings: ${message}`);
-					return;
-				}
-
-				// A failed switch falls back to whatever was loaded before. Put the dropdown back on
-				// that model too, so the setting keeps showing the language actually in use.
-				const fallbackId = this.fallbackModelId(draft.modelId);
-				if (fallbackId) this.revertModelDraft(fallbackId);
-
-				const kept = fallbackId ? ` Staying on ${EMBEDDING_MODELS[fallbackId].label}.` : "";
-				new Notice(`${message}${kept}`);
-			})
-			.finally(() => {
-				// Only re-sync what `modelChanged` is compared against. The drafts belong to the user,
-				// who may have edited them while this (up to a minute long) save was in flight.
-				this.cachedSettings = this.deps.settingsRepo.get();
-			});
+			const message = error instanceof Error ? error.message : String(error);
+			const status = this.deps.engine.status();
+			const kept = status.kind === "ready" ? ` Staying on ${EMBEDDING_MODELS[status.modelId].label}.` : "";
+			new Notice(`${message}${kept}`);
+		}
 	}
-}
-
-function validateIndexingSettings(settings: Pick<
-	SimilaritySettings,
-	"maxRawMarkdownChars" | "maxExtractedChars" | "maxOverlapPercent"
->): string | null {
-	if (settings.maxRawMarkdownChars <= 0) {
-		return "Max raw markdown characters must be greater than 0.";
-	}
-	if (settings.maxExtractedChars <= 0) {
-		return "Max extracted characters must be greater than 0.";
-	}
-	if (settings.maxOverlapPercent < 0 || settings.maxOverlapPercent > MAX_OVERLAP_PERCENT) {
-		return `Max sentence overlap must be between 0 and ${MAX_OVERLAP_PERCENT}.`;
-	}
-	return null;
 }
