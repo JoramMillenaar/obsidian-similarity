@@ -1,11 +1,11 @@
-import { App, Notice, PluginSettingTab, SettingDefinitionItem } from "obsidian";
+import { App, DropdownComponent, Notice, PluginSettingTab, SettingDefinitionItem } from "obsidian";
 import RelatedNotes from "../main";
 import { parseIgnoredPaths } from "../core/rules/ignorePaths";
 import { EMBEDDING_MODELS, MAX_OVERLAP_PERCENT } from "../constants";
 import { EmbeddingModelId, SimilaritySettings } from "../types";
 import { SettingsRepository } from "../ports";
 import { UpdateSettingsUseCase } from "../app/updateSettings";
-import { EngineStateReader, EngineStatus, ModelRequestSupersededError } from "../embedding/engine";
+import { EngineStateReader, ModelRequestSupersededError } from "../embedding/engine";
 
 export type SettingsViewDeps = {
 	settingsRepo: SettingsRepository,
@@ -13,15 +13,11 @@ export type SettingsViewDeps = {
 	engine: EngineStateReader,
 }
 
-const EMBEDDING_MODEL_OPTIONS: Record<string, string> = Object.fromEntries(
-	Object.values(EMBEDDING_MODELS).map((model) => [model.id, model.label]),
-);
-
 type NumericSettingKey = "maxRawMarkdownChars" | "maxExtractedChars" | "maxOverlapPercent";
 
 export class SettingView extends PluginSettingTab {
 	private ignoredPathsDraft: string;
-	private previousModelStatus: EngineStatus["kind"] = "idle";
+	private modelDropdown?: DropdownComponent;
 
 	constructor(
 		app: App,
@@ -31,9 +27,14 @@ export class SettingView extends PluginSettingTab {
 		super(app, plugin);
 		this.ignoredPathsDraft = this.deps.settingsRepo.get().ignoredPaths.join("\n");
 		this.deps.engine.subscribe((status) => {
-			if (this.previousModelStatus !== status.kind) this.update();
-			this.previousModelStatus = status.kind;
+			this.modelDropdown?.setValue(this.currentModelId(status));
 		});
+	}
+
+	private currentModelId(status = this.deps.engine.status()): EmbeddingModelId {
+		return status.kind === "ready" || status.kind === "loading"
+			? status.modelId
+			: this.deps.settingsRepo.get().embeddingModelId;
 	}
 
 	getSettingDefinitions(): SettingDefinitionItem[] {
@@ -41,10 +42,17 @@ export class SettingView extends PluginSettingTab {
 			{
 				name: "Language",
 				desc: "Determine which language to support. Changing this option may start an optimization process in the background. You can pick a different one before it finishes to switch again.",
-				control: {
-					type: "dropdown",
-					key: "embeddingModelId",
-					options: EMBEDDING_MODEL_OPTIONS,
+				render: (setting) => {
+					setting.addDropdown((dropdown) => {
+						for (const model of Object.values(EMBEDDING_MODELS)) {
+							dropdown.addOption(model.id, model.label);
+						}
+						dropdown.setValue(this.currentModelId());
+						dropdown.onChange((value) => {
+							void this.switchModel(value as EmbeddingModelId);
+						});
+						this.modelDropdown = dropdown;
+					});
 				},
 			},
 			{
@@ -138,10 +146,6 @@ export class SettingView extends PluginSettingTab {
 		if (key === "advancedOpen") {
 			return settings.advancedOpen;
 		}
-		if (key === "embeddingModelId") {
-			const status = this.deps.engine.status();
-			return status.kind === "ready" || status.kind === "loading" ? status.modelId : settings.embeddingModelId;
-		}
 		return settings[key as NumericSettingKey];
 	}
 
@@ -151,10 +155,6 @@ export class SettingView extends PluginSettingTab {
 			this.refreshDomState();
 			return;
 		}
-		if (key === "embeddingModelId") {
-			await this.switchModel(value as EmbeddingModelId);
-			return;
-		}
 		await this.deps.updateSettings({[key]: value as number} as Partial<SimilaritySettings>);
 	}
 
@@ -162,8 +162,8 @@ export class SettingView extends PluginSettingTab {
 	 * Fire-and-forget: a model switch can take up to a minute, and the whole point of surfacing
 	 * live status elsewhere (sidebar banner, status bar) is that the user doesn't have to sit and
 	 * wait for it here — they can keep the settings tab interactive, including picking a different
-	 * model before this one finishes, which cancels it. The dropdown itself always reflects
-	 * `engine.status()`, so a failed switch's fallback shows up without any manual reverting.
+	 * model before this one finishes, which cancels it. The dropdown's own visual revert on failure
+	 * is handled by the `engine.subscribe` callback in the constructor, not here.
 	 */
 	private async switchModel(modelId: EmbeddingModelId): Promise<void> {
 		const modelLabel = EMBEDDING_MODELS[modelId].label;
@@ -177,7 +177,8 @@ export class SettingView extends PluginSettingTab {
 
 			const message = error instanceof Error ? error.message : String(error);
 			const status = this.deps.engine.status();
-			const kept = status.kind === "ready" ? ` Staying on ${EMBEDDING_MODELS[status.modelId].label}.` : "";
+			const fallbackId = status.kind === "ready" || status.kind === "loading" ? status.modelId : null;
+			const kept = fallbackId ? ` Staying on ${EMBEDDING_MODELS[fallbackId].label}.` : "";
 			new Notice(`${message}${kept}`);
 		}
 	}
