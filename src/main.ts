@@ -21,6 +21,19 @@ export default class SimilarNotes extends Plugin {
 			engine: this.appContainer.engine,
 		}));
 
+		const openSearchModal = () => {
+			new SearchModal(this.app, {
+				similarSearchFeed: this.appContainer.similarSearchFeed,
+				statusHub: this.appContainer.statusHub,
+				insertWikilinkAtCursor: this.appContainer.insertWikilinkAtCursor,
+			}).open();
+		};
+
+		const openSettings = () => {
+			this.app.setting.open();
+			this.app.setting.openTabById("similarity");
+		};
+
 		this.registerView(
 			VIEW_TYPE_SIMILARITY,
 			(leaf) =>
@@ -28,6 +41,8 @@ export default class SimilarNotes extends Plugin {
 					similarNotesFeed: this.appContainer.similarNotesFeed,
 					statusHub: this.appContainer.statusHub,
 					getNoteText: this.appContainer.getNoteText,
+					openSearchModal,
+					openSettings,
 				})
 		);
 		this.registerHoverLinkSource(VIEW_TYPE_SIMILARITY, {
@@ -38,13 +53,7 @@ export default class SimilarNotes extends Plugin {
 		this.addCommand({
 			id: "open-search-modal",
 			name: "Open semantic search",
-			callback: () => {
-				new SearchModal(this.app, {
-					similarSearchFeed: this.appContainer.similarSearchFeed,
-					statusHub: this.appContainer.statusHub,
-					insertWikilinkAtCursor: this.appContainer.insertWikilinkAtCursor,
-				}).open();
-			},
+			callback: openSearchModal,
 		});
 
 		this.addCommand({

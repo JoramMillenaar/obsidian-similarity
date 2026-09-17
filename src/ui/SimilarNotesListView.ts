@@ -1,4 +1,4 @@
-import { ItemView, Notice, TFile, WorkspaceLeaf } from "obsidian";
+import { ItemView, Notice, setIcon, TFile, WorkspaceLeaf } from "obsidian";
 import { SimilarNotesFeed, SimilarNotesSnapshot } from "../search/similarNotesFeed";
 import { StatusHub } from "../status/statusHub";
 import { BannerState, subscribeBanner } from "./banner";
@@ -33,6 +33,8 @@ export type SimilarNotesListViewDeps = {
 	similarNotesFeed: SimilarNotesFeed;
 	statusHub: StatusHub;
 	getNoteText: GetNoteTextUseCase;
+	openSearchModal: () => void;
+	openSettings: () => void;
 };
 
 const TRUNCATION_NOTICE_TEXT = "Only part of this large note was used for the search.";
@@ -103,9 +105,26 @@ export class SimilarNotesListView extends ItemView {
 		});
 	}
 
+	private createNavActionButton(container: HTMLElement, icon: string, label: string, onClick: () => void) {
+		const button = container.createEl("button", {
+			cls: "clickable-icon nav-action-button",
+			attr: {"aria-label": label},
+		});
+		setIcon(button, icon);
+		button.addEventListener("click", onClick);
+		return button;
+	}
+
 	async onOpen() {
-		this.containerEl.empty();
-		const root = this.containerEl.createDiv({cls: "tag-container"});
+		this.containerEl.querySelector(":scope > .nav-header")?.remove();
+		const navHeader = this.containerEl.createDiv({cls: "nav-header"});
+		const navButtons = navHeader.createDiv({cls: "nav-buttons-container"});
+		this.createNavActionButton(navButtons, "search", "Open semantic search", () => this.deps.openSearchModal());
+		this.createNavActionButton(navButtons, "settings", "Open plugin settings", () => this.deps.openSettings());
+		this.contentEl.before(navHeader);
+
+		this.contentEl.empty();
+		const root = this.contentEl.createDiv({cls: "tag-container"});
 		this.bannerEl = root.createDiv({cls: "similarity-index-banner is-hidden"});
 		this.truncationNoticeEl = root.createDiv({cls: "similarity-truncation-notice is-hidden"});
 		const body = root.createDiv();
@@ -176,10 +195,7 @@ export class SimilarNotesListView extends ItemView {
 		});
 		link.addEventListener("click", (event) => {
 			event.preventDefault();
-			// `app.setting` is undocumented but stable Obsidian API for opening the settings modal.
-			const app = this.app as unknown as {setting?: {open(): void; openTabById(id: string): void}};
-			app.setting?.open();
-			app.setting?.openTabById("similarity");
+			this.deps.openSettings();
 		});
 	}
 
