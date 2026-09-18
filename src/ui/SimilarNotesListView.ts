@@ -4,8 +4,10 @@ import { StatusHub } from "../status/statusHub";
 import { BannerState, subscribeBanner } from "./banner";
 import { WASM_WARNING_MESSAGE } from "../status/notices";
 import { textForNotice } from "./similarNoticeText";
-import { VIEW_TYPE_SIMILARITY } from "../constants";
+import { SEARCH_MODES, VIEW_TYPE_SIMILARITY } from "../constants";
 import { GetNoteTextUseCase } from "../app/getNoteText";
+import { SettingsRepository } from "../ports";
+import { SearchMode } from "../types";
 
 export { VIEW_TYPE_SIMILARITY };
 
@@ -33,6 +35,8 @@ export type SimilarNotesListViewDeps = {
 	similarNotesFeed: SimilarNotesFeed;
 	statusHub: StatusHub;
 	getNoteText: GetNoteTextUseCase;
+	settingsRepo: SettingsRepository;
+	setSearchMode: (mode: SearchMode) => Promise<void>;
 	openSearchModal: () => void;
 	openSettings: () => void;
 };
@@ -59,6 +63,7 @@ export class SimilarNotesListView extends ItemView {
 	private truncationCheckId = 0;
 	private unsubscribeSnapshot?: () => void;
 	private unsubscribeBanner?: () => void;
+	private searchModeButtonEl?: HTMLElement;
 
 	constructor(leaf: WorkspaceLeaf, private deps: SimilarNotesListViewDeps) {
 		super(leaf);
@@ -115,10 +120,31 @@ export class SimilarNotesListView extends ItemView {
 		return button;
 	}
 
+	private currentMode() {
+		const mode = this.deps.settingsRepo.get().searchMode;
+		return SEARCH_MODES.find((m) => m.id === mode) ?? SEARCH_MODES[0];
+	}
+
+	private updateSearchModeButton() {
+		const button = this.searchModeButtonEl;
+		if (!button) return;
+		const mode = this.currentMode();
+		setIcon(button, mode.icon);
+		button.setAttribute("aria-label", `Searching by ${mode.label}`);
+	}
+
+	private cycleSearchMode = () => {
+		const currentIndex = SEARCH_MODES.findIndex((mode) => mode.id === this.currentMode().id);
+		const next = SEARCH_MODES[(currentIndex + 1) % SEARCH_MODES.length];
+		void this.deps.setSearchMode(next.id).then(() => this.updateSearchModeButton());
+	};
+
 	async onOpen() {
 		this.containerEl.querySelector(":scope > .nav-header")?.remove();
 		const navHeader = this.containerEl.createDiv({cls: "nav-header"});
 		const navButtons = navHeader.createDiv({cls: "nav-buttons-container"});
+		this.searchModeButtonEl = this.createNavActionButton(navButtons, this.currentMode().icon, "Search mode", this.cycleSearchMode);
+		this.updateSearchModeButton();
 		this.createNavActionButton(navButtons, "search", "Open semantic search", () => this.deps.openSearchModal());
 		this.createNavActionButton(navButtons, "settings", "Open plugin settings", () => this.deps.openSettings());
 		this.containerEl.prepend(navHeader);
@@ -143,6 +169,7 @@ export class SimilarNotesListView extends ItemView {
 		this.unsubscribeSnapshot = this.deps.similarNotesFeed.subscribe((snapshot) => {
 			this.snapshot = snapshot;
 			this.renderBody();
+			this.updateSearchModeButton();
 		});
 		this.unsubscribeBanner = subscribeBanner(this.deps.statusHub, (banner) => this.renderBanner(banner));
 

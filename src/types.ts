@@ -48,6 +48,8 @@ export type RelatedNote = {
 	score: number;
 };
 
+export type SearchMode = "granular" | "average";
+
 export type IndexingQueueSnapshot = {
 	isRunning: boolean;
 	currentNoteId?: string;
@@ -59,15 +61,6 @@ export type IndexingQueueSnapshot = {
 	failedIds: string[];
 };
 
-export const IDLE_INDEXING_SNAPSHOT: IndexingQueueSnapshot = {
-	isRunning: false,
-	pending: 0,
-	processed: 0,
-	total: 0,
-	failed: 0,
-	failedIds: [],
-};
-
 export interface SimilaritySettings {
 	ignoredPaths: string[];
 	advancedOpen: boolean;
@@ -75,11 +68,7 @@ export interface SimilaritySettings {
 	maxExtractedChars: number;
 	maxOverlapPercent: number;
 	embeddingModelId: EmbeddingModelId;
-	/**
-	 * The character caps in effect as of the last completed sync pass. Used to notice when
-	 * `maxRawMarkdownChars`/`maxExtractedChars` have been raised since, so previously-truncated
-	 * notes can be reconsidered — see `syncPlan.ts`. Not shown in the settings UI.
-	 */
+	searchMode: SearchMode;
 	lastAppliedMaxRawMarkdownChars: number;
 	lastAppliedMaxExtractedChars: number;
 }

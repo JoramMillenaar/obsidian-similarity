@@ -1,4 +1,4 @@
-import { Embedding, EmbeddingModelId, IndexedNote, RelatedNote, SCHEMA_VERSION } from "../../types";
+import { Embedding, EmbeddingModelId, IndexedNote, RelatedNote, SCHEMA_VERSION, SearchMode } from "../../types";
 import { EmbeddingFileStore, ModelIndexMetaStore } from "../../ports";
 import { DecodedEmbeddings, decodeEmbeddings, encodeEmbeddings } from "../../core/vector/codec";
 import { packForStorage, unpackFromStorage } from "../../core/vector/packing";
@@ -12,7 +12,6 @@ export type IndexEntry = {
 	id: string;
 	updatedAt: string;
 	contentHash: string;
-	/** Character offset where the note's last chunk ends — a note truncated by a character cap has this sitting at the cap. */
 	lastChunkEnd: number;
 };
 
@@ -26,6 +25,7 @@ export type QueryOptions = {
 	excludeId?: string;
 	limit?: number;
 	minScore?: number;
+	mode?: SearchMode;
 };
 
 export interface IndexHandle {

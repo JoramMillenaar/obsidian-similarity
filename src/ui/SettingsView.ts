@@ -1,8 +1,8 @@
 import { App, DropdownComponent, Notice, PluginSettingTab, SettingDefinitionItem } from "obsidian";
 import RelatedNotes from "../main";
 import { parseIgnoredPaths } from "../core/rules/ignorePaths";
-import { EMBEDDING_MODELS, MAX_OVERLAP_PERCENT } from "../constants";
-import { EmbeddingModelId, SimilaritySettings } from "../types";
+import { EMBEDDING_MODELS, MAX_OVERLAP_PERCENT, SEARCH_MODES } from "../constants";
+import { EmbeddingModelId, SearchMode, SimilaritySettings } from "../types";
 import { SettingsRepository } from "../ports";
 import { UpdateSettingsUseCase } from "../app/updateSettings";
 import { EngineStateReader, ModelRequestSupersededError } from "../embedding/engine";
@@ -10,10 +10,15 @@ import { EngineStateReader, ModelRequestSupersededError } from "../embedding/eng
 export type SettingsViewDeps = {
 	settingsRepo: SettingsRepository,
 	updateSettings: UpdateSettingsUseCase,
+	setSearchMode: (mode: SearchMode) => Promise<void>,
 	engine: EngineStateReader,
 }
 
 type NumericSettingKey = "maxRawMarkdownChars" | "maxExtractedChars" | "maxOverlapPercent";
+
+function capitalize(text: string): string {
+	return text.charAt(0).toUpperCase() + text.slice(1);
+}
 
 export class SettingView extends PluginSettingTab {
 	private ignoredPathsDraft: string;
@@ -52,6 +57,21 @@ export class SettingView extends PluginSettingTab {
 							void this.switchModel(value as EmbeddingModelId);
 						});
 						this.modelDropdown = dropdown;
+					});
+				},
+			},
+			{
+				name: "Search mode",
+				desc: SEARCH_MODES.map((mode) => `${mode.label}: ${mode.desc}`).join(" "),
+				render: (setting) => {
+					setting.addDropdown((dropdown) => {
+						for (const mode of SEARCH_MODES) {
+							dropdown.addOption(mode.id, capitalize(mode.label));
+						}
+						dropdown.setValue(this.deps.settingsRepo.get().searchMode);
+						dropdown.onChange((value) => {
+							void this.deps.setSearchMode(value as SearchMode);
+						});
 					});
 				},
 			},

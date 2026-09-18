@@ -1,4 +1,5 @@
 import { Plugin } from "obsidian";
+import { SearchMode } from "./types";
 import { ObsidianStatusBar } from "./obsidian/obsidianStatusBar";
 import { ObsidianVault } from "./obsidian/obsidianVault";
 import { BinaryEmbeddingFileStore } from "./obsidian/binaryEmbeddingFileStore";
@@ -47,6 +48,7 @@ export class AppContainer {
 	readonly similarSearchFeed: SimilarSearchFeed;
 	readonly insertWikilinkAtCursor: InsertWikilinkAtCursorUseCase;
 	readonly updateSettings: UpdateSettingsUseCase;
+	readonly setSearchMode: (mode: SearchMode) => Promise<void>;
 	readonly runLegacyMigrations: RunLegacyMigrationsUseCase;
 
 	readonly getNoteText: GetNoteTextUseCase;
@@ -107,7 +109,7 @@ export class AppContainer {
 		this.getSimilarNotesForNote = async (args) => {
 			const index = this.indexer.index();
 			if (!index) return [];
-			return makeGetSimilarNotesForNote({index})(args);
+			return makeGetSimilarNotesForNote({index})({mode: this.settingsRepo.get().searchMode, ...args});
 		};
 
 		this.getSimilarNotesForText = async (args) => {
@@ -116,7 +118,7 @@ export class AppContainer {
 			return makeGetSimilarNotesForText({
 				index,
 				embed: (text) => this.engine.embed(text, {priority: "high"}),
-			})(args);
+			})({mode: this.settingsRepo.get().searchMode, ...args});
 		};
 
 		this.isIndexEmpty = async () => this.indexer.index()?.isEmpty() ?? true;
@@ -145,6 +147,11 @@ export class AppContainer {
 		});
 
 		this.insertWikilinkAtCursor = makeInsertWikilinkAtCursor({vault: this.vault});
+
+		this.setSearchMode = async (mode) => {
+			await this.settingsRepo.updatePartial({searchMode: mode});
+			this.similarNotesFeed.refresh();
+		};
 	}
 
 	async shutdown(): Promise<void> {
