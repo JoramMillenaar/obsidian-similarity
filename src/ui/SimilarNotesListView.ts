@@ -121,13 +121,12 @@ export class SimilarNotesListView extends ItemView {
 		const navButtons = navHeader.createDiv({cls: "nav-buttons-container"});
 		this.createNavActionButton(navButtons, "search", "Open semantic search", () => this.deps.openSearchModal());
 		this.createNavActionButton(navButtons, "settings", "Open plugin settings", () => this.deps.openSettings());
-		this.contentEl.before(navHeader);
+		this.containerEl.prepend(navHeader);
 
 		this.contentEl.empty();
-		const root = this.contentEl.createDiv({cls: "tag-container"});
-		this.bannerEl = root.createDiv({cls: "similarity-index-banner is-hidden"});
-		this.truncationNoticeEl = root.createDiv({cls: "similarity-truncation-notice is-hidden"});
-		const body = root.createDiv();
+		this.bannerEl = this.contentEl.createDiv({cls: "similarity-index-banner is-hidden"});
+		this.truncationNoticeEl = this.contentEl.createDiv({cls: "similarity-truncation-notice is-hidden"});
+		const body = this.contentEl.createDiv();
 		this.listEl = body.createDiv();
 		this.messageEl = body.createDiv();
 
