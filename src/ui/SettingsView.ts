@@ -2,7 +2,7 @@ import { App, DropdownComponent, Notice, PluginSettingTab, SettingDefinitionItem
 import RelatedNotes from "../main";
 import { parseIgnoredPaths } from "../core/rules/ignorePaths";
 import { EMBEDDING_MODELS, MAX_OVERLAP_PERCENT, SEARCH_MODES } from "../constants";
-import { EmbeddingModelId, SearchMode, SimilaritySettings } from "../types";
+import { EmbeddingModelId, SearchMode } from "../types";
 import { SettingsRepository } from "../ports";
 import { UpdateSettingsUseCase } from "../app/updateSettings";
 import { EngineStateReader, ModelRequestSupersededError } from "../embedding/engine";
