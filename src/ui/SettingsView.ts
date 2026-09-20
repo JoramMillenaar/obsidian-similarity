@@ -175,7 +175,7 @@ export class SettingView extends PluginSettingTab {
 			this.refreshDomState();
 			return;
 		}
-		await this.deps.updateSettings({[key]: value as number} as Partial<SimilaritySettings>);
+		await this.deps.updateSettings({[key]: value as number});
 	}
 
 	/**
