@@ -1,4 +1,4 @@
-import { Embedding, IndexedNote, RelatedNote } from "../../types";
+import { Embedding, IndexedNote, RelatedNote, SearchMode } from "../../types";
 import { QUANT_SCALE } from "./codec";
 
 export function normalizeEmbedding(embedding: Float32Array): Float32Array {
@@ -43,16 +43,40 @@ export function maxPairwiseSimilarity(a: Embedding[], b: Embedding[]): number {
 	return Number.isFinite(best) ? best : 0;
 }
 
+export function averageEmbedding(chunks: Embedding[]): Embedding {
+	if (chunks.length === 0) return new Int8Array(0);
+
+	const dim = chunks[0].length;
+	const sum = new Float32Array(dim);
+	for (const chunk of chunks) {
+		for (let i = 0; i < dim; i++) {
+			sum[i] += chunk[i] / QUANT_SCALE;
+		}
+	}
+	for (let i = 0; i < dim; i++) sum[i] /= chunks.length;
+
+	return quantizeEmbedding(normalizeEmbedding(sum));
+}
+
+function vectorsForSide(chunks: Embedding[], mode: SearchMode): Embedding[] {
+	if (mode === "granular" || chunks.length === 0) return chunks;
+	return [averageEmbedding(chunks)];
+}
+
+export function scoreSimilarity(mode: SearchMode, queryChunks: Embedding[], candidateChunks: Embedding[]): number {
+	return maxPairwiseSimilarity(vectorsForSide(queryChunks, mode), vectorsForSide(candidateChunks, mode));
+}
+
 export function rankSimilarNotes(
 	queryChunks: Embedding[],
 	notes: IndexedNote[],
-	options: {excludeId?: string; limit?: number; minScore?: number} = {},
+	options: {excludeId?: string; limit?: number; minScore?: number; mode?: SearchMode} = {},
 ): RelatedNote[] {
-	const {excludeId, limit = 10, minScore = 0.25} = options;
+	const {excludeId, limit = 10, minScore = 0.25, mode = "granular"} = options;
 
 	return notes
 		.filter((n) => (excludeId ? n.id !== excludeId : true))
-		.map((n) => ({id: n.id, score: maxPairwiseSimilarity(queryChunks, n.chunks.map((chunk) => chunk.embedding))}))
+		.map((n) => ({id: n.id, score: scoreSimilarity(mode, queryChunks, n.chunks.map((chunk) => chunk.embedding))}))
 		.filter((r) => Number.isFinite(r.score) && r.score >= minScore)
 		.sort((a, b) => b.score - a.score)
 		.slice(0, limit);

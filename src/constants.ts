@@ -1,4 +1,4 @@
-import { EmbeddingModelConfig, EmbeddingModelId, SimilaritySettings } from "./types";
+import { EmbeddingModelConfig, EmbeddingModelId, SearchMode, SimilaritySettings } from "./types";
 
 export const VIEW_TYPE_SIMILARITY = "similarity";
 
@@ -35,6 +35,23 @@ export const EMBEDDING_MODELS: Record<EmbeddingModelId, EmbeddingModelConfig> = 
 
 export const DEFAULT_EMBEDDING_MODEL_ID: EmbeddingModelId = "xenova-all-MiniLM-L6-v2";
 
+export const DEFAULT_SEARCH_MODE: SearchMode = "granular";
+
+export const SEARCH_MODES: {id: SearchMode; label: string; desc: string; icon: string}[] = [
+	{
+		id: "granular",
+		label: "precise match",
+		desc: "Compares every passage of this note against every passage of each candidate, keeping the best match (default).",
+		icon: "locate",
+	},
+	{
+		id: "average",
+		label: "average match",
+		desc: "Compares the overall averaged meaning of this note against the overall averaged meaning of each candidate.",
+		icon: "blend",
+	},
+];
+
 export const DEFAULT_SETTINGS: SimilaritySettings = {
 	ignoredPaths: [],
 	advancedOpen: false,
@@ -42,6 +59,7 @@ export const DEFAULT_SETTINGS: SimilaritySettings = {
 	maxExtractedChars: 4800,
 	maxOverlapPercent: 15,
 	embeddingModelId: DEFAULT_EMBEDDING_MODEL_ID,
+	searchMode: DEFAULT_SEARCH_MODE,
 	lastAppliedMaxRawMarkdownChars: 20000,
 	lastAppliedMaxExtractedChars: 4800,
 };

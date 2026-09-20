@@ -1,5 +1,5 @@
 import { IndexMetadata, ModelIndexFile, SCHEMA_VERSION, SimilarityPluginData, SimilaritySettings } from "../../types";
-import { DEFAULT_SETTINGS, EMBEDDING_MODELS, MAX_OVERLAP_PERCENT } from "../../constants";
+import { DEFAULT_SETTINGS, EMBEDDING_MODELS, MAX_OVERLAP_PERCENT, SEARCH_MODES } from "../../constants";
 
 export function normalizeSettings(
 	value: Partial<SimilaritySettings> | undefined,
@@ -10,6 +10,7 @@ export function normalizeSettings(
 	const maxExtractedChars = value?.maxExtractedChars;
 	const maxOverlapPercent = value?.maxOverlapPercent;
 	const embeddingModelId = value?.embeddingModelId;
+	const searchMode = value?.searchMode;
 	const lastAppliedMaxRawMarkdownChars = value?.lastAppliedMaxRawMarkdownChars;
 	const lastAppliedMaxExtractedChars = value?.lastAppliedMaxExtractedChars;
 
@@ -35,9 +36,9 @@ export function normalizeSettings(
 		embeddingModelId: typeof embeddingModelId === "string" && embeddingModelId in EMBEDDING_MODELS
 			? embeddingModelId
 			: DEFAULT_SETTINGS.embeddingModelId,
-		// Missing (e.g. upgrading from before this field existed) defaults to the currently
-		// configured cap, not the factory default — otherwise upgrading with an already-customized
-		// cap would look like an increase and trigger a spurious resync-recheck pass.
+		searchMode: typeof searchMode === "string" && SEARCH_MODES.some((mode) => mode.id === searchMode)
+			? searchMode
+			: DEFAULT_SETTINGS.searchMode,
 		lastAppliedMaxRawMarkdownChars: typeof lastAppliedMaxRawMarkdownChars === "number" && lastAppliedMaxRawMarkdownChars > 0
 			? lastAppliedMaxRawMarkdownChars
 			: normalizedMaxRawMarkdownChars,
