@@ -38,7 +38,7 @@ function abortError(): Error {
  * Owns one Worker's lifecycle: spins it up, waits for it to report ready, sends embed/dispose
  * requests with ack + completion timeouts, and retries embed requests that never got acked.
  */
-class WorkerMessenger {
+export class WorkerMessenger {
 	private worker: Worker | null = null;
 	private requestIdCounter = 0;
 	private loadError: ModelLoadFailedError | null = null;

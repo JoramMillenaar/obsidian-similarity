@@ -1,8 +1,6 @@
 const test = require("node:test");
 const assert = require("node:assert");
 
-const ORIGIN = "app://obsidian.md";
-
 /** Manual clock, so the 15s ack deadline and 5min work deadline are testable in milliseconds. */
 function makeClock() {
 	let now = 0;
@@ -43,41 +41,54 @@ function makeClock() {
 }
 
 /**
- * @param respond called with each message the host posts into the iframe, plus a `deliver`
- *   callback that plays a message back to the host the way the real iframe would.
+ * @param respond called with each message the host posts into the worker, plus a `deliver`
+ *   callback that plays a message back to the host the way the real worker would. A `type:
+ *   'init'` message is answered with a `ready` response automatically, the way the worker
+ *   acknowledges its own startup, unless `respond` intercepts it itself.
  */
-function mountFakeIframe(respond) {
+function mountFakeWorker(respond) {
 	const clock = makeClock();
-	const listeners = [];
 
-	const contentWindow = {
+	class FakeWorker {
+		constructor() {
+			this.listeners = {message: [], error: []};
+		}
+
 		postMessage(message) {
-			respond(message, deliver);
-		},
-	};
-	const iframe = {contentWindow, remove() {}};
+			if (message.type === 'init') {
+				this.deliver({type: 'ready', device: 'wasm'});
+				return;
+			}
+			respond(message, (data) => this.deliver(data));
+		}
 
-	function deliver(data) {
-		for (const listener of [...listeners]) listener({origin: ORIGIN, source: contentWindow, data});
+		addEventListener(type, fn) {
+			this.listeners[type].push(fn);
+		}
+
+		removeEventListener(type, fn) {
+			const list = this.listeners[type];
+			const at = list.indexOf(fn);
+			if (at >= 0) list.splice(at, 1);
+		}
+
+		deliver(data) {
+			for (const listener of [...this.listeners.message]) listener({data});
+		}
+
+		terminate() {}
 	}
 
 	global.window = {
 		setTimeout: clock.setTimeout,
 		clearTimeout: clock.clearTimeout,
-		addEventListener(type, fn) {
-			if (type === "message") listeners.push(fn);
-		},
-		removeEventListener(type, fn) {
-			const at = listeners.indexOf(fn);
-			if (at >= 0) listeners.splice(at, 1);
-		},
-		location: {origin: ORIGIN},
-		origin: ORIGIN,
 		navigator: {onLine: true},
 	};
-	global.document = {body: {createEl: () => iframe}};
+	global.Worker = FakeWorker;
+	global.Blob = class {};
+	global.URL = {createObjectURL: () => 'blob:fake', revokeObjectURL: () => {}};
 
-	return {clock, deliver};
+	return {clock};
 }
 
 const MODEL_CONFIG = {
@@ -89,60 +100,53 @@ const MODEL_CONFIG = {
 	pooling: "mean",
 };
 
-const EMPTY_RESULT = {chunks: [], metadata: {embeddingModelId: MODEL_CONFIG.id, maxOverlapPercent: 0}};
-
 function loadMessenger() {
-	const path = require.resolve("../dist/embedding/host/messenger.js");
+	const path = require.resolve("../dist/embedding/host/workerProvider.js");
 	delete require.cache[path];
-	return require(path).IframeMessenger;
+	return require(path).WorkerMessenger;
 }
 
-test("a request the iframe has taken on is never sent a second time", async () => {
+test("a request the worker has taken on is never sent a second time", async () => {
 	const sent = [];
 	let acked = 0;
 
-	const {clock} = mountFakeIframe((message, deliver) => {
+	const {clock} = mountFakeWorker((message, deliver) => {
 		sent.push(message);
-		if (message.payload === "ping") {
-			deliver({requestId: message.requestId, data: EMPTY_RESULT});
-			return;
-		}
 		acked++;
 		deliver({type: "ack", requestId: message.requestId});
 		// ...and then never finishes, the way a very slow embedding on a phone behaves.
 	});
 
-	const IframeMessenger = loadMessenger();
-	const messenger = new IframeMessenger("test-iframe", "<script></script>", MODEL_CONFIG);
+	const WorkerMessenger = loadMessenger();
+	const messenger = new WorkerMessenger("<script></script>", MODEL_CONFIG);
 	await messenger.initialize();
 
 	const embed = messenger.sendMessage("a long note", 15);
 	const settled = embed.then(() => "resolved", (error) => error);
 
-	// Past the delivery deadline: acknowledged work must not be re-sent behind itself.
+	// Past the ack deadline: acknowledged work must not be re-sent behind itself.
 	await clock.advance(60_000);
 	assert.strictEqual(acked, 1);
-	assert.strictEqual(sent.filter((m) => m.payload !== "ping").length, 1);
+	assert.strictEqual(sent.filter((m) => m.type === 'embed').length, 1);
 
 	// It still gives up eventually rather than hanging on to the request forever.
 	await clock.advance(5 * 60_000);
 	const outcome = await settled;
 	assert.ok(outcome instanceof Error, `expected a rejection, got ${outcome}`);
 	assert.match(outcome.message, /did not finish in time/);
-	assert.strictEqual(sent.filter((m) => m.payload !== "ping").length, 1);
+	assert.strictEqual(sent.filter((m) => m.type === 'embed').length, 1);
 });
 
-test("a request the iframe never acknowledges is retried", async () => {
+test("a request the worker never acknowledges is retried", async () => {
 	const sent = [];
 
-	const {clock} = mountFakeIframe((message, deliver) => {
+	const {clock} = mountFakeWorker((message) => {
 		sent.push(message);
-		if (message.payload === "ping") deliver({requestId: message.requestId, data: EMPTY_RESULT});
-		// Non-ping messages are dropped entirely: nothing received them.
+		// Never acked: nothing received it.
 	});
 
-	const IframeMessenger = loadMessenger();
-	const messenger = new IframeMessenger("test-iframe", "<script></script>", MODEL_CONFIG);
+	const WorkerMessenger = loadMessenger();
+	const messenger = new WorkerMessenger("<script></script>", MODEL_CONFIG);
 	await messenger.initialize();
 
 	const settled = messenger.sendMessage("a note", 15).then(() => "resolved", (error) => error);
@@ -152,30 +156,21 @@ test("a request the iframe never acknowledges is retried", async () => {
 	const outcome = await settled;
 	assert.ok(outcome instanceof Error, `expected a rejection, got ${outcome}`);
 	assert.match(outcome.message, /All 3 attempts/);
-	assert.strictEqual(sent.filter((m) => m.payload !== "ping").length, 3);
+	assert.strictEqual(sent.filter((m) => m.type === 'embed').length, 3);
 });
 
 test("an acknowledged request still resolves with its result", async () => {
-	const result = {
-		chunks: [{embedding: [1, 2, 3], start: 0, end: 4}],
-		metadata: {embeddingModelId: MODEL_CONFIG.id, maxOverlapPercent: 15},
-	};
+	const result = {chunks: [{embedding: [1, 2, 3], start: 0, end: 4}], metadata: {embeddingModelId: MODEL_CONFIG.id, maxOverlapPercent: 15}};
 
-	const {clock} = mountFakeIframe((message, deliver) => {
-		if (message.payload === "ping") {
-			deliver({requestId: message.requestId, data: EMPTY_RESULT});
-			return;
-		}
+	mountFakeWorker((message, deliver) => {
 		deliver({type: "ack", requestId: message.requestId});
-		global.window.setTimeout(() => deliver({requestId: message.requestId, data: result}), 90_000);
+		deliver({type: "embed-result", requestId: message.requestId, data: result});
 	});
 
-	const IframeMessenger = loadMessenger();
-	const messenger = new IframeMessenger("test-iframe", "<script></script>", MODEL_CONFIG);
+	const WorkerMessenger = loadMessenger();
+	const messenger = new WorkerMessenger("<script></script>", MODEL_CONFIG);
 	await messenger.initialize();
 
-	const embed = messenger.sendMessage("a long note", 15);
-	await clock.advance(120_000);
-
-	assert.deepStrictEqual(await embed, result);
+	const outcome = await messenger.sendMessage("a note", 15);
+	assert.deepStrictEqual(outcome, result);
 });
