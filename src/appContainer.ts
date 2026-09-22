@@ -28,6 +28,8 @@ import { IsIgnoredPath, makeIsIgnoredPath } from "./app/isIgnoredPath";
 import { GetNoteTextUseCase, makeGetNoteText } from "./app/getNoteText";
 import { makeUpdateSettings, UpdateSettingsUseCase } from "./app/updateSettings";
 import { makeRunLegacyMigrations, RunLegacyMigrationsUseCase } from "./app/legacyMigrations";
+import { collectDeviceInfo } from "./obsidian/obsidianDeviceInfo";
+import { EnvironmentInfo } from "./core/feedback";
 
 const INDEX_WRITE_THROTTLE_MS = 1000;
 
@@ -58,8 +60,10 @@ export class AppContainer {
 	readonly isIndexEmpty: () => Promise<boolean>;
 
 	private readonly registry: IndexRegistry;
+	private readonly plugin: Plugin;
 
 	constructor(plugin: Plugin) {
+		this.plugin = plugin;
 		this.status = new ObsidianStatusBar(plugin);
 		this.vault = new ObsidianVault(plugin);
 		this.pluginDataStore = new ObsidianPluginDataStore(plugin);
@@ -151,6 +155,22 @@ export class AppContainer {
 		this.setSearchMode = async (mode) => {
 			await this.settingsRepo.updatePartial({searchMode: mode});
 			this.similarNotesFeed.refresh();
+		};
+	}
+
+	collectEnvironment(): EnvironmentInfo {
+		const engine = this.engine.status();
+		const {searchMode, maxRawMarkdownChars, maxExtractedChars, maxOverlapPercent} = this.settingsRepo.get();
+		return {
+			...collectDeviceInfo(this.plugin),
+			engineState: engine.kind,
+			modelId: engine.kind === "idle" ? undefined : engine.modelId,
+			device: engine.kind === "ready" ? engine.device : undefined,
+			indexedNotes: this.indexer.index()?.stats().notes ?? 0,
+			searchMode,
+			maxRawMarkdownChars,
+			maxExtractedChars,
+			maxOverlapPercent,
 		};
 	}
 

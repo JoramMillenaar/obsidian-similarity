@@ -1,4 +1,4 @@
-import { ItemView, Notice, setIcon, TFile, WorkspaceLeaf } from "obsidian";
+import { ItemView, Menu, Notice, setIcon, TFile, WorkspaceLeaf } from "obsidian";
 import { SimilarNotesFeed, SimilarNotesSnapshot } from "../search/similarNotesFeed";
 import { StatusHub } from "../status/statusHub";
 import { BannerState, subscribeBanner } from "./banner";
@@ -8,6 +8,7 @@ import { SEARCH_MODES, VIEW_TYPE_SIMILARITY } from "../constants";
 import { GetNoteTextUseCase } from "../app/getNoteText";
 import { SettingsRepository } from "../ports";
 import { SearchMode } from "../types";
+import { FEEDBACK_ACTIONS, OpenFeedback } from "./FeedbackModal";
 
 export { VIEW_TYPE_SIMILARITY };
 
@@ -39,6 +40,7 @@ export type SimilarNotesListViewDeps = {
 	setSearchMode: (mode: SearchMode) => Promise<void>;
 	openSearchModal: () => void;
 	openSettings: () => void;
+	openFeedback: OpenFeedback;
 };
 
 const TRUNCATION_NOTICE_TEXT = "Only part of this large note was used for the search.";
@@ -110,7 +112,7 @@ export class SimilarNotesListView extends ItemView {
 		});
 	}
 
-	private createNavActionButton(container: HTMLElement, icon: string, label: string, onClick: () => void) {
+	private createNavActionButton(container: HTMLElement, icon: string, label: string, onClick: (event: MouseEvent) => void) {
 		const button = container.createEl("button", {
 			cls: "clickable-icon nav-action-button",
 			attr: {"aria-label": label},
@@ -133,6 +135,16 @@ export class SimilarNotesListView extends ItemView {
 		button.setAttribute("aria-label", `Searching by ${mode.label}`);
 	}
 
+	private openFeedbackMenu = (event: MouseEvent) => {
+		const menu = new Menu();
+		for (const action of FEEDBACK_ACTIONS) {
+			menu.addItem((item) => {
+				item.setTitle(action.label).setIcon(action.icon).onClick(() => action.run(this.deps.openFeedback));
+			});
+		}
+		menu.showAtMouseEvent(event);
+	};
+
 	private cycleSearchMode = () => {
 		const currentIndex = SEARCH_MODES.findIndex((mode) => mode.id === this.currentMode().id);
 		const next = SEARCH_MODES[(currentIndex + 1) % SEARCH_MODES.length];
@@ -147,6 +159,7 @@ export class SimilarNotesListView extends ItemView {
 		this.updateSearchModeButton();
 		this.createNavActionButton(navButtons, "search", "Open semantic search", () => this.deps.openSearchModal());
 		this.createNavActionButton(navButtons, "settings", "Open plugin settings", () => this.deps.openSettings());
+		this.createNavActionButton(navButtons, "message-square", "Send feedback", this.openFeedbackMenu);
 		this.containerEl.prepend(navHeader);
 
 		this.contentEl.empty();

@@ -187,3 +187,9 @@
 	font-family: var(--font-monospace); white-space: nowrap; }
 .spr-cell-text { font-family: var(--font-monospace); color: var(--text-muted);
 	max-width: 460px; word-break: break-word; }
+
+.similarity-feedback-text {
+	width: 100%;
+	margin: 6px 0 12px;
+	resize: vertical;
+}

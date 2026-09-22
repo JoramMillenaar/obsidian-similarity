@@ -5,6 +5,7 @@ import { AppContainer } from "./appContainer";
 import { SimilarNotesListView, VIEW_TYPE_SIMILARITY } from "./ui/SimilarNotesListView";
 import { SettingView } from "./ui/SettingsView";
 import { registerVaultEvents } from "./indexing/vaultEvents";
+import { FeedbackModal, FeedbackRequest } from "./ui/FeedbackModal";
 
 export default class SimilarNotes extends Plugin {
 	private appContainer!: AppContainer;
@@ -15,11 +16,18 @@ export default class SimilarNotes extends Plugin {
 
 		await this.appContainer.pluginDataStore.load();
 
+		const openFeedback = (request: FeedbackRequest) => {
+			new FeedbackModal(this.app, request, {
+				collectEnvironment: () => this.appContainer.collectEnvironment(),
+			}).open();
+		};
+
 		this.addSettingTab(new SettingView(this.app, this, {
 			settingsRepo: this.appContainer.settingsRepo,
 			updateSettings: this.appContainer.updateSettings,
 			setSearchMode: this.appContainer.setSearchMode,
 			engine: this.appContainer.engine,
+			openFeedback,
 		}));
 
 		const openSearchModal = () => {
@@ -46,6 +54,7 @@ export default class SimilarNotes extends Plugin {
 					setSearchMode: this.appContainer.setSearchMode,
 					openSearchModal,
 					openSettings,
+					openFeedback,
 				})
 		);
 		this.registerHoverLinkSource(VIEW_TYPE_SIMILARITY, {

@@ -6,12 +6,14 @@ import { EmbeddingModelId, SearchMode } from "../types";
 import { SettingsRepository } from "../ports";
 import { UpdateSettingsUseCase } from "../app/updateSettings";
 import { EngineStateReader, ModelRequestSupersededError } from "../embedding/engine";
+import { FEEDBACK_ACTIONS, OpenFeedback } from "./FeedbackModal";
 
 export type SettingsViewDeps = {
 	settingsRepo: SettingsRepository,
 	updateSettings: UpdateSettingsUseCase,
 	setSearchMode: (mode: SearchMode) => Promise<void>,
 	engine: EngineStateReader,
+	openFeedback: OpenFeedback,
 }
 
 type NumericSettingKey = "maxRawMarkdownChars" | "maxExtractedChars" | "maxOverlapPercent";
@@ -108,6 +110,17 @@ export class SettingView extends PluginSettingTab {
 								});
 						});
 					});
+				},
+			},
+			{
+				name: "Feedback",
+				desc: "Found a bug or have an idea? Reports open in your browser or mail client, so you see exactly what is sent.",
+				render: (setting) => {
+					for (const action of FEEDBACK_ACTIONS) {
+						setting.addButton((button) => {
+							button.setButtonText(action.label).onClick(() => action.run(this.deps.openFeedback));
+						});
+					}
 				},
 			},
 			{
