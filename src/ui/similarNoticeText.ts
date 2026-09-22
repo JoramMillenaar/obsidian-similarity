@@ -12,6 +12,8 @@ export function textForNotice(notice: SimilarNotesNotice): string {
 			return notice.offline
 				? `${notice.message} This will resume on its own once you are back online.`
 				: notice.message;
+		case "model-disabled":
+			return "Local AI disabled on this device. Results won't update until it is re-enabled in the settings.";
 		case "warming-up":
 			return "Similar notes will appear once loading finishes.";
 		case "empty-index":

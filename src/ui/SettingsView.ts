@@ -1,17 +1,19 @@
-import { App, DropdownComponent, Notice, PluginSettingTab, SettingDefinitionItem } from "obsidian";
+import { App, DropdownComponent, Notice, PluginSettingTab, SettingDefinitionItem, ToggleComponent } from "obsidian";
 import RelatedNotes from "../main";
 import { parseIgnoredPaths } from "../core/rules/ignorePaths";
 import { EMBEDDING_MODELS, MAX_OVERLAP_PERCENT, SEARCH_MODES } from "../constants";
 import { EmbeddingModelId, SearchMode } from "../types";
 import { SettingsRepository } from "../ports";
 import { UpdateSettingsUseCase } from "../app/updateSettings";
-import { EngineStateReader, ModelRequestSupersededError } from "../embedding/engine";
+import { EngineStateReader, EngineStatus, ModelRequestSupersededError } from "../embedding/engine";
 import { FEEDBACK_ACTIONS, OpenFeedback } from "./FeedbackModal";
+import { createWarningIcon } from "./warning";
 
 export type SettingsViewDeps = {
 	settingsRepo: SettingsRepository,
 	updateSettings: UpdateSettingsUseCase,
 	setSearchMode: (mode: SearchMode) => Promise<void>,
+	setModelDisabled: (disabled: boolean) => Promise<void>,
 	engine: EngineStateReader,
 	openFeedback: OpenFeedback,
 }
@@ -25,6 +27,8 @@ function capitalize(text: string): string {
 export class SettingView extends PluginSettingTab {
 	private ignoredPathsDraft: string;
 	private modelDropdown?: DropdownComponent;
+	private modelDisabledToggle?: ToggleComponent;
+	private modelDisabledSettingEl?: HTMLElement;
 
 	constructor(
 		app: App,
@@ -35,6 +39,7 @@ export class SettingView extends PluginSettingTab {
 		this.ignoredPathsDraft = this.deps.settingsRepo.get().ignoredPaths.join("\n");
 		this.deps.engine.subscribe((status) => {
 			this.modelDropdown?.setValue(this.currentModelId(status));
+			this.reflectModelDisabled(status);
 		});
 	}
 
@@ -42,6 +47,25 @@ export class SettingView extends PluginSettingTab {
 		return status.kind === "ready" || status.kind === "loading"
 			? status.modelId
 			: this.deps.settingsRepo.get().embeddingModelId;
+	}
+
+	private isModelDisabled(status = this.deps.engine.status()): boolean {
+		return status.kind === "disabled";
+	}
+
+	/**
+	 * The disabled state can change from outside this tab (it may be tripped for the user, not
+	 * by them), so everything that depends on it is synced from engine status, not from the
+	 * toggle's own onChange. Language stays switchable: the choice is kept and applied on enable.
+	 */
+	private reflectModelDisabled(status: EngineStatus): void {
+		const disabled = this.isModelDisabled(status);
+		// ToggleComponent.setValue fires onChange, so only touch it when it actually differs.
+		if (this.modelDisabledToggle && this.modelDisabledToggle.getValue() !== disabled) {
+			this.modelDisabledToggle.setValue(disabled);
+		}
+		this.modelDisabledSettingEl?.toggleClass("similarity-setting-warning", disabled);
+		if (this.containerEl?.isConnected) this.refreshDomState();
 	}
 
 	getSettingDefinitions(): SettingDefinitionItem[] {
@@ -125,13 +149,34 @@ export class SettingView extends PluginSettingTab {
 			},
 			{
 				name: "Show advanced settings",
-				control: {type: "toggle", key: "advancedOpen"},
+				control: {type: "toggle", key: "advancedOpen", disabled: () => this.isModelDisabled()},
 			},
 			{
 				type: "group",
 				heading: "Advanced",
-				visible: () => this.deps.settingsRepo.get().advancedOpen,
+				// Forced open while the model is disabled so the warning below can't be missed.
+				visible: () => this.deps.settingsRepo.get().advancedOpen || this.isModelDisabled(),
 				items: [
+					{
+						name: "Disable local AI on this device",
+						desc: "Turns the AI model off on this device only (this setting is not synced). Similar notes keep working from what was already indexed, but nothing new is indexed and text search is unavailable. You can still pick a language; it is applied once the model is enabled again. Use this if the model crashes or slows this device down.",
+						render: (setting) => {
+							setting.addToggle((toggle) => {
+								toggle.setValue(this.isModelDisabled());
+								toggle.onChange((value) => {
+									void this.setModelDisabled(value);
+								});
+								this.modelDisabledToggle = toggle;
+							});
+							setting.nameEl.prepend(createWarningIcon(setting.nameEl));
+							this.modelDisabledSettingEl = setting.settingEl;
+							setting.settingEl.toggleClass("similarity-setting-warning", this.isModelDisabled());
+							return () => {
+								this.modelDisabledToggle = undefined;
+								this.modelDisabledSettingEl = undefined;
+							};
+						},
+					},
 					{
 						name: "Max raw markdown characters",
 						desc: "Upper bound applied before MarkdownRenderer runs.",
@@ -177,7 +222,7 @@ export class SettingView extends PluginSettingTab {
 		const settings = this.deps.settingsRepo.get();
 
 		if (key === "advancedOpen") {
-			return settings.advancedOpen;
+			return settings.advancedOpen || this.isModelDisabled();
 		}
 		return settings[key as NumericSettingKey];
 	}
@@ -189,6 +234,16 @@ export class SettingView extends PluginSettingTab {
 			return;
 		}
 		await this.deps.updateSettings({[key]: value as number});
+	}
+
+	private async setModelDisabled(disabled: boolean): Promise<void> {
+		try {
+			await this.deps.setModelDisabled(disabled);
+		} catch (error) {
+			if (error instanceof ModelRequestSupersededError) return;
+			const message = error instanceof Error ? error.message : String(error);
+			new Notice(`Could not ${disabled ? "disable" : "enable"} the model: ${message}`);
+		}
 	}
 
 	/**

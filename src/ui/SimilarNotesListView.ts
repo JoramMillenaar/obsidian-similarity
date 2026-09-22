@@ -2,6 +2,7 @@ import { ItemView, Menu, Notice, setIcon, TFile, WorkspaceLeaf } from "obsidian"
 import { SimilarNotesFeed, SimilarNotesSnapshot } from "../search/similarNotesFeed";
 import { StatusHub } from "../status/statusHub";
 import { BannerState, subscribeBanner } from "./banner";
+import { renderBannerMessage } from "./warning";
 import { WASM_WARNING_MESSAGE } from "../status/notices";
 import { textForNotice } from "./similarNoticeText";
 import { SEARCH_MODES, VIEW_TYPE_SIMILARITY } from "../constants";
@@ -312,15 +313,23 @@ export class SimilarNotesListView extends ItemView {
 		bannerEl.toggleClass("is-hidden", !banner.visible);
 		if (!banner.visible) return;
 
-		bannerEl.createDiv({
-			cls: "similarity-index-banner-message",
-			text: banner.message,
-		});
+		renderBannerMessage(bannerEl, banner);
 
 		if (banner.wasmWarning) {
 			bannerEl.createDiv({
 				cls: "similarity-index-banner-gpu-warning",
 				text: WASM_WARNING_MESSAGE,
+			});
+		}
+
+		if (banner.action === "open-settings") {
+			const link = bannerEl.createEl("a", {
+				cls: "similarity-index-banner-link",
+				text: "Re-enable in settings",
+			});
+			link.addEventListener("click", (event) => {
+				event.preventDefault();
+				this.deps.openSettings();
 			});
 		}
 

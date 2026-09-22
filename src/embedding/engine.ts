@@ -37,6 +37,9 @@ export type EmbedRequestOptions = {
 /**
  * Owns the lifecycle of the active embedding model (loading, switching, recovering from
  * failure) and serializes embed requests against it through a priority queue.
+ *
+ * The model can be switched off (see {@link disable}): an override that outranks model requests
+ * until {@link enable} lifts it. Whether that is remembered, and where, is the caller's business.
  */
 export class EmbeddingEngine {
 	private state: EngineState = {status: "idle"};
@@ -75,6 +78,7 @@ export class EmbeddingEngine {
 		if (state.status === "error") {
 			return {kind: "error", modelId: state.modelId, message: state.message, offline: state.offline};
 		}
+		if (state.status === "disabled") return {kind: "disabled"};
 		return {kind: "idle"};
 	}
 
@@ -109,8 +113,8 @@ export class EmbeddingEngine {
 		});
 	}
 
-	/** Loads and switches to `modelId`, superseding any in-flight switch and falling back to the previous model on failure. */
 	requestModel(modelId: EmbeddingModelId): Promise<void> {
+		if (this.state.status === "disabled") return Promise.resolve();
 		if (this.state.status === "ready" && this.state.modelId === modelId) return Promise.resolve();
 		if (this.pending?.modelId === modelId) return this.pending.promise;
 
@@ -122,13 +126,37 @@ export class EmbeddingEngine {
 		return pending.promise;
 	}
 
-	/** Re-attempts loading the model that's currently in an error state; a no-op otherwise. */
 	retry(): Promise<void> {
 		if (this.state.status !== "error") return Promise.resolve();
 		return this.requestModel(this.state.modelId);
 	}
 
-	/** Tears down the engine: cancels queued work, unloads the active model, and stops accepting new requests. */
+	async disable(): Promise<void> {
+		if (this.disposed || this.state.status === "disabled") return;
+
+		this.epoch++;
+		this.abortController?.abort();
+		this.abortController = null;
+		this.pending = null;
+		this.cancelQueued("The embedding model has been disabled.");
+
+		const outgoing = this.state.status === "ready" ? this.state.embedder : null;
+		this.state = {status: "disabled"};
+		this.notify();
+		this.deps.status.update("Model disabled.", 4000);
+
+		await this.inFlight;
+		await outgoing?.unload();
+	}
+
+	enable(modelId: EmbeddingModelId): Promise<void> {
+		if (this.disposed || this.state.status !== "disabled") return Promise.resolve();
+
+		this.state = {status: "idle"};
+		this.notify();
+		return this.requestModel(modelId);
+	}
+
 	dispose(): void {
 		this.disposed = true;
 		this.epoch++;

@@ -7,8 +7,10 @@ import { ObsidianModelIndexMetaStore } from "./obsidian/obsidianModelIndexMetaSt
 import { LegacyEmbeddingFileStore } from "./obsidian/legacyEmbeddingFileStore";
 import { ObsidianPluginDataStore } from "./obsidian/obsidianPluginDataStore";
 import { ObsidianSettingsRepository } from "./obsidian/obsidianSettings";
+import { ObsidianDeviceSettingsRepository } from "./obsidian/obsidianDeviceSettings";
 import { loadEmbeddingProvider } from "./embedding/host/workerProvider";
 import {
+	DeviceSettingsRepository,
 	EmbeddingFileStore,
 	ModelIndexMetaStore,
 	SettingsRepository,
@@ -28,6 +30,7 @@ import { IsIgnoredPath, makeIsIgnoredPath } from "./app/isIgnoredPath";
 import { GetNoteTextUseCase, makeGetNoteText } from "./app/getNoteText";
 import { makeUpdateSettings, UpdateSettingsUseCase } from "./app/updateSettings";
 import { makeRunLegacyMigrations, RunLegacyMigrationsUseCase } from "./app/legacyMigrations";
+import { makeSetModelDisabled, SetModelDisabledUseCase } from "./app/setModelDisabled";
 import { collectDeviceInfo } from "./obsidian/obsidianDeviceInfo";
 import { EnvironmentInfo } from "./core/feedback";
 
@@ -41,6 +44,7 @@ export class AppContainer {
 	readonly embeddingFileStore: EmbeddingFileStore;
 	readonly legacyEmbeddingFileStore: LegacyEmbeddingFileStore;
 	readonly settingsRepo: SettingsRepository;
+	readonly deviceSettingsRepo: DeviceSettingsRepository;
 
 	readonly engine: EmbeddingEngine;
 	readonly indexer: Indexer;
@@ -51,6 +55,7 @@ export class AppContainer {
 	readonly insertWikilinkAtCursor: InsertWikilinkAtCursorUseCase;
 	readonly updateSettings: UpdateSettingsUseCase;
 	readonly setSearchMode: (mode: SearchMode) => Promise<void>;
+	readonly setModelDisabled: SetModelDisabledUseCase;
 	readonly runLegacyMigrations: RunLegacyMigrationsUseCase;
 
 	readonly getNoteText: GetNoteTextUseCase;
@@ -71,6 +76,7 @@ export class AppContainer {
 		this.embeddingFileStore = new BinaryEmbeddingFileStore(plugin);
 		this.legacyEmbeddingFileStore = new LegacyEmbeddingFileStore(plugin);
 		this.settingsRepo = new ObsidianSettingsRepository(this.pluginDataStore);
+		this.deviceSettingsRepo = new ObsidianDeviceSettingsRepository(plugin);
 
 		this.registry = new IndexRegistry(
 			{metaStore: this.modelIndexMetaStore, binaryStore: this.embeddingFileStore},
@@ -148,6 +154,7 @@ export class AppContainer {
 			settingsRepo: this.settingsRepo,
 			engine: this.engine,
 			resync: () => this.indexer.syncAll(),
+			switchIndex: (modelId) => this.indexer.useModel(modelId),
 		});
 
 		this.insertWikilinkAtCursor = makeInsertWikilinkAtCursor({vault: this.vault});
@@ -156,6 +163,12 @@ export class AppContainer {
 			await this.settingsRepo.updatePartial({searchMode: mode});
 			this.similarNotesFeed.refresh();
 		};
+
+		this.setModelDisabled = makeSetModelDisabled({
+			deviceSettingsRepo: this.deviceSettingsRepo,
+			settingsRepo: this.settingsRepo,
+			engine: this.engine,
+		});
 	}
 
 	collectEnvironment(): EnvironmentInfo {
@@ -164,7 +177,7 @@ export class AppContainer {
 		return {
 			...collectDeviceInfo(this.plugin),
 			engineState: engine.kind,
-			modelId: engine.kind === "idle" ? undefined : engine.modelId,
+			modelId: "modelId" in engine ? engine.modelId : undefined,
 			device: engine.kind === "ready" ? engine.device : undefined,
 			indexedNotes: this.indexer.index()?.stats().notes ?? 0,
 			searchMode,

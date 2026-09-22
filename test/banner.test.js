@@ -66,6 +66,7 @@ test("the banner reflects model-download state with no note-specific context", (
 		processed: 40,
 		total: 100,
 		wasmWarning: false,
+		tone: "info",
 	});
 
 	engine.push({kind: "ready", modelId: "m1"});
@@ -133,5 +134,32 @@ test("a model still downloading outranks indexing progress in the banner", () =>
 	indexer.push({...IDLE_INDEXING, isRunning: true, pending: 40, total: 42});
 
 	assert.strictEqual(seen[seen.length - 1].message, "Setting up...");
+	hub.dispose();
+});
+
+test("a disabled model raises a warning banner that outranks indexing progress", () => {
+	const {hub, engine, indexer} = makeHub({
+		engine: makeFakeEngine({kind: "disabled"}),
+	});
+
+	const seen = [];
+	subscribeBanner(hub, (banner) => seen.push(banner));
+
+	let banner = seen[seen.length - 1];
+	assert.strictEqual(banner.visible, true);
+	assert.strictEqual(banner.tone, "warning");
+	assert.strictEqual(banner.action, "open-settings");
+	assert.match(banner.message, /disabled on this device/);
+
+	indexer.push({...IDLE_INDEXING, isRunning: true, pending: 40, processed: 2, total: 42});
+	banner = seen[seen.length - 1];
+	assert.strictEqual(banner.tone, "warning", "queued edits while paused must not look like indexing");
+	assert.strictEqual(banner.total, 0);
+
+	engine.push({kind: "ready", modelId: "m1"});
+	banner = seen[seen.length - 1];
+	assert.strictEqual(banner.tone, "info");
+	assert.strictEqual(banner.total, 42, "re-enabling hands the banner back to indexing");
+
 	hub.dispose();
 });

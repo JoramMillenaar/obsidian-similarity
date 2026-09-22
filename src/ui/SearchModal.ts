@@ -3,6 +3,7 @@ import { InsertWikilinkAtCursorUseCase } from "../app/insertWikilinkAtCursor";
 import { SimilarSearchFeed, SimilarSearchResult } from "../search/similarSearchFeed";
 import { StatusHub } from "../status/statusHub";
 import { BannerState, computeBanner, subscribeBanner } from "./banner";
+import { renderBannerMessage } from "./warning";
 import { WASM_WARNING_MESSAGE } from "../status/notices";
 import { textForNotice } from "./similarNoticeText";
 import { KeyedDebouncer } from "../core/util/debounce";
@@ -195,7 +196,8 @@ export class SearchModal extends SuggestModal<RelatedNote> {
 	private isIndexingBusy(): boolean {
 		const indexingState = this.deps.statusHub.getIndexingState();
 		if (!indexingState) return false;
-		return computeBanner(this.deps.statusHub.getEngineState(), indexingState).visible;
+		const banner = computeBanner(this.deps.statusHub.getEngineState(), indexingState);
+		return banner.visible && banner.tone === "info";
 	}
 
 	private renderBanner(banner: BannerState) {
@@ -216,10 +218,7 @@ export class SearchModal extends SuggestModal<RelatedNote> {
 			return;
 		}
 
-		this.bannerEl.createDiv({
-			cls: "similarity-index-banner-message",
-			text: banner.message,
-		});
+		renderBannerMessage(this.bannerEl, banner);
 
 		if (banner.wasmWarning) {
 			this.bannerEl.createDiv({

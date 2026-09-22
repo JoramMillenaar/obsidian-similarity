@@ -1,4 +1,4 @@
-import { EmbeddingModelConfig, EmbeddingModelId, SearchMode, SimilaritySettings } from "./types";
+import { DeviceSettings, EmbeddingModelConfig, EmbeddingModelId, SearchMode, SimilaritySettings } from "./types";
 
 export const VIEW_TYPE_SIMILARITY = "similarity";
 
@@ -63,6 +63,12 @@ export const DEFAULT_SETTINGS: SimilaritySettings = {
 	lastAppliedMaxRawMarkdownChars: 20000,
 	lastAppliedMaxExtractedChars: 4800,
 };
+
+export const DEFAULT_DEVICE_SETTINGS: DeviceSettings = {
+	modelDisabled: false,
+};
+
+export const DEVICE_SETTINGS_STORAGE_KEY = "similarity:device-settings";
 
 export const REPO_URL = "https://github.com/JoramMillenaar/obsidian-similarity";
 

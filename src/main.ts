@@ -26,6 +26,7 @@ export default class SimilarNotes extends Plugin {
 			settingsRepo: this.appContainer.settingsRepo,
 			updateSettings: this.appContainer.updateSettings,
 			setSearchMode: this.appContainer.setSearchMode,
+			setModelDisabled: this.appContainer.setModelDisabled,
 			engine: this.appContainer.engine,
 			openFeedback,
 		}));
