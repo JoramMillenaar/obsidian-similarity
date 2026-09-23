@@ -49,6 +49,7 @@ This plugin is built around one principle: your notes stay yours.
 - All processing happens locally  
 - No internet connection required after install  
 - No tracking, no telemetry, no external services
+- Bug reports and feedback are sent only when you choose to, through your own browser or mail client, and you see the full content first
 
 ---
 

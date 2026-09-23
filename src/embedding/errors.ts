@@ -7,9 +7,11 @@ export class ModelNotReadyError extends Error {
 		super(
 			status === "idle"
 				? "No embedding model is loaded yet."
-				: status === "error"
-					? "The embedding model failed to load."
-					: "A model switch is in progress.",
+				: status === "disabled"
+					? "The embedding model is disabled on this device."
+					: status === "error"
+						? "The embedding model failed to load."
+						: "A model switch is in progress.",
 		);
 		this.name = "ModelNotReadyError";
 	}

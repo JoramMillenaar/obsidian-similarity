@@ -10,6 +10,7 @@ export type LoadPhase = "downloading" | "finalizing";
 /** Public snapshot of the engine's model lifecycle, as seen by UI and status consumers. */
 export type EngineStatus =
 	| { kind: "idle" }
+	| { kind: "disabled" }
 	| { kind: "loading"; modelId: EmbeddingModelId; progress: number | null; phase: LoadPhase }
 	| { kind: "ready"; modelId: EmbeddingModelId; device?: Device }
 	| { kind: "error"; modelId: EmbeddingModelId; message: string; offline: boolean };
@@ -26,6 +27,7 @@ export type EngineStateReader = {
 /** Internal model lifecycle state, including data (embedder instance, epoch) not exposed via `EngineStatus`. */
 export type EngineState =
 	| { status: "idle" }
+	| { status: "disabled" }
 	| { status: "loading"; modelId: EmbeddingModelId; epoch: number; progress: ModelLoadProgress | null; phase: LoadPhase }
 	| { status: "error"; modelId: EmbeddingModelId; message: string; offline: boolean; epoch: number }
 	| { status: "ready"; modelId: EmbeddingModelId; embedder: EmbeddingPort; epoch: number };

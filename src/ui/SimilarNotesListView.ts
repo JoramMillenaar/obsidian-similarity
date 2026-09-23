@@ -1,13 +1,15 @@
-import { ItemView, Notice, setIcon, TFile, WorkspaceLeaf } from "obsidian";
+import { ItemView, Menu, Notice, setIcon, TFile, WorkspaceLeaf } from "obsidian";
 import { SimilarNotesFeed, SimilarNotesSnapshot } from "../search/similarNotesFeed";
 import { StatusHub } from "../status/statusHub";
 import { BannerState, subscribeBanner } from "./banner";
+import { renderBannerMessage } from "./warning";
 import { WASM_WARNING_MESSAGE } from "../status/notices";
 import { textForNotice } from "./similarNoticeText";
 import { SEARCH_MODES, VIEW_TYPE_SIMILARITY } from "../constants";
 import { GetNoteTextUseCase } from "../app/getNoteText";
 import { SettingsRepository } from "../ports";
 import { SearchMode } from "../types";
+import { FEEDBACK_ACTIONS, OpenFeedback } from "./FeedbackModal";
 
 export { VIEW_TYPE_SIMILARITY };
 
@@ -39,6 +41,7 @@ export type SimilarNotesListViewDeps = {
 	setSearchMode: (mode: SearchMode) => Promise<void>;
 	openSearchModal: () => void;
 	openSettings: () => void;
+	openFeedback: OpenFeedback;
 };
 
 const TRUNCATION_NOTICE_TEXT = "Only part of this large note was used for the search.";
@@ -110,7 +113,7 @@ export class SimilarNotesListView extends ItemView {
 		});
 	}
 
-	private createNavActionButton(container: HTMLElement, icon: string, label: string, onClick: () => void) {
+	private createNavActionButton(container: HTMLElement, icon: string, label: string, onClick: (event: MouseEvent) => void) {
 		const button = container.createEl("button", {
 			cls: "clickable-icon nav-action-button",
 			attr: {"aria-label": label},
@@ -133,6 +136,16 @@ export class SimilarNotesListView extends ItemView {
 		button.setAttribute("aria-label", `Searching by ${mode.label}`);
 	}
 
+	private openFeedbackMenu = (event: MouseEvent) => {
+		const menu = new Menu();
+		for (const action of FEEDBACK_ACTIONS) {
+			menu.addItem((item) => {
+				item.setTitle(action.label).setIcon(action.icon).onClick(() => action.run(this.deps.openFeedback));
+			});
+		}
+		menu.showAtMouseEvent(event);
+	};
+
 	private cycleSearchMode = () => {
 		const currentIndex = SEARCH_MODES.findIndex((mode) => mode.id === this.currentMode().id);
 		const next = SEARCH_MODES[(currentIndex + 1) % SEARCH_MODES.length];
@@ -147,6 +160,7 @@ export class SimilarNotesListView extends ItemView {
 		this.updateSearchModeButton();
 		this.createNavActionButton(navButtons, "search", "Open semantic search", () => this.deps.openSearchModal());
 		this.createNavActionButton(navButtons, "settings", "Open plugin settings", () => this.deps.openSettings());
+		this.createNavActionButton(navButtons, "message-square", "Send feedback", this.openFeedbackMenu);
 		this.containerEl.prepend(navHeader);
 
 		this.contentEl.empty();
@@ -299,15 +313,23 @@ export class SimilarNotesListView extends ItemView {
 		bannerEl.toggleClass("is-hidden", !banner.visible);
 		if (!banner.visible) return;
 
-		bannerEl.createDiv({
-			cls: "similarity-index-banner-message",
-			text: banner.message,
-		});
+		renderBannerMessage(bannerEl, banner);
 
 		if (banner.wasmWarning) {
 			bannerEl.createDiv({
 				cls: "similarity-index-banner-gpu-warning",
 				text: WASM_WARNING_MESSAGE,
+			});
+		}
+
+		if (banner.action === "open-settings") {
+			const link = bannerEl.createEl("a", {
+				cls: "similarity-index-banner-link",
+				text: "Re-enable in settings",
+			});
+			link.addEventListener("click", (event) => {
+				event.preventDefault();
+				this.deps.openSettings();
 			});
 		}
 

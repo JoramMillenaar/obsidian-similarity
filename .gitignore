@@ -21,6 +21,8 @@ main.js
 
 # dev-only tooling: kept locally, never pushed to the remote
 src/dev/
+.plan
+.claude
 
 # obsidian
 data.json

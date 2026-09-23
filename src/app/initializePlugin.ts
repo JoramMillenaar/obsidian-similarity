@@ -13,7 +13,11 @@ export async function initializePlugin(app: AppContainer): Promise<void> {
 			console.error("[Similarity] Failed to open the index:", error);
 		});
 
-		await app.engine.requestModel(embeddingModelId);
+		if (app.deviceSettingsRepo.get().modelDisabled) {
+			await app.engine.disable();
+		} else {
+			await app.engine.requestModel(embeddingModelId);
+		}
 
 		app.status.update("Done", 1500);
 	} catch (error) {

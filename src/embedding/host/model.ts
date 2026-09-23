@@ -20,16 +20,21 @@ async function isModelCached(repoId: string): Promise<boolean> {
 type GpuAdapterLike = { features: { has(feature: string): boolean } };
 type GpuLike = { requestAdapter(): Promise<GpuAdapterLike | null> };
 
-// WebGPU support doesn't imply shader-f16 support; it's an optional feature some adapters lack.
-// Credit to @MikailuReeves for flagging this and suggesting the fix.
-async function supportsWebGpuF16(): Promise<boolean> {
+/**
+ * `navigator.gpu` being defined only means the WebGPU API exists, not that a GPU adapter is
+ * actually obtainable — some Android WebViews (and Chrome without the unsafe-webgpu flag) expose
+ * the API but fail `requestAdapter()`. Actually requesting the adapter is the only way to know,
+ * and doubles as the shader-f16 feature check, since that also needs an adapter.
+ */
+async function detectWebGpu(): Promise<{available: boolean; f16: boolean}> {
 	const gpu = (navigator as Navigator & { gpu?: GpuLike }).gpu;
-	if (gpu == null) return false;
+	if (gpu == null) return {available: false, f16: false};
 	try {
 		const adapter = await gpu.requestAdapter();
-		return adapter?.features.has('shader-f16') ?? false;
+		if (adapter == null) return {available: false, f16: false};
+		return {available: true, f16: adapter.features.has('shader-f16')};
 	} catch {
-		return false;
+		return {available: false, f16: false};
 	}
 }
 
@@ -57,8 +62,7 @@ export class EmbeddingModel {
 	}
 
 	async #initialize(onProgress?: ModelLoadProgressCallback): Promise<void> {
-		const webgpuAvailable = (navigator as Navigator & { gpu?: unknown }).gpu != null;
-		const f16Available = webgpuAvailable && (await supportsWebGpuF16());
+		const {available: webgpuAvailable, f16: f16Available} = await detectWebGpu();
 		this.#device = webgpuAvailable ? 'webgpu' : 'wasm';
 
 		if (!navigator.onLine && !(await isModelCached(this.config.repoId))) {
@@ -70,17 +74,18 @@ export class EmbeddingModel {
 
 		let loaded: FeatureExtractionPipeline;
 		try {
-			loaded = await pipeline('feature-extraction', this.config.repoId, {
-				device: this.#device,
-				dtype: webgpuAvailable ? (f16Available ? 'fp16' : 'fp32') : 'q8',
-				progress_callback: onProgress ? (info: ProgressInfo) => {
-					if (info.status === 'progress') {
-						onProgress({ progress: info.progress, file: info.file, loaded: info.loaded, total: info.total });
-					}
-				} : undefined,
-			});
+			loaded = await this.#load(this.#device, webgpuAvailable ? (f16Available ? 'fp16' : 'fp32') : 'q8', onProgress);
 		} catch (error) {
-			throw new Error(describeLoadFailure(error, this.config));
+			if (this.#device !== 'webgpu' || this.#disposed) {
+				throw new Error(describeLoadFailure(error, this.config));
+			}
+			console.warn(`[Similarity] WebGPU backend failed to load the ${this.config.label} model; falling back to WASM.`, error);
+			this.#device = 'wasm';
+			try {
+				loaded = await this.#load('wasm', 'q8', onProgress);
+			} catch (wasmError) {
+				throw new Error(describeLoadFailure(wasmError, this.config));
+			}
 		}
 
 		if (this.#disposed) {
@@ -88,6 +93,18 @@ export class EmbeddingModel {
 			return;
 		}
 		this.#pipeline = loaded;
+	}
+
+	#load(device: Device, dtype: 'fp16' | 'fp32' | 'q8', onProgress?: ModelLoadProgressCallback): Promise<FeatureExtractionPipeline> {
+		return pipeline('feature-extraction', this.config.repoId, {
+			device,
+			dtype,
+			progress_callback: onProgress ? (info: ProgressInfo) => {
+				if (info.status === 'progress') {
+					onProgress({ progress: info.progress, file: info.file, loaded: info.loaded, total: info.total });
+				}
+			} : undefined,
+		});
 	}
 
 	/** Releases the underlying pipeline once any in-flight `embed` call has settled. Safe to call more than once. */

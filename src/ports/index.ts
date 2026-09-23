@@ -4,4 +4,5 @@ export type { EmbeddingFileStore } from "./embeddingFileStore";
 export type { ModelIndexMetaStore } from "./modelIndexMetaStore";
 export type { PluginDataStore } from "./pluginDataStore";
 export type { SettingsRepository } from "./settingsRepository";
+export type { DeviceSettingsRepository } from "./deviceSettingsRepository";
 export type { StatusReporter } from "./statusReporter";

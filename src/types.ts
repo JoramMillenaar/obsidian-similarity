@@ -72,6 +72,14 @@ export interface SimilaritySettings {
 	lastAppliedMaxRawMarkdownChars: number;
 	lastAppliedMaxExtractedChars: number;
 }
+
+/**
+ * Settings that belong to one device and must never follow the vault to another
+ * (via Obsidian Sync, iCloud, git, …). Persisted in localStorage, not data.json.
+ */
+export interface DeviceSettings {
+	modelDisabled: boolean;
+}
 export const SCHEMA_VERSION = 2;
 
 export type ChunkMetadata = {

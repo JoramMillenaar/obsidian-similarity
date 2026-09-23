@@ -45,7 +45,7 @@ export function makeSimilarNotesFeed(deps: SimilarNotesFeedDeps): SimilarNotesFe
 	let noteId: string | null = null;
 	let snapshot: SimilarNotesSnapshot = IDLE;
 	let indexingState: IndexingQueueSnapshot | undefined = backend.getIndexingState();
-	let modelReady = backend.isReady();
+	let engineKind = backend.getEngineState().kind;
 	let lastIndexEmpty = false;
 	const listeners = new Set<(snapshot: SimilarNotesSnapshot) => void>();
 
@@ -101,10 +101,12 @@ export function makeSimilarNotesFeed(deps: SimilarNotesFeedDeps): SimilarNotesFe
 	});
 
 	const unsubscribeModelState = backend.subscribeEngineState((next) => {
-		const wasReady = modelReady;
-		modelReady = next.kind === "ready";
+		const kindChanged = next.kind !== engineKind;
+		engineKind = next.kind;
 
-		if (((modelReady && !wasReady) || next.kind === "error") && noteId !== null) {
+		// Any change of kind (ready, error, disabled, a switch starting…) changes the notice,
+		// and ranking needs no model, so reload; same-kind updates only carry progress.
+		if (kindChanged && noteId !== null) {
 			epoch += 1;
 			void load(epoch);
 		} else if (next.kind === "loading" && snapshot.notice?.kind === "warming-up") {

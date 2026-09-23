@@ -72,6 +72,23 @@
 	line-height: 1.4;
 }
 
+.similarity-index-banner-link {
+	font-size: var(--font-ui-smaller);
+}
+
+.similarity-warning-icon {
+	display: inline-flex;
+	align-items: center;
+	color: var(--color-orange);
+	margin-right: 6px;
+	vertical-align: middle;
+}
+
+.similarity-warning-icon .svg-icon {
+	width: var(--icon-s);
+	height: var(--icon-s);
+}
+
 .similarity-truncation-notice {
 	margin-bottom: 12px;
 	padding: 10px 12px;
@@ -111,6 +128,15 @@
 	display: block;
 	opacity: 0.7;
 	font-size: 0.85em;
+}
+
+/* The disable-model row: its icon only shows while the model is actually disabled. */
+.setting-item .similarity-warning-icon {
+	display: none;
+}
+
+.similarity-setting-warning .similarity-warning-icon {
+	display: inline-flex;
 }
 
 .similarity-setting-section-heading {
@@ -187,3 +213,25 @@
 	font-family: var(--font-monospace); white-space: nowrap; }
 .spr-cell-text { font-family: var(--font-monospace); color: var(--text-muted);
 	max-width: 460px; word-break: break-word; }
+
+.similarity-feedback-text {
+	width: 100%;
+	margin: 6px 0 12px;
+	resize: vertical;
+}
+
+/* The three feedback buttons don't fit beside the description on narrow screens. */
+.similarity-feedback-setting .setting-item-control,
+.similarity-feedback-actions .setting-item-control {
+	flex-wrap: wrap;
+}
+
+.is-mobile .similarity-feedback-setting {
+	flex-wrap: wrap;
+}
+
+.is-mobile .similarity-feedback-setting .setting-item-control {
+	flex-basis: 100%;
+	justify-content: flex-start;
+	margin-top: 8px;
+}

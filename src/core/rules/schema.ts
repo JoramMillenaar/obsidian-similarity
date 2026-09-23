@@ -1,5 +1,5 @@
-import { IndexMetadata, ModelIndexFile, SCHEMA_VERSION, SimilarityPluginData, SimilaritySettings } from "../../types";
-import { DEFAULT_SETTINGS, EMBEDDING_MODELS, MAX_OVERLAP_PERCENT, SEARCH_MODES } from "../../constants";
+import { DeviceSettings, IndexMetadata, ModelIndexFile, SCHEMA_VERSION, SimilarityPluginData, SimilaritySettings } from "../../types";
+import { DEFAULT_DEVICE_SETTINGS, DEFAULT_SETTINGS, EMBEDDING_MODELS, MAX_OVERLAP_PERCENT, SEARCH_MODES } from "../../constants";
 
 export function normalizeSettings(
 	value: Partial<SimilaritySettings> | undefined,
@@ -52,6 +52,15 @@ export function normalizePluginData(
 	value: Partial<SimilarityPluginData> | undefined,
 ): SimilarityPluginData {
 	return {settings: normalizeSettings(value?.settings)};
+}
+
+export function normalizeDeviceSettings(
+	value: Partial<DeviceSettings> | null | undefined,
+): DeviceSettings {
+	const modelDisabled = value?.modelDisabled;
+	return {
+		modelDisabled: typeof modelDisabled === "boolean" ? modelDisabled : DEFAULT_DEVICE_SETTINGS.modelDisabled,
+	};
 }
 
 export function normalizeModelIndexFile(
