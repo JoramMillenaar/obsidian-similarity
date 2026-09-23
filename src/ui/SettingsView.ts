@@ -140,6 +140,7 @@ export class SettingView extends PluginSettingTab {
 				name: "Feedback",
 				desc: "Found a bug or have an idea? Reports open in your browser or mail client, so you see exactly what is sent.",
 				render: (setting) => {
+					setting.settingEl.addClass("similarity-feedback-setting");
 					for (const action of FEEDBACK_ACTIONS) {
 						setting.addButton((button) => {
 							button.setButtonText(action.label).onClick(() => action.run(this.deps.openFeedback));

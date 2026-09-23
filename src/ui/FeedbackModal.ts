@@ -1,4 +1,4 @@
-import { App, Modal, Notice, Setting } from "obsidian";
+import { App, Modal, Notice, Platform, Setting } from "obsidian";
 import { REPO_URL, SUPPORT_CONTACT } from "../constants";
 import {
 	EnvironmentInfo,
@@ -80,6 +80,7 @@ export class FeedbackModal extends Modal {
 		}
 
 		new Setting(this.contentEl)
+			.setClass("similarity-feedback-actions")
 			.addButton((button) => {
 				button.setButtonText("Open GitHub issue").setCta().onClick(() => this.send(issueUrl(this.report(), REPO_URL)));
 			})
@@ -90,7 +91,15 @@ export class FeedbackModal extends Modal {
 				button.setButtonText("Copy report").onClick(() => void this.copy());
 			});
 
-		textarea.focus();
+		if (Platform.isMobile) {
+			this.contentEl.addEventListener("pointerdown", (event) => {
+				const target = event.target;
+				if (target instanceof Element && target.closest("textarea, input, button, .checkbox-container")) return;
+				textarea.blur();
+			});
+		} else {
+			textarea.focus();
+		}
 	}
 
 	onClose(): void {

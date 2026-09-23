@@ -219,3 +219,19 @@
 	margin: 6px 0 12px;
 	resize: vertical;
 }
+
+/* The three feedback buttons don't fit beside the description on narrow screens. */
+.similarity-feedback-setting .setting-item-control,
+.similarity-feedback-actions .setting-item-control {
+	flex-wrap: wrap;
+}
+
+.is-mobile .similarity-feedback-setting {
+	flex-wrap: wrap;
+}
+
+.is-mobile .similarity-feedback-setting .setting-item-control {
+	flex-basis: 100%;
+	justify-content: flex-start;
+	margin-top: 8px;
+}
