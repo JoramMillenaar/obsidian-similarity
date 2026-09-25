@@ -1,4 +1,4 @@
-import { Embedding, EmbeddingModelConfig, EmbeddingModelId } from "../types";
+import { Embedding, EmbeddingModelConfig, EmbeddingModelId, EmbeddingQuant } from "../types";
 
 /** Compute backend a model ran inference on. */
 export type Device = 'wasm' | 'webgpu';
@@ -16,6 +16,7 @@ export type EmbeddedChunk = {
 
 export type EmbeddingMetadata = {
 	embeddingModelId: EmbeddingModelId;
+	quant: EmbeddingQuant;
 	maxOverlapPercent: number;
 	maxChunkSize?: number;
 };

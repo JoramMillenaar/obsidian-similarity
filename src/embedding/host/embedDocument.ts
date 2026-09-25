@@ -19,6 +19,7 @@ export function makeGenerateDocumentEmbeddings(model: EmbeddingModel): GenerateD
 
 		const metadata = {
 			embeddingModelId: model.config.id,
+			quant: model.getQuant(),
 			maxOverlapPercent: maxOverlapPercent ?? 0,
 			maxChunkSize,
 		};

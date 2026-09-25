@@ -62,6 +62,7 @@ export function makeIndexNote(deps: IndexNoteDeps): IndexNoteUseCase {
 			chunks: toNoteChunks(embedded.chunks, text),
 			contentHash,
 			updatedAt: new Date().toISOString(),
+			quant: embedded.metadata.quant,
 		});
 		return "indexed";
 	}

@@ -157,6 +157,20 @@ test("an index survives a close and reopen", async () => {
 	assert.strictEqual(second.get("a.md").chunks[0].embedding[0], 120, "vectors must round-trip");
 });
 
+test("a note's quantization round-trips, and notes without one stay without one", async () => {
+	const files = makeFiles();
+	const first = await openIndex(files, MODEL_ID, {throttleMs: THROTTLE_MS});
+	first.upsert({...note("new.md"), quant: {vocab: "q4", ffn: "fp32"}});
+	first.upsert(note("legacy.md"));
+	await first.close();
+
+	const second = await openIndex(files, MODEL_ID, {throttleMs: THROTTLE_MS});
+
+	assert.deepStrictEqual(second.get("new.md").quant, {vocab: "q4", ffn: "fp32"});
+	assert.strictEqual(second.get("legacy.md").quant, undefined);
+	assert.ok(!("quant" in second.get("legacy.md")), "legacy notes must not gain a quant key");
+});
+
 test("a corrupt sidecar is discarded rather than served", async () => {
 	const files = makeFiles();
 	const first = await openWith(files, ["a.md"]);

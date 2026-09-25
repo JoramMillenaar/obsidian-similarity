@@ -1,5 +1,11 @@
 # Similarity
 
+[![CI](https://github.com/JoramMillenaar/obsidian-similarity/actions/workflows/ci.yml/badge.svg)](https://github.com/JoramMillenaar/obsidian-similarity/actions/workflows/ci.yml)
+[![Obsidian downloads](https://img.shields.io/badge/dynamic/json?logo=obsidian&color=%23483699&label=downloads&query=%24%5B%22similarity%22%5D.downloads&url=https%3A%2F%2Fraw.githubusercontent.com%2Fobsidianmd%2Fobsidian-releases%2Fmaster%2Fcommunity-plugin-stats.json)](https://obsidian.md/plugins?id=similarity)
+[![Latest release](https://img.shields.io/github/v/release/JoramMillenaar/obsidian-similarity?sort=semver)](https://github.com/JoramMillenaar/obsidian-similarity/releases/latest)
+[![GitHub stars](https://img.shields.io/github/stars/JoramMillenaar/obsidian-similarity?style=flat)](https://github.com/JoramMillenaar/obsidian-similarity/stargazers)
+[![License: MIT](https://img.shields.io/github/license/JoramMillenaar/obsidian-similarity)](LICENCE)
+
 Find notes by meaning—not just keywords.
 
 Similarity helps you uncover hidden connections across your Obsidian vault by understanding what your notes *actually say*, not just what words they contain.

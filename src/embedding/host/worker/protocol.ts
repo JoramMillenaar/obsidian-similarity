@@ -4,7 +4,7 @@ import { Device } from "../types";
 
 /** Messages the host sends to the embedding worker. */
 export type WorkerRequest =
-	| { type: 'init'; config: EmbeddingModelConfig }
+	| { type: 'init'; config: EmbeddingModelConfig; allowWebGpu: boolean }
 	| { type: 'embed'; requestId: number; payload: string; maxOverlapPercent?: number; maxChunkSize?: number }
 	| { type: 'dispose'; requestId: number };
 

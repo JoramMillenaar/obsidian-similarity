@@ -8,6 +8,11 @@ export type EmbeddingModelId =
 
 export type PoolingStrategy = "mean" | "cls";
 
+export type EmbeddingQuant = {
+	vocab: "q4" | "q8";
+	ffn: "fp32" | "fp16" | "q8";
+};
+
 export type EmbeddingModelConfig = {
 	id: EmbeddingModelId;
 	label: string;
@@ -41,6 +46,8 @@ export type IndexedNote = {
 	chunks: NoteChunk[];
 	contentHash: string,
 	updatedAt: string,
+	// deprecated
+	quant?: EmbeddingQuant,
 };
 
 export type RelatedNote = {
@@ -94,6 +101,7 @@ export type NoteIndexMetadata = {
 	contentHash: string;
 	updatedAt: string;
 	chunks: ChunkMetadata[];
+	quant?: EmbeddingQuant;
 };
 
 export type IndexMetadata = NoteIndexMetadata[];
