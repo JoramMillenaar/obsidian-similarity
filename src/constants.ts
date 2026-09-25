@@ -10,7 +10,7 @@ export const EMBEDDING_MODELS: Record<EmbeddingModelId, EmbeddingModelConfig> = 
 	"xenova-all-MiniLM-L6-v2": {
 		id: "xenova-all-MiniLM-L6-v2",
 		label: "English",
-		repoId: "Xenova/all-MiniLM-L6-v2",
+		repoId: "JoramMillenaar/all-MiniLM-L6-v2-vocab-quantized",
 		dim: 384,
 		maxTokens: 256,
 		pooling: "mean",
@@ -18,7 +18,7 @@ export const EMBEDDING_MODELS: Record<EmbeddingModelId, EmbeddingModelConfig> = 
 	"xenova-paraphrase-multilingual-MiniLM-L12-v2": {
 		id: "xenova-paraphrase-multilingual-MiniLM-L12-v2",
 		label: "Multilingual (slower)",
-		repoId: "Xenova/paraphrase-multilingual-MiniLM-L12-v2",
+		repoId: "JoramMillenaar/paraphrase-multilingual-MiniLM-L12-v2-vocab-quantized",
 		dim: 384,
 		maxTokens: 128,
 		pooling: "mean",
@@ -26,7 +26,7 @@ export const EMBEDDING_MODELS: Record<EmbeddingModelId, EmbeddingModelConfig> = 
 	"xenova-bge-small-zh-v1.5": {
 		id: "xenova-bge-small-zh-v1.5",
 		label: "Chinese",
-		repoId: "Xenova/bge-small-zh-v1.5",
+		repoId: "JoramMillenaar/bge-small-zh-v1.5-vocab-quantized",
 		dim: 512,
 		maxTokens: 512,
 		pooling: "cls",

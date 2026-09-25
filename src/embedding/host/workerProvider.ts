@@ -51,6 +51,7 @@ export class WorkerMessenger {
 		private readonly workerScript: string,
 		private readonly modelConfig: EmbeddingModelConfig,
 		private readonly onProgress?: (progress: ModelLoadProgress) => void,
+		private readonly allowWebGpu = true,
 	) {}
 
 	/** Creates the worker and waits for it to finish loading the model, rejecting (and cleaning up) on failure or abort. */
@@ -121,7 +122,7 @@ export class WorkerMessenger {
 			worker.addEventListener('error', onWorkerError);
 			worker.addEventListener('message', onReady);
 
-			const message: WorkerRequest = {type: 'init', config: this.modelConfig};
+			const message: WorkerRequest = {type: 'init', config: this.modelConfig, allowWebGpu: this.allowWebGpu};
 			worker.postMessage(message);
 		});
 	}
@@ -315,13 +316,14 @@ class WorkerEmbeddingProvider implements EmbeddingPort {
 	}
 }
 
-/** Spins up the embedding worker for `config` and returns an `EmbeddingPort` backed by it. */
-export const loadEmbeddingProvider: LoadEmbeddingPort = async (
-	config: EmbeddingModelConfig,
-	onProgress?: (progress: ModelLoadProgress) => void,
-	signal?: AbortSignal,
-): Promise<EmbeddingPort> => {
-	const messenger = new WorkerMessenger(__WORKER_CONTENTS_PLACEHOLDER__, config, onProgress);
-	const device = await messenger.initialize(signal);
-	return new WorkerEmbeddingProvider(messenger, device);
-};
+export function makeLoadEmbeddingProvider({allowWebGpu}: { allowWebGpu: boolean }): LoadEmbeddingPort {
+	return async (
+		config: EmbeddingModelConfig,
+		onProgress?: (progress: ModelLoadProgress) => void,
+		signal?: AbortSignal,
+	): Promise<EmbeddingPort> => {
+		const messenger = new WorkerMessenger(__WORKER_CONTENTS_PLACEHOLDER__, config, onProgress, allowWebGpu);
+		const device = await messenger.initialize(signal);
+		return new WorkerEmbeddingProvider(messenger, device);
+	};
+}

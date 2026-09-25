@@ -1,4 +1,4 @@
-import { ChunkMetadata, ModelIndexFile, NoteIndexMetadata, SCHEMA_VERSION } from "../../types";
+import { ChunkMetadata, EmbeddingQuant, ModelIndexFile, NoteIndexMetadata, SCHEMA_VERSION } from "../../types";
 import { isBinaryLayoutValid } from "../vector/codec";
 
 export type IndexUnusableReason =
@@ -113,7 +113,7 @@ function validateEntry(
 ): NoteIndexMetadata | null {
 	if (!isRecord(candidate)) return null;
 
-	const {id, contentHash, updatedAt, chunks} = candidate;
+	const {id, contentHash, updatedAt, chunks, quant} = candidate;
 	if (!isNonEmptyString(id) || seenIds.has(id)) return null;
 	if (!isNonEmptyString(contentHash) || !isNonEmptyString(updatedAt)) return null;
 	// A v1 entry carries its vector inline and has no chunks at all; a v2 entry
@@ -131,7 +131,15 @@ function validateEntry(
 		validated.push(validChunk);
 	}
 
-	return {id, contentHash, updatedAt, chunks: validated};
+	const entry: NoteIndexMetadata = {id, contentHash, updatedAt, chunks: validated};
+	if (isQuant(quant)) entry.quant = {vocab: quant.vocab, ffn: quant.ffn};
+	return entry;
+}
+
+function isQuant(value: unknown): value is EmbeddingQuant {
+	if (!isRecord(value)) return false;
+	return (value.vocab === "q4" || value.vocab === "q8")
+		&& (value.ffn === "fp32" || value.ffn === "fp16" || value.ffn === "q8");
 }
 
 function validateChunk(

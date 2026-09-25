@@ -14,6 +14,7 @@ function makeModel(maxTokens) {
 		ready: Promise.resolve(),
 		config: {id: "xenova-all-MiniLM-L6-v2", maxTokens},
 		countTokens,
+		getQuant: () => ({vocab: "q4", ffn: "fp16"}),
 		embed: async (text) => new Float32Array([countTokens(text)]),
 	};
 }
@@ -31,6 +32,13 @@ test("maxChunkSize narrows the chunk budget below the model's own limit", async 
 	const withLimit = await generate(SENTENCES, 0, 4);
 	assert.ok(withLimit.chunks.length > 1, "a smaller maxChunkSize must actually split the text into more chunks");
 	assert.strictEqual(withLimit.metadata.maxChunkSize, 4);
+});
+
+test("the model's vocab/FFN quantization is reported with every result", async () => {
+	const generate = makeGenerateDocumentEmbeddings(makeModel(100));
+
+	assert.deepStrictEqual((await generate(SENTENCES)).metadata.quant, {vocab: "q4", ffn: "fp16"});
+	assert.deepStrictEqual((await generate("   ")).metadata.quant, {vocab: "q4", ffn: "fp16"});
 });
 
 test("maxChunkSize larger than the model's own budget still throws", async () => {

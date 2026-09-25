@@ -23,7 +23,7 @@ async function handleInit(config: WorkerRequest & { type: 'init' }): Promise<voi
 
 	model = new EmbeddingModel(config.config, (progress) => {
 		post({type: 'model-load-progress', ...progress});
-	});
+	}, config.allowWebGpu);
 	generateDocumentEmbeddings = makeGenerateDocumentEmbeddings(model);
 
 	try {

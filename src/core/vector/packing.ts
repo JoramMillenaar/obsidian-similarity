@@ -34,6 +34,7 @@ export function packForStorage(notes: IndexedNote[], dim: number): PackedIndex {
 			updatedAt: note.updatedAt,
 			chunks,
 		};
+		if (note.quant) entry.quant = note.quant;
 		return entry;
 	});
 
@@ -64,6 +65,7 @@ export function unpackFromStorage(packedIndex: PackedIndex): IndexedNote[] {
 			chunks,
 			contentHash: entry.contentHash,
 			updatedAt: entry.updatedAt,
+			...(entry.quant ? {quant: entry.quant} : {}),
 		});
 	}
 

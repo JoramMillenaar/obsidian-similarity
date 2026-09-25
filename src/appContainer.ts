@@ -1,4 +1,4 @@
-import { Plugin } from "obsidian";
+import { Platform, Plugin } from "obsidian";
 import { SearchMode } from "./types";
 import { ObsidianStatusBar } from "./obsidian/obsidianStatusBar";
 import { ObsidianVault } from "./obsidian/obsidianVault";
@@ -8,7 +8,7 @@ import { LegacyEmbeddingFileStore } from "./obsidian/legacyEmbeddingFileStore";
 import { ObsidianPluginDataStore } from "./obsidian/obsidianPluginDataStore";
 import { ObsidianSettingsRepository } from "./obsidian/obsidianSettings";
 import { ObsidianDeviceSettingsRepository } from "./obsidian/obsidianDeviceSettings";
-import { loadEmbeddingProvider } from "./embedding/host/workerProvider";
+import { makeLoadEmbeddingProvider } from "./embedding/host/workerProvider";
 import {
 	DeviceSettingsRepository,
 	EmbeddingFileStore,
@@ -98,7 +98,7 @@ export class AppContainer {
 		});
 
 		this.engine = new EmbeddingEngine({
-			loadEmbedder: loadEmbeddingProvider,
+			loadEmbedder: makeLoadEmbeddingProvider({allowWebGpu: !Platform.isMobile}),
 			settingsRepo: this.settingsRepo,
 			status: this.status,
 		});

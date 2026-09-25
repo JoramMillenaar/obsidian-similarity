@@ -1,5 +1,5 @@
 import { env, pipeline, FeatureExtractionPipeline, ProgressInfo } from '@huggingface/transformers';
-import { EmbeddingModelConfig } from '../../types';
+import { EmbeddingModelConfig, EmbeddingQuant } from '../../types';
 import { Device, ModelLoadProgressCallback } from './types';
 
 env.allowLocalModels = false;
@@ -38,6 +38,20 @@ async function detectWebGpu(): Promise<{available: boolean; f16: boolean}> {
 	}
 }
 
+type ModelVariant = {
+	device: Device;
+	dtype: 'fp16' | 'fp32' | 'q8';
+	modelFileName?: string;
+	quant: EmbeddingQuant;
+};
+
+const WASM_VARIANT: ModelVariant = {device: 'wasm', dtype: 'q8', quant: {vocab: 'q8', ffn: 'q8'}};
+
+function webGpuVariant(f16: boolean): ModelVariant {
+	const ffn = f16 ? 'fp16' : 'fp32';
+	return {device: 'webgpu', dtype: ffn, modelFileName: 'model_vocab4', quant: {vocab: 'q4', ffn}};
+}
+
 function describeLoadFailure(error: unknown, config: EmbeddingModelConfig): string {
 	const detail = error instanceof Error ? error.message : String(error);
 	const looksLikeNetwork = !navigator.onLine || /failed to fetch|network|load model file/i.test(detail);
@@ -50,20 +64,23 @@ function describeLoadFailure(error: unknown, config: EmbeddingModelConfig): stri
 /** Wraps a single loaded transformers.js feature-extraction pipeline: loads it, runs serialized inference, and disposes it. */
 export class EmbeddingModel {
 	#pipeline: FeatureExtractionPipeline | null = null;
-	#device: Device = 'wasm';
+	#variant: ModelVariant = WASM_VARIANT;
 	#queue: Promise<unknown> = Promise.resolve(); // serialize all inference calls
 	#disposed = false;
 	readonly config: EmbeddingModelConfig;
 	ready: Promise<void>;
 
-	constructor(config: EmbeddingModelConfig, onProgress?: ModelLoadProgressCallback) {
+	/** `allowWebGpu: false` forces the WASM backend without probing for a GPU adapter (used on mobile). */
+	constructor(config: EmbeddingModelConfig, onProgress?: ModelLoadProgressCallback, allowWebGpu = true) {
 		this.config = config;
-		this.ready = this.#initialize(onProgress);
+		this.ready = this.#initialize(onProgress, allowWebGpu);
 	}
 
-	async #initialize(onProgress?: ModelLoadProgressCallback): Promise<void> {
-		const {available: webgpuAvailable, f16: f16Available} = await detectWebGpu();
-		this.#device = webgpuAvailable ? 'webgpu' : 'wasm';
+	async #initialize(onProgress: ModelLoadProgressCallback | undefined, allowWebGpu: boolean): Promise<void> {
+		const {available: webgpuAvailable, f16: f16Available} = allowWebGpu
+			? await detectWebGpu()
+			: {available: false, f16: false};
+		this.#variant = webgpuAvailable ? webGpuVariant(f16Available) : WASM_VARIANT;
 
 		if (!navigator.onLine && !(await isModelCached(this.config.repoId))) {
 			throw new Error(
@@ -74,15 +91,15 @@ export class EmbeddingModel {
 
 		let loaded: FeatureExtractionPipeline;
 		try {
-			loaded = await this.#load(this.#device, webgpuAvailable ? (f16Available ? 'fp16' : 'fp32') : 'q8', onProgress);
+			loaded = await this.#load(this.#variant, onProgress);
 		} catch (error) {
-			if (this.#device !== 'webgpu' || this.#disposed) {
+			if (this.#variant.device !== 'webgpu' || this.#disposed) {
 				throw new Error(describeLoadFailure(error, this.config));
 			}
 			console.warn(`[Similarity] WebGPU backend failed to load the ${this.config.label} model; falling back to WASM.`, error);
-			this.#device = 'wasm';
+			this.#variant = WASM_VARIANT;
 			try {
-				loaded = await this.#load('wasm', 'q8', onProgress);
+				loaded = await this.#load(WASM_VARIANT, onProgress);
 			} catch (wasmError) {
 				throw new Error(describeLoadFailure(wasmError, this.config));
 			}
@@ -95,10 +112,11 @@ export class EmbeddingModel {
 		this.#pipeline = loaded;
 	}
 
-	#load(device: Device, dtype: 'fp16' | 'fp32' | 'q8', onProgress?: ModelLoadProgressCallback): Promise<FeatureExtractionPipeline> {
+	#load(variant: ModelVariant, onProgress?: ModelLoadProgressCallback): Promise<FeatureExtractionPipeline> {
 		return pipeline('feature-extraction', this.config.repoId, {
-			device,
-			dtype,
+			device: variant.device,
+			dtype: variant.dtype,
+			model_file_name: variant.modelFileName,
 			progress_callback: onProgress ? (info: ProgressInfo) => {
 				if (info.status === 'progress') {
 					onProgress({ progress: info.progress, file: info.file, loaded: info.loaded, total: info.total });
@@ -151,6 +169,11 @@ export class EmbeddingModel {
 
 	/** The compute backend ('wasm' or 'webgpu') this model ended up loading on. */
 	getDevice(): Device {
-		return this.#device;
+		return this.#variant.device;
+	}
+
+	/** Vocab/FFN precision of the model file this ended up loading. */
+	getQuant(): EmbeddingQuant {
+		return this.#variant.quant;
 	}
 }
