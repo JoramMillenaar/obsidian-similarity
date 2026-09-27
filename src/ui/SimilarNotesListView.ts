@@ -10,6 +10,7 @@ import { GetNoteTextUseCase } from "../app/getNoteText";
 import { SettingsRepository } from "../ports";
 import { SearchMode } from "../types";
 import { FEEDBACK_ACTIONS, OpenFeedback } from "./FeedbackModal";
+import { renderSimilarityBar } from "./similarityBar";
 
 export { VIEW_TYPE_SIMILARITY };
 
@@ -397,10 +398,7 @@ export class SimilarNotesListView extends ItemView {
 			}
 
 			const flairOuter = itemSelf.createDiv({cls: "tree-item-flair-outer"});
-			flairOuter.createSpan({
-				cls: "tag-pane-tag-count tree-item-flair",
-				text: `${Math.round(note.score * 100)}%`,
-			});
+			renderSimilarityBar(flairOuter, note);
 		});
 	}
 

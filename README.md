@@ -6,25 +6,10 @@
 [![GitHub stars](https://img.shields.io/github/stars/JoramMillenaar/obsidian-similarity?style=flat)](https://github.com/JoramMillenaar/obsidian-similarity/stargazers)
 [![License: MIT](https://img.shields.io/github/license/JoramMillenaar/obsidian-similarity)](LICENCE)
 
-Find notes by meaning—not just keywords.
+Add semantic search to Obsidian to explore your notes by concepts, without data _ever_ leaving your device.
+Where Obsidian lets you search by titles or contents, Similarity searches by the _meaning_ of your notes.
 
-Similarity helps you uncover hidden connections across your Obsidian vault by understanding what your notes *actually say*, not just what words they contain.
 
-Runs fully local. No APIs. Your data _never_ leaves your machine.
-
----
-
-## What it does
-
-### Search by meaning
-Look up notes based on intent, not exact phrasing.
-
-![modal-demo-v2](https://github.com/user-attachments/assets/d544122c-c683-46a2-bdda-43b39bdcc8ae)
-
-### Browse related notes instantly
-Jump through semantically similar notes and explore ideas that are actually connected.
-
-![leaf-demo](https://github.com/user-attachments/assets/15c79d6e-e5f9-42d2-9f95-563856b832eb)
 
 ---
 

@@ -8,6 +8,7 @@ import { WASM_WARNING_MESSAGE } from "../status/notices";
 import { textForNotice } from "./similarNoticeText";
 import { KeyedDebouncer } from "../core/util/debounce";
 import { RelatedNote } from "../types";
+import { renderSimilarityBar } from "./similarityBar";
 
 export type SearchModalDeps = {
 	similarSearchFeed: SimilarSearchFeed;
@@ -140,12 +141,11 @@ export class SearchModal extends SuggestModal<RelatedNote> {
 	renderSuggestion(value: RelatedNote, el: HTMLElement): void {
 		let fileName = value.id;
 		if (fileName.endsWith(".md")) fileName = fileName.slice(0, -3);
-		const scorePercent = (value.score * 100).toFixed(0);
-
-		const titleEl = el.createDiv({text: fileName});
+		el.addClass("similarity-suggestion");
+		const titleEl = el.createDiv({text: fileName, cls: "similarity-suggestion-title"});
 		titleEl.addClass("internal-link");
 
-		el.createEl("small", {text: `${scorePercent}%`, cls: "suggestion-note"});
+		renderSimilarityBar(el, value);
 	}
 
 	private async getInitialSuggestions(isAutoRefresh = false): Promise<RelatedNote[]> {

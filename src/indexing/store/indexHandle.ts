@@ -4,6 +4,7 @@ import { DecodedEmbeddings, decodeEmbeddings, encodeEmbeddings } from "../../cor
 import { packForStorage, unpackFromStorage } from "../../core/vector/packing";
 import { checkIndexHealth, MetaState, SidecarState } from "../../core/rules/health";
 import { rankSimilarNotes } from "../../core/vector/similarity";
+import { scaleScore, similarityTier } from "../../core/vector/similarityTier";
 import { EMBEDDING_MODELS } from "../../constants";
 
 export type IndexRename = { oldId: string; newId: string };
@@ -118,7 +119,13 @@ class ResidentIndex implements IndexHandle {
 	}
 
 	query(queryChunks: Embedding[], options: QueryOptions = {}): RelatedNote[] {
-		return rankSimilarNotes(queryChunks, [...this.byId.values()], options);
+		const {tierThresholds} = EMBEDDING_MODELS[this.modelId];
+		return rankSimilarNotes(queryChunks, [...this.byId.values()], options)
+			.map((result) => ({
+				...result,
+				tier: similarityTier(result.score, tierThresholds),
+				scaledScore: scaleScore(result.score, tierThresholds),
+			}));
 	}
 
 	upsert(note: IndexedNote): void {

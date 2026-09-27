@@ -214,3 +214,20 @@ test("query ranks the closest note first and can exclude the query note", async 
 	assert.strictEqual(results[0].id, "near.md");
 	assert.ok(!results.some((r) => r.id === "self.md"), "the query note must be excluded");
 });
+
+test("query labels each result with the index model's tier and scaled score", async () => {
+	const files = makeFiles();
+	const index = await openIndex(files, MODEL_ID, {throttleMs: THROTTLE_MS});
+
+	index.upsert(note("same.md", [vec(127, 0)]));
+	index.upsert(note("loose.md", [vec(40, 120)]));
+
+	const results = index.query([vec(127, 0)], {minScore: 0});
+	const same = results.find((r) => r.id === "same.md");
+	const loose = results.find((r) => r.id === "loose.md");
+
+	assert.strictEqual(same.tier, 3);
+	assert.strictEqual(same.scaledScore, 1);
+	assert.strictEqual(loose.tier, 0);
+	assert.ok(loose.scaledScore > 0 && loose.scaledScore < 0.25);
+});

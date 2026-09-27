@@ -71,7 +71,7 @@ export function rankSimilarNotes(
 	queryChunks: Embedding[],
 	notes: IndexedNote[],
 	options: {excludeId?: string; limit?: number; minScore?: number; mode?: SearchMode} = {},
-): RelatedNote[] {
+): Pick<RelatedNote, "id" | "score">[] {
 	const {excludeId, limit = 10, minScore = 0.25, mode = "granular"} = options;
 
 	return notes

@@ -114,9 +114,59 @@
 	font-size: var(--font-ui-smaller);
 }
 
-.suggestion-note {
-	color: var(--text-muted);
-	font-size: var(--font-smallest);
+/* Width follows the model-normalised score; colour follows the tier. Themes/snippets can override the tier colours. */
+body {
+--similarity-tier-0-color: var(--text-faint);
+--similarity-tier-1-color: var(--text-muted);
+--similarity-tier-2-color: var(--interactive-accent);
+--similarity-tier-3-color: var(--background-modifier-success);
+}
+
+.similarity-bar {
+	flex-shrink: 0;
+	width: 36px;
+	height: 6px;
+	border-radius: var(--radius-s);
+	background: var(--background-modifier-border);
+	overflow: hidden;
+}
+
+.similarity-bar-fill {
+	width: var(--similarity-fill, 0%);
+	min-width: 3px;
+	height: 100%;
+	border-radius: inherit;
+}
+
+.similarity-tier-0 .similarity-bar-fill {
+	background: var(--similarity-tier-0-color);
+}
+
+.similarity-tier-1 .similarity-bar-fill {
+	background: var(--similarity-tier-1-color);
+}
+
+.similarity-tier-2 .similarity-bar-fill {
+	background: var(--similarity-tier-2-color);
+}
+
+.similarity-tier-3 .similarity-bar-fill {
+	background: var(--similarity-tier-3-color);
+}
+
+.tree-item-flair-outer .similarity-bar {
+	align-self: center;
+}
+
+.similarity-suggestion {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+}
+
+.similarity-suggestion-title {
+	flex: 1;
+	min-width: 0;
 }
 
 
