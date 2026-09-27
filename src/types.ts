@@ -20,7 +20,12 @@ export type EmbeddingModelConfig = {
 	dim: number;
 	maxTokens: number;
 	pooling: PoolingStrategy;
+	tierThresholds: TierThresholds;
 };
+
+export type TierThresholds = readonly [number, number, number];
+
+export type SimilarityTier = 0 | 1 | 2 | 3;
 
 export type RawNote = {
 	id: string;
@@ -53,6 +58,8 @@ export type IndexedNote = {
 export type RelatedNote = {
 	id: string;
 	score: number;
+	tier: SimilarityTier;
+	scaledScore: number;
 };
 
 export type SearchMode = "granular" | "average";

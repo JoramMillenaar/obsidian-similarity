@@ -6,47 +6,19 @@
 [![GitHub stars](https://img.shields.io/github/stars/JoramMillenaar/obsidian-similarity?style=flat)](https://github.com/JoramMillenaar/obsidian-similarity/stargazers)
 [![License: MIT](https://img.shields.io/github/license/JoramMillenaar/obsidian-similarity)](LICENCE)
 
-Find notes by meaning—not just keywords.
+Add semantic search to Obsidian to explore your notes by concepts, without data _ever_ leaving your device.
+Obsidian lets you search by titles or contents, Similarity searches by the _meaning_ of your notes.
 
-Similarity helps you uncover hidden connections across your Obsidian vault by understanding what your notes *actually say*, not just what words they contain.
-
-Runs fully local. No APIs. Your data _never_ leaves your machine.
-
----
-
-## What it does
-
-### Search by meaning
-Look up notes based on intent, not exact phrasing.
-
-![modal-demo-v2](https://github.com/user-attachments/assets/d544122c-c683-46a2-bdda-43b39bdcc8ae)
-
-### Browse related notes instantly
-Jump through semantically similar notes and explore ideas that are actually connected.
-
-![leaf-demo](https://github.com/user-attachments/assets/15c79d6e-e5f9-42d2-9f95-563856b832eb)
-
----
-
-## Why this matters
-
-Folders and tags force structure upfront.  
-Similarity lets structure emerge naturally.
-
-- Discover notes you forgot existed  
-- Connect ideas across different topics  
-- Reduce reliance on rigid organization  
-
----
+<img width="1335" height="817" alt="thumbnail" src="https://github.com/user-attachments/assets/ebba293a-a6ef-4945-a7c7-c90a06dd7445" />
 
 ## Features
+<img width="1400" height="440" alt="Main@2x (2)" src="https://github.com/user-attachments/assets/6518c42a-39a6-4ac3-8717-3886e7281075" />
 
-- **Semantic search** – find notes by meaning, not keywords  
-- **Related notes view** – explore connections instantly  
-- **Fully local** – runs entirely on-device  
-- **No external APIs** – zero data leaves your vault  
-
----
+## How it helps me
+- Notes are never truly orphaned. If they don't have deep links, they still surface when I write something similar.
+- I sometimes forgot that I already wrote about a topic, just using a different title. Now I can notes that talk about the same thing.
+- When journaling, I see notes of times when I faced something similar. Looking back a few years to see how I dealt with the same topic has been insightful!
+- It allows me to write with even less friction as I don't _need_ to do the chore of linking my note.
 
 ## Privacy
 
@@ -55,22 +27,19 @@ This plugin is built around one principle: your notes stay yours.
 - All processing happens locally  
 - No internet connection required after install  
 - No tracking, no telemetry, no external services
-- Bug reports and feedback are sent only when you choose to, through your own browser or mail client, and you see the full content first
+- If you want, you can send bug reports and feedback through your own browser or mail client. You see the full content first.
 
----
+## Similarity's Priorities
 
-## Why Similarity
+There are some other plugins in this space, each with their own strengths and approaches.
 
-There are many great plugins in this space, each with their own strengths and approaches.
+This plugin is built around the following set of priorities:
 
-This plugin is built around a different set of priorities:
-
-- **Fully local, by design** – your data never leaves your device. No APIs, no background calls, no risk.
-- **Lightweight and fast** – minimal overhead, built to stay responsive even as your vault grows.
-- **Keeping it simple** – hiding all the complicated parts so you can focus on writing.
-- **Focused experience** – no fancy AI LLM agents, just practical semantic discovery that fits naturally into your workflow.
-- **Cross-platform consistency** – works on desktop and mobile, with a shared index so you don’t need to reindex per device.
----
+- **Fully local, by design**: your notes _never_ leave your device. I don't add features that violates that, even if it's opt-in.
+- **Lightweight and fast**: fast and responsive software makes me happy :).
+- **For everyone**: it's free forever and I make sure that Similarity works on every device.
+- **Easy to use**: the plugin should help focus on writing, which is why the plugin is made to be as easy to understand and use as possible.
+- **Feature Quality over Quantity**: it's tempting with agentic coding to add a billion features. But I try to not release any feature unless I think it's ironclad and genuinely useful.
 
 ## Support
 

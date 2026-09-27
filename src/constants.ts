@@ -14,6 +14,7 @@ export const EMBEDDING_MODELS: Record<EmbeddingModelId, EmbeddingModelConfig> = 
 		dim: 384,
 		maxTokens: 256,
 		pooling: "mean",
+		tierThresholds: [0.46, 0.64, 0.85],
 	},
 	"xenova-paraphrase-multilingual-MiniLM-L12-v2": {
 		id: "xenova-paraphrase-multilingual-MiniLM-L12-v2",
@@ -22,6 +23,7 @@ export const EMBEDDING_MODELS: Record<EmbeddingModelId, EmbeddingModelConfig> = 
 		dim: 384,
 		maxTokens: 128,
 		pooling: "mean",
+		tierThresholds: [0.51, 0.72, 0.90],
 	},
 	"xenova-bge-small-zh-v1.5": {
 		id: "xenova-bge-small-zh-v1.5",
@@ -30,6 +32,7 @@ export const EMBEDDING_MODELS: Record<EmbeddingModelId, EmbeddingModelConfig> = 
 		dim: 512,
 		maxTokens: 512,
 		pooling: "cls",
+		tierThresholds: [0.64, 0.80, 0.87],
 	},
 };
 
