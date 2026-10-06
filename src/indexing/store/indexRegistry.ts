@@ -19,11 +19,6 @@ export class IndexRegistry {
 	) {
 	}
 
-	/** The open index, or null before the first `use()` resolves. */
-	current(): IndexHandle | null {
-		return this.handle;
-	}
-
 	/** Opens the index for `modelId`, flushing and closing any other one first. */
 	use(modelId: EmbeddingModelId): Promise<IndexHandle> {
 		if (this.handle?.modelId === modelId && this.pending === null) {

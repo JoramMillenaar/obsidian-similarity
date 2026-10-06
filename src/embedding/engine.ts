@@ -31,7 +31,6 @@ export type EmbeddingEngineDeps = {
  */
 export type EmbedRequestOptions = {
 	priority?: Priority;
-	maxChunkSize?: number;
 };
 
 /**
@@ -102,10 +101,7 @@ export class EmbeddingEngine {
 			this.enqueue({
 				priority: options.priority ?? "medium",
 				run: async (embedder) => {
-					const result = await embedder.embed(text, {
-						maxOverlapPercent,
-						maxChunkSize: options.maxChunkSize,
-					});
+					const result = await embedder.embed(text, {maxOverlapPercent});
 					resolve(result && result.chunks.length > 0 ? result : null);
 				},
 				cancel: reject,

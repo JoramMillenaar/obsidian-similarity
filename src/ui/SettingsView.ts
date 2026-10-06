@@ -1,5 +1,5 @@
 import { App, DropdownComponent, Notice, PluginSettingTab, Setting, setIcon, SettingDefinitionItem, TFolder, ToggleComponent } from "obsidian";
-import RelatedNotes from "../main";
+import SimilarNotes from "../main";
 import { EMBEDDING_MODELS, MAX_OVERLAP_PERCENT, SEARCH_MODES } from "../constants";
 import { EmbeddingModelId, SearchMode } from "../types";
 import { SettingsRepository } from "../ports";
@@ -31,7 +31,7 @@ export class SettingView extends PluginSettingTab {
 
 	constructor(
 		app: App,
-		plugin: RelatedNotes,
+		plugin: SimilarNotes,
 		private readonly deps: SettingsViewDeps,
 	) {
 		super(app, plugin);

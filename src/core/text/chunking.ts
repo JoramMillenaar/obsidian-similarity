@@ -10,9 +10,6 @@ export interface TextChunk {
 	text: string;
 	start: number;
 	end: number;
-	canonicalStart: number;
-	canonicalEnd: number;
-	tokens: number;
 }
 
 export type TokenCounter = (text: string) => number;
@@ -156,9 +153,6 @@ export function chunkText(
 			text: chunkText,
 			start: embedded[0].start,
 			end: embedded[embedded.length - 1].end,
-			canonicalStart: canonical[0].start,
-			canonicalEnd: canonical[canonical.length - 1].end,
-			tokens: countTokens(chunkText),
 		};
 	});
 }

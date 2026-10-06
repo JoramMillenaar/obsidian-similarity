@@ -1,4 +1,4 @@
-/** Quantized unit-vector embedding: see domain/embedding.ts and domain/embeddingCodec.ts. */
+/** Quantized unit-vector embedding: see core/vector/similarity.ts and codec.ts. */
 export type Embedding = Int8Array;
 
 export type EmbeddingModelId =

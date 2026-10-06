@@ -5,7 +5,6 @@ export type Device = 'wasm' | 'webgpu';
 
 export interface EmbedOptions {
 	maxOverlapPercent: number;
-	maxChunkSize?: number;
 }
 
 export type EmbeddedChunk = {
@@ -17,8 +16,6 @@ export type EmbeddedChunk = {
 export type EmbeddingMetadata = {
 	embeddingModelId: EmbeddingModelId;
 	quant: EmbeddingQuant;
-	maxOverlapPercent: number;
-	maxChunkSize?: number;
 };
 
 export type EmbeddingResult = {

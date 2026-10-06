@@ -40,7 +40,7 @@ export function isBinaryLayoutValid(byteLength: number, dim: number, count: numb
 
 /**
  * Allocates exactly HEADER_SIZE + count*dim bytes and returns that exact-sized buffer.
- * Takes already-quantized int8 (see domain/embedding.ts#quantizeEmbedding) — this is a
+ * Takes already-quantized int8 (see quantizeEmbedding in similarity.ts) — this is a
  * byte copy into the framed layout, not a quantization step.
  */
 export function encodeEmbeddings(embeddings: Int8Array, dim: number): ArrayBuffer {
@@ -65,7 +65,7 @@ export function encodeEmbeddings(embeddings: Int8Array, dim: number): ArrayBuffe
 	return buffer;
 }
 
-/** Returns a zero-copy int8 view over the body — no dequantization. Similarity math is done directly on int8, see domain/embedding.ts. */
+/** Returns a zero-copy int8 view over the body — no dequantization. Similarity math is done directly on int8. */
 export function decodeEmbeddings(buffer: ArrayBuffer): DecodedEmbeddings {
 	if (buffer.byteLength < HEADER_SIZE) {
 		throw new Error("decodeEmbeddings: buffer too small for header");

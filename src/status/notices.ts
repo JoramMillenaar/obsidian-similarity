@@ -68,12 +68,10 @@ export function engineNoticeFor(engine: EngineStatus): SimilarNotesNotice | null
 export function shouldRefreshOnIndexingChange(
 	previous: IndexingQueueSnapshot | undefined,
 	next: IndexingQueueSnapshot,
-	currentNoteId: string | null,
 ): boolean {
 	if (!previous) return false;
 	if (previous.fatalError !== next.fatalError) return true;
 	if (previous.isRunning && !next.isRunning) return true;
-	if (currentNoteId !== null && previous.currentNoteId === currentNoteId && next.currentNoteId !== currentNoteId) return true;
 	if (previous.processed !== next.processed) return true;
 	return false;
 }

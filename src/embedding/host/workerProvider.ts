@@ -224,7 +224,7 @@ export class WorkerMessenger {
 	}
 
 	/** Sends `payload` to the worker to embed, retrying if the request is never acknowledged. */
-	async sendMessage(payload: string, maxOverlapPercent: number, maxChunkSize?: number, retries = 3): Promise<EmbeddingResult | null> {
+	async sendMessage(payload: string, maxOverlapPercent: number, retries = 3): Promise<EmbeddingResult | null> {
 		if (!this.worker) throw new Error("Could not find the embedding worker. Is it loaded?");
 
 		let lastError: unknown;
@@ -234,7 +234,7 @@ export class WorkerMessenger {
 			if (this.crashError) throw this.crashError;
 
 			const requestId = this.requestIdCounter++;
-			const message: WorkerRequest = {requestId, type: 'embed', payload, maxOverlapPercent, maxChunkSize};
+			const message: WorkerRequest = {requestId, type: 'embed', payload, maxOverlapPercent};
 			const request = this.trackRequest(requestId, EMBED_ACK_TIMEOUT_MS, `Request with ID '${requestId}' was never acknowledged`, true);
 
 			this.worker.postMessage(message);
@@ -308,7 +308,7 @@ class WorkerEmbeddingProvider implements EmbeddingPort {
 	constructor(private readonly messenger: WorkerMessenger, readonly device: Device) {}
 
 	async embed(text: string, options: EmbedOptions): Promise<EmbeddingResult | null> {
-		return await this.messenger.sendMessage(text, options.maxOverlapPercent, options.maxChunkSize);
+		return await this.messenger.sendMessage(text, options.maxOverlapPercent);
 	}
 
 	unload(): Promise<void> {

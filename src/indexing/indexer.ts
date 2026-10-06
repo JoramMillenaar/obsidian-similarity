@@ -128,9 +128,7 @@ export class Indexer {
 				await this.submit(noteId, "medium");
 			} catch (error) {
 				console.error("[Similarity] Indexing edited note failed", error);
-				return;
 			}
-			this.deps.onChanged();
 		});
 	}
 

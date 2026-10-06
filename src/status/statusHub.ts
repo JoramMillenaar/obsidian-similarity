@@ -57,7 +57,7 @@ export function makeStatusHub(deps: StatusHubDeps): StatusHub {
 		const previous = indexingState;
 		indexingState = next;
 		for (const fn of indexingListeners) fn(next);
-		if (shouldRefreshOnIndexingChange(previous, next, null)) {
+		if (shouldRefreshOnIndexingChange(previous, next)) {
 			scheduleThrottledRefresh();
 		}
 	});

@@ -56,8 +56,6 @@ export interface IndexHandle {
 
 	renameMany(renames: IndexRename[]): boolean;
 
-	clear(): void;
-
 	flush(): Promise<void>;
 
 	close(): Promise<void>;
@@ -162,12 +160,6 @@ class ResidentIndex implements IndexHandle {
 		}
 		if (changed) this.markDirty();
 		return changed;
-	}
-
-	clear(): void {
-		if (this.byId.size === 0) return;
-		this.byId.clear();
-		this.markDirty();
 	}
 
 	async flush(): Promise<void> {

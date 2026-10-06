@@ -6,7 +6,7 @@ export type { Device };
 export type ModelLoadProgressCallback = (progress: ModelLoadProgress) => void;
 
 /** Chunks and embeds a whole document's text, honoring optional overlap and max chunk size. */
-export type GenerateDocumentEmbeddings = (text: string, maxOverlapPercent?: number, maxChunkSize?: number) => Promise<EmbeddingResult>;
+export type GenerateDocumentEmbeddings = (text: string, maxOverlapPercent?: number) => Promise<EmbeddingResult>;
 
 /** Bookkeeping for one outstanding embed request sent to the embedding worker, awaiting its response. */
 export type PendingWorkerRequest = {

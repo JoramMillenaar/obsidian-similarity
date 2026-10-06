@@ -15,10 +15,6 @@ export class ObsidianSettingsRepository implements SettingsRepository {
 		return DEFAULT_SETTINGS;
 	}
 
-	async update(settings: SimilaritySettings): Promise<void> {
-		return this.writeSettings(() => settings);
-	}
-
 	async updatePartial(patch: Partial<SimilaritySettings>): Promise<void> {
 		return this.writeSettings((current) => ({
 			...current,

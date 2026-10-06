@@ -92,11 +92,8 @@ export function makeSimilarNotesFeed(deps: SimilarNotesFeedDeps): SimilarNotesFe
 	const unsubscribeIndexingState = backend.subscribeIndexingState((next) => {
 		const previous = indexingState;
 		indexingState = next;
-		const movedOffActiveNote = noteId !== null && previous?.currentNoteId === noteId && next.currentNoteId !== noteId;
-		if (movedOffActiveNote) {
-			void load(epoch);
-		} else if (
-			!shouldRefreshOnIndexingChange(previous, next, noteId)
+		if (
+			!shouldRefreshOnIndexingChange(previous, next)
 			&& snapshot.noteId !== null && !snapshot.refining && BACKEND_NOTICE_KINDS.has(snapshot.notice?.kind)
 		) {
 			emit({...snapshot, notice: backendNoticeFor(lastIndexEmpty, next)});
