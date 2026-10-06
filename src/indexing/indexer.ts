@@ -28,10 +28,8 @@ export type IndexerDeps = {
 const DEFAULT_EDIT_DEBOUNCE_MS = 1100;
 
 export class Indexer {
-	private readonly foreground = new PriorityQueue();
-	private backlogOrder: string[] = [];
-	private backlogCursor = 0;
-	private backlogRemaining = new Set<string>();
+	/** high: the note being viewed · medium: edited notes · low: the sync backlog. */
+	private readonly queue = new PriorityQueue();
 
 	private readonly pendingIds = new Set<string>();
 	private readonly awaited = new Map<string, { resolve: () => void; promise: Promise<void> }>();
@@ -96,7 +94,7 @@ export class Indexer {
 				getNoteText: this.deps.getNoteText,
 				index: handle,
 				isIgnoredPath: this.deps.isIgnoredPath,
-				embedText: (text) => this.deps.engine.embed(text, {priority: "low"}),
+				embedText: (text) => this.deps.engine.embed(text, {lane: "background"}),
 			});
 		});
 
@@ -216,20 +214,15 @@ export class Indexer {
 	}
 
 	private async handleView(noteId: string): Promise<void> {
-		if (this.pendingIds.has(noteId) || this.backlogRemaining.has(noteId)) {
-			await this.submit(noteId, "medium");
-			return;
-		}
-		if (this.handle?.has(noteId)) return;
-		await this.submit(noteId, "medium");
+		if (!this.queue.has(noteId) && this.handle?.has(noteId)) return;
+		await this.submit(noteId, "high");
 	}
 
 	private submit(noteId: string, priority: Priority): Promise<void> {
 		if (this.disposed) return Promise.resolve();
 
-		this.backlogRemaining.delete(noteId);
 		this.watch(noteId);
-		this.foreground.enqueue(noteId, priority);
+		this.queue.enqueue(noteId, priority);
 		this.scheduleEmit();
 		this.ensureRunning();
 
@@ -294,12 +287,11 @@ export class Indexer {
 	private setBacklog(noteIds: string[]): void {
 		if (this.disposed) return;
 
-		this.backlogOrder = noteIds;
-		this.backlogCursor = 0;
-		this.backlogRemaining = new Set(noteIds);
-		for (const queued of this.pendingIds) this.backlogRemaining.delete(queued);
-
-		for (const noteId of noteIds) this.watch(noteId);
+		// Already-queued notes keep their place: enqueue never demotes.
+		for (const noteId of noteIds) {
+			this.watch(noteId);
+			this.queue.enqueue(noteId, "low");
+		}
 		this.scheduleEmit();
 		this.deps.onChanged();
 		this.ensureRunning();
@@ -324,7 +316,7 @@ export class Indexer {
 	private async runLoop(): Promise<void> {
 		try {
 			while (!this.disposed && !this.paused) {
-				const noteId = this.takeNext();
+				const noteId = this.queue.take();
 				if (noteId === null) return;
 				await this.processNote(noteId);
 			}
@@ -344,21 +336,6 @@ export class Indexer {
 		}
 	}
 
-	private takeNext(): string | null {
-		const queued = this.foreground.take();
-		if (queued) return queued;
-
-		while (this.backlogCursor < this.backlogOrder.length) {
-			const noteId = this.backlogOrder[this.backlogCursor++];
-			if (this.backlogRemaining.delete(noteId)) return noteId;
-		}
-
-		this.backlogOrder = [];
-		this.backlogCursor = 0;
-		this.backlogRemaining.clear();
-		return null;
-	}
-
 	private async processNote(noteId: string): Promise<void> {
 		const indexNote = this.indexNote;
 		if (!indexNote) return;
@@ -374,8 +351,14 @@ export class Indexer {
 			await run;
 			this.settle(noteId);
 		} catch (error) {
-			this.settle(noteId, error);
-			console.error(`[Similarity] Indexing failed for ${noteId}:`, error);
+			if (this.paused) {
+				// The model was switched or disabled under this note; the next sync re-queues it.
+				this.runningIds.delete(noteId);
+				this.scheduleEmit();
+			} else {
+				this.settle(noteId, error);
+				console.error(`[Similarity] Indexing failed for ${noteId}:`, error);
+			}
 		} finally {
 			this.inFlight = null;
 			this.releaseNote(noteId);
@@ -393,8 +376,7 @@ export class Indexer {
 
 	private forget(noteId: string): void {
 		this.pendingIds.delete(noteId);
-		this.backlogRemaining.delete(noteId);
-		this.foreground.remove(noteId);
+		this.queue.remove(noteId);
 		this.releaseNote(noteId);
 	}
 
@@ -413,10 +395,7 @@ export class Indexer {
 	}
 
 	private clearQueues(): void {
-		this.foreground.clear();
-		this.backlogOrder = [];
-		this.backlogCursor = 0;
-		this.backlogRemaining.clear();
+		this.queue.clear();
 		this.pendingIds.clear();
 		for (const noteId of [...this.awaited.keys()]) this.releaseNote(noteId);
 		this.scheduleEmit();
@@ -424,7 +403,7 @@ export class Indexer {
 	}
 
 	private hasWork(): boolean {
-		return !this.foreground.isEmpty || this.backlogCursor < this.backlogOrder.length;
+		return !this.queue.isEmpty;
 	}
 
 	private isIdle(): boolean {

@@ -66,26 +66,20 @@ test("a disabled engine ignores model requests until it is enabled", async () =>
 	assert.deepStrictEqual(engine.status(), {kind: "disabled"});
 });
 
-test("disabling a ready engine unloads the model and drops queued work", async () => {
+test("disabling a ready engine flips at once and hands the model to unload", async () => {
 	const loaded = embedder();
-	let releaseInFlight;
-	loaded.embed = () => new Promise((resolve) => {
-		releaseInFlight = () => resolve({chunks: [{embedding: new Int8Array(1), start: 0, end: 1, hash: "h"}]});
-	});
+	loaded.embed = () => new Promise(() => {});
 	const engine = makeEngine(async () => loaded);
 	await engine.requestModel(MODEL_ID);
 
-	const inFlight = engine.embed("first");
-	const queued = engine.embed("second");
-	const disabling = engine.disable();
+	void engine.embed("in progress", {lane: "background"});
+	await engine.disable();
 
-	assert.deepStrictEqual(engine.status(), {kind: "disabled"}, "the state flips before in-flight work settles");
-	await assert.rejects(queued, /disabled/);
-
-	releaseInFlight();
-	await disabling;
-	await inFlight;
-	assert.strictEqual(loaded.unloaded, 1, "unloaded only after the in-flight job finished");
+	// Settling work still in progress is the embedder's job: unloading it rejects what it
+	// was still waiting on and lets the running inference finish first (see InferenceQueue).
+	assert.deepStrictEqual(engine.status(), {kind: "disabled"});
+	assert.strictEqual(loaded.unloaded, 1);
+	await assert.rejects(engine.embed("after", {lane: "interactive"}), /disabled/);
 });
 
 test("embedding while disabled is refused with a ModelNotReadyError for the disabled state", async () => {

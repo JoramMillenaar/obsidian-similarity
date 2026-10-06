@@ -1,9 +1,8 @@
 import { EmbeddingModelId } from "../types";
 import { Device, EmbeddingPort, ModelLoadProgress } from "../ports";
 import { Unsubscribe } from "../core/util/unsubscribe";
-import { Priority } from "../core/util/priorityQueue";
 
-export type { Priority, Unsubscribe };
+export type { Unsubscribe };
 
 /** Which stage of a model download `EngineStatus`'s "loading" state is in. */
 export type LoadPhase = "downloading" | "finalizing";
@@ -30,13 +29,6 @@ export type EngineState =
 	| { status: "loading"; modelId: EmbeddingModelId; epoch: number; progress: ModelLoadProgress | null; phase: LoadPhase }
 	| { status: "error"; modelId: EmbeddingModelId; message: string; offline: boolean; epoch: number }
 	| { status: "ready"; modelId: EmbeddingModelId; embedder: EmbeddingPort; epoch: number };
-
-/** A single queued embed request awaiting the ready embedder. */
-export type Job = {
-	priority: Priority;
-	run: (embedder: EmbeddingPort) => Promise<unknown>;
-	cancel: (error: unknown) => void;
-};
 
 /** Tracks an in-flight `requestModel` call so duplicate requests for the same model can share it. */
 export type PendingModelRequest = { modelId: EmbeddingModelId; promise: Promise<void> };

@@ -14,7 +14,7 @@ const SPECIAL_TOKEN_RESERVE = 2;
 export function makeGenerateDocumentEmbeddings(model: EmbeddingModel): GenerateDocumentEmbeddings {
 	const chunkTokenBudget = model.config.maxTokens - SPECIAL_TOKEN_RESERVE;
 
-	return async function generateDocumentEmbeddings(text, maxOverlapPercent) {
+	return async function generateDocumentEmbeddings(text, maxOverlapPercent, lane) {
 		await model.ready;
 
 		const metadata = {
@@ -28,7 +28,7 @@ export function makeGenerateDocumentEmbeddings(model: EmbeddingModel): GenerateD
 
 		const embedded: EmbeddedChunk[] = [];
 		for (const chunk of chunks) {
-			const data = await model.embed(chunk.text);
+			const data = await model.embed(chunk.text, lane);
 			if (data.length) {
 				embedded.push({ embedding: quantizeEmbedding(normalizeEmbedding(data)), start: chunk.start, end: chunk.end });
 			}

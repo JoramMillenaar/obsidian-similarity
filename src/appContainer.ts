@@ -127,7 +127,7 @@ export class AppContainer {
 			if (!index) return [];
 			return makeGetSimilarNotesForText({
 				index,
-				embed: (text) => this.engine.embed(text, {priority: "high"}),
+				embed: (text) => this.engine.embed(text, {lane: "interactive"}),
 			})({mode: this.settingsRepo.get().searchMode, ...args});
 		};
 

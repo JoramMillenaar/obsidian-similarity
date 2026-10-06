@@ -38,14 +38,16 @@ async function handleInit(config: WorkerRequest & { type: 'init' }): Promise<voi
 	}
 }
 
-/** Acks the embed request, then generates and posts back its embeddings (or an error). */
+/**
+ * Generates and posts back the embeddings (or an error). Requests are not serialized here:
+ * several can be in progress at once, and the model's inference queue interleaves their chunks.
+ */
 async function handleEmbed(message: WorkerRequest & { type: 'embed' }): Promise<void> {
-	const {requestId, payload, maxOverlapPercent} = message;
-	post({type: 'ack', requestId});
+	const {requestId, payload, maxOverlapPercent, lane} = message;
 
 	try {
 		if (!generateDocumentEmbeddings) throw new Error("Embedding model has not been initialized");
-		const data = await generateDocumentEmbeddings(payload, maxOverlapPercent);
+		const data = await generateDocumentEmbeddings(payload, maxOverlapPercent, lane);
 		post({type: 'embed-result', requestId, data});
 	} catch (error) {
 		post({requestId, type: 'embed-error', message: error instanceof Error ? error.message : String(error)});

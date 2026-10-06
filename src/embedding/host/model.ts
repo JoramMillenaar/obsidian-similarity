@@ -1,6 +1,8 @@
 import { env, pipeline, FeatureExtractionPipeline, ProgressInfo } from '@huggingface/transformers';
 import { EmbeddingModelConfig, EmbeddingQuant } from '../../types';
 import { Device, ModelLoadProgressCallback } from './types';
+import { EmbedLane } from '../../ports';
+import { InferenceQueue } from './inferenceQueue';
 
 env.allowLocalModels = false;
 
@@ -61,11 +63,11 @@ function describeLoadFailure(error: unknown, config: EmbeddingModelConfig): stri
 	return `Could not load the ${config.label} model: ${detail}`;
 }
 
-/** Wraps a single loaded transformers.js feature-extraction pipeline: loads it, runs serialized inference, and disposes it. */
+/** Wraps a single loaded transformers.js feature-extraction pipeline: loads it, runs prioritized, serialized inference, and disposes it. */
 export class EmbeddingModel {
 	#pipeline: FeatureExtractionPipeline | null = null;
 	#variant: ModelVariant = WASM_VARIANT;
-	#queue: Promise<unknown> = Promise.resolve(); // serialize all inference calls
+	readonly #queue = new InferenceQueue();
 	#disposed = false;
 	readonly config: EmbeddingModelConfig;
 	ready: Promise<void>;
@@ -130,11 +132,11 @@ export class EmbeddingModel {
 		if (this.#disposed) return;
 		this.#disposed = true;
 
+		await this.#queue.close();
+
 		const loaded = this.#pipeline;
 		if (!loaded) return;
 		this.#pipeline = null;
-
-		await this.#queue.catch(() => undefined);
 		await loaded.dispose();
 	}
 
@@ -145,25 +147,18 @@ export class EmbeddingModel {
 	};
 
 	/**
-	 * Runs inference for `input`, queued behind any prior call so requests are serialized.
+	 * Runs inference for one chunk in `lane`; see {@link InferenceQueue} for the ordering.
 	 * Not normalized here — `embedDocument.ts` always L2-normalizes the result itself right
 	 * before quantizing, so normalizing again at the pipeline level would just redo that work.
 	 */
-	embed(input: string): Promise<Float32Array> {
-		return new Promise((resolve, reject) => {
-			this.#queue = this.#queue.then(async () => {
-				try {
-					if (this.#disposed) return reject(new Error("model has been disposed"));
-					if (!this.#pipeline) return reject(new Error("pipeline not yet initialized"));
-					const result: { data: Float32Array } = await this.#pipeline(input, {
-						pooling: this.config.pooling,
-						normalize: false,
-					});
-					resolve(result.data);
-				} catch (err) {
-					reject(err instanceof Error ? err : new Error(String(err)));
-				}
+	embed(input: string, lane: EmbedLane): Promise<Float32Array> {
+		return this.#queue.run(lane, async () => {
+			if (!this.#pipeline) throw new Error("pipeline not yet initialized");
+			const result: { data: Float32Array } = await this.#pipeline(input, {
+				pooling: this.config.pooling,
+				normalize: false,
 			});
+			return result.data;
 		});
 	}
 
