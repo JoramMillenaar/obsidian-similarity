@@ -8,6 +8,7 @@ import { textForNotice } from "./similarNoticeText";
 import { KeyedDebouncer } from "../core/util/debounce";
 import { RelatedNote } from "../types";
 import { renderSimilarityBar } from "./similarityBar";
+import { noteAgeText } from "./noteAge";
 
 export type SearchModalDeps = {
 	similarSearchFeed: SimilarSearchFeed;
@@ -143,6 +144,9 @@ export class SearchModal extends SuggestModal<RelatedNote> {
 		el.addClass("similarity-suggestion");
 		const titleEl = el.createDiv({text: fileName, cls: "similarity-suggestion-title"});
 		titleEl.addClass("internal-link");
+
+		const age = noteAgeText(this.app, value.id);
+		if (age) el.createEl("small", {text: age, cls: "similarity-suggestion-age"});
 
 		renderSimilarityBar(el, value);
 	}

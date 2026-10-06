@@ -9,6 +9,7 @@ import { SettingsRepository } from "../ports";
 import { SearchMode } from "../types";
 import { FEEDBACK_ACTIONS, OpenFeedback } from "./FeedbackModal";
 import { renderSimilarityBar } from "./similarityBar";
+import { noteAgeText } from "./noteAge";
 
 export { VIEW_TYPE_SIMILARITY };
 
@@ -342,8 +343,11 @@ export class SimilarNotesListView extends ItemView {
 
 			textWrapper.createSpan({cls: "related-title", text: title});
 
-			if (parentPath) {
-				textWrapper.createEl("small", {cls: "related-parent", text: parentPath});
+			const age = noteAgeText(this.app, path);
+			if (parentPath || age) {
+				const meta = textWrapper.createEl("small", {cls: "related-parent"});
+				if (parentPath) meta.appendText(parentPath);
+				if (age) meta.createSpan({cls: "related-age", text: parentPath ? ` · ${age}` : age});
 			}
 
 			const flairOuter = itemSelf.createDiv({cls: "tree-item-flair-outer"});
