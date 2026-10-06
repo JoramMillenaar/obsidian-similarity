@@ -318,3 +318,19 @@ body {
 	width: var(--icon-s);
 	height: var(--icon-s);
 }
+
+.similarity-path-search-setting > .setting-item-info {
+	display: none;
+}
+
+.similarity-path-search-setting > .setting-item-control {
+	flex: 1;
+}
+
+.similarity-path-search-setting .search-input-container {
+	flex: 1;
+}
+
+.similarity-path-search-setting input[type="search"] {
+	width: 100%;
+}

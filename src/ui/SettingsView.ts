@@ -7,7 +7,7 @@ import { UpdateSettingsUseCase } from "../app/updateSettings";
 import { EngineStateReader, EngineStatus, ModelRequestSupersededError } from "../embedding/engine";
 import { FEEDBACK_ACTIONS, OpenFeedback } from "./FeedbackModal";
 import { createWarningIcon } from "./warning";
-import { IgnorePathModal } from "./IgnorePathModal";
+import { IgnorePathSuggest } from "./IgnorePathSuggest";
 
 export type SettingsViewDeps = {
 	settingsRepo: SettingsRepository,
@@ -108,20 +108,20 @@ export class SettingView extends PluginSettingTab {
 				displayValue: () => ignoredPaths.length ? String(ignoredPaths.length) : "None",
 				items: [
 					{
+						name: "Add folder or note",
+						render: (setting) => {
+							setting.settingEl.addClass("similarity-path-search-setting");
+							setting.addSearch((search) => {
+								search.setPlaceholder("Find or type a folder or note to ignore…");
+								new IgnorePathSuggest(this.app, search.inputEl, this.deps.settingsRepo.get().ignoredPaths, (path) => {
+									void this.addIgnoredPath(path);
+								});
+							});
+						},
+					},
+					{
 						type: "list",
 						emptyState: "Nothing is ignored.",
-						search: {
-							placeholder: "Search ignored paths",
-							match: (def, query) => def.name.toLowerCase().includes(query.toLowerCase()),
-						},
-						addItem: {
-							name: "Add folder or note",
-							action: () => {
-								new IgnorePathModal(this.app, this.deps.settingsRepo.get().ignoredPaths, (path) => {
-									void this.addIgnoredPath(path);
-								}).open();
-							},
-						},
 						onDelete: (index) => {
 							void this.removeIgnoredPath(ignoredPaths[index]);
 						},
