@@ -24,12 +24,7 @@
 		"typescript": "^5.4.5"
 	},
 	"dependencies": {
-		"@huggingface/transformers": "^4.2.0",
-		"@types/p-limit": "^2.1.0",
-		"@types/turndown": "^5.0.5",
-		"p-limit": "^6.1.0",
-		"remove-markdown": "^0.5.5",
-		"uuid": "^11.1.1"
+		"@huggingface/transformers": "^4.2.0"
 	},
 	"overrides": {
 		"sharp": "^0.35.4"
