@@ -118,7 +118,7 @@ export class AppContainer {
 
 		this.getSimilarNotesForNote = async (args) => {
 			const index = this.indexer.index();
-			if (!index) return [];
+			if (!index) return {items: [], truncated: false};
 			return makeGetSimilarNotesForNote({index})({mode: this.settingsRepo.get().searchMode, ...args});
 		};
 

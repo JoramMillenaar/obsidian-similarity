@@ -172,7 +172,7 @@ test("the similar-notes feed surfaces the load failure instead of 'warming up' f
 	let retried = 0;
 	const feed = makeSimilarNotesFeed({
 		statusHub,
-		getSimilarNotesForNote: async () => [],
+		getSimilarNotesForNote: async () => ({items: [], truncated: false}),
 		isIndexEmpty: async () => false,
 		isIgnoredPath: () => false,
 		synchronizeIndex: async () => {},

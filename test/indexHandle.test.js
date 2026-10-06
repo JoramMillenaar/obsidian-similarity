@@ -171,6 +171,21 @@ test("a note's quantization round-trips, and notes without one stay without one"
 	assert.ok(!("quant" in second.get("legacy.md")), "legacy notes must not gain a quant key");
 });
 
+test("truncation round-trips, and notes indexed before it was recorded stay unknown", async () => {
+	const files = makeFiles();
+	const first = await openIndex(files, MODEL_ID, {throttleMs: THROTTLE_MS});
+	first.upsert({...note("cut.md"), truncated: true});
+	first.upsert({...note("whole.md"), truncated: false});
+	first.upsert(note("legacy.md"));
+	await first.close();
+
+	const second = await openIndex(files, MODEL_ID, {throttleMs: THROTTLE_MS});
+
+	assert.strictEqual(second.get("cut.md").truncated, true);
+	assert.strictEqual(second.get("whole.md").truncated, false);
+	assert.ok(!("truncated" in second.get("legacy.md")), "legacy notes must not gain a truncated key");
+});
+
 test("a corrupt sidecar is discarded rather than served", async () => {
 	const files = makeFiles();
 	const first = await openWith(files, ["a.md"]);

@@ -202,7 +202,7 @@ test("disable and enable are immediate for observers: no restart, notice flips b
 	});
 	const feed = makeSimilarNotesFeed({
 		statusHub,
-		getSimilarNotesForNote: async () => [{id: "other.md", score: 0.9}],
+		getSimilarNotesForNote: async () => ({items: [{id: "other.md", score: 0.9}], truncated: false}),
 		isIndexEmpty: async () => false,
 		isIgnoredPath: () => false,
 		synchronizeIndex: async () => {},

@@ -6,7 +6,6 @@ import { renderBannerMessage } from "./warning";
 import { WASM_WARNING_MESSAGE } from "../status/notices";
 import { textForNotice } from "./similarNoticeText";
 import { SEARCH_MODES, VIEW_TYPE_SIMILARITY } from "../constants";
-import { GetNoteTextUseCase } from "../app/getNoteText";
 import { SettingsRepository } from "../ports";
 import { SearchMode } from "../types";
 import { FEEDBACK_ACTIONS, OpenFeedback } from "./FeedbackModal";
@@ -37,7 +36,6 @@ type MessageState = {
 export type SimilarNotesListViewDeps = {
 	similarNotesFeed: SimilarNotesFeed;
 	statusHub: StatusHub;
-	getNoteText: GetNoteTextUseCase;
 	settingsRepo: SettingsRepository;
 	setSearchMode: (mode: SearchMode) => Promise<void>;
 	openSearchModal: () => void;
@@ -64,7 +62,6 @@ export class SimilarNotesListView extends ItemView {
 	private messageEl?: HTMLElement;
 	private renderedItems: string | null = null;
 	private renderedMessage: string | null = null;
-	private truncationCheckId = 0;
 	private unsubscribeSnapshot?: () => void;
 	private unsubscribeBanner?: () => void;
 	private searchModeButtonEl?: HTMLElement;
@@ -196,26 +193,6 @@ export class SimilarNotesListView extends ItemView {
 		this.activePath = active?.path ?? null;
 		this.deps.similarNotesFeed.setActiveNote(this.activePath);
 		this.renderBody();
-		this.checkTruncation(this.activePath);
-	}
-
-	private checkTruncation(noteId: string | null) {
-		const checkId = ++this.truncationCheckId;
-		if (!noteId) {
-			this.renderTruncationNotice(false);
-			return;
-		}
-
-		this.deps.getNoteText(noteId).then(
-			({truncated}) => {
-				if (checkId !== this.truncationCheckId) return;
-				this.renderTruncationNotice(truncated);
-			},
-			() => {
-				if (checkId !== this.truncationCheckId) return;
-				this.renderTruncationNotice(false);
-			},
-		);
 	}
 
 	private renderTruncationNotice(visible: boolean) {
@@ -241,7 +218,10 @@ export class SimilarNotesListView extends ItemView {
 	}
 
 	private renderBody() {
-		if (!this.snapshot || this.snapshot.noteId !== this.activePath) {
+		const current = this.snapshot?.noteId === this.activePath;
+		this.renderTruncationNotice(current && this.snapshot?.truncated === true);
+
+		if (!this.snapshot || !current) {
 			this.renderRelatedList([]);
 			this.renderMessage({text: LOADING_TEXT, cls: "tree-item-self"});
 			return;

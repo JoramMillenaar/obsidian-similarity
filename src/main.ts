@@ -50,7 +50,6 @@ export default class SimilarNotes extends Plugin {
 				new SimilarNotesListView(leaf, {
 					similarNotesFeed: this.appContainer.similarNotesFeed,
 					statusHub: this.appContainer.statusHub,
-					getNoteText: this.appContainer.getNoteText,
 					settingsRepo: this.appContainer.settingsRepo,
 					setSearchMode: this.appContainer.setSearchMode,
 					openSearchModal,

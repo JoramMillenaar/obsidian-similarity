@@ -13,6 +13,7 @@ export type SimilarNotesSnapshot = {
 	items: RelatedNote[];
 	refining: boolean;
 	notice?: SimilarNotesNotice;
+	truncated?: boolean;
 };
 
 export type Unsubscribe = () => void;
@@ -77,6 +78,7 @@ export function makeSimilarNotesFeed(deps: SimilarNotesFeedDeps): SimilarNotesFe
 			items: result.items,
 			refining: result.notice?.kind === "warming-up",
 			notice: result.notice,
+			truncated: result.truncated,
 		});
 	}
 

@@ -13,7 +13,7 @@ export type IndexEntry = {
 	id: string;
 	updatedAt: string;
 	contentHash: string;
-	lastChunkEnd: number;
+	truncated?: boolean;
 };
 
 export type IndexStats = {
@@ -108,8 +108,7 @@ class ResidentIndex implements IndexHandle {
 	entries(): IndexEntry[] {
 		const out: IndexEntry[] = [];
 		for (const note of this.byId.values()) {
-			const lastChunkEnd = note.chunks.reduce((max, chunk) => Math.max(max, chunk.end), 0);
-			out.push({id: note.id, updatedAt: note.updatedAt, contentHash: note.contentHash, lastChunkEnd});
+			out.push({id: note.id, updatedAt: note.updatedAt, contentHash: note.contentHash, truncated: note.truncated});
 		}
 		return out;
 	}

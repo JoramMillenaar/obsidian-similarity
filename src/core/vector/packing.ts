@@ -35,6 +35,7 @@ export function packForStorage(notes: IndexedNote[], dim: number): PackedIndex {
 			chunks,
 		};
 		if (note.quant) entry.quant = note.quant;
+		if (typeof note.truncated === "boolean") entry.truncated = note.truncated;
 		return entry;
 	});
 
@@ -66,6 +67,7 @@ export function unpackFromStorage(packedIndex: PackedIndex): IndexedNote[] {
 			contentHash: entry.contentHash,
 			updatedAt: entry.updatedAt,
 			...(entry.quant ? {quant: entry.quant} : {}),
+			...(typeof entry.truncated === "boolean" ? {truncated: entry.truncated} : {}),
 		});
 	}
 

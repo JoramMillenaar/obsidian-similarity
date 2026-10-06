@@ -53,6 +53,7 @@ export type IndexedNote = {
 	updatedAt: string,
 	// deprecated
 	quant?: EmbeddingQuant,
+	truncated?: boolean,
 };
 
 export type RelatedNote = {
@@ -109,6 +110,7 @@ export type NoteIndexMetadata = {
 	updatedAt: string;
 	chunks: ChunkMetadata[];
 	quant?: EmbeddingQuant;
+	truncated?: boolean;
 };
 
 export type IndexMetadata = NoteIndexMetadata[];
