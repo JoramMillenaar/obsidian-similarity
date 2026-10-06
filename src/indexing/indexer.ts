@@ -134,45 +134,49 @@ export class Indexer {
 		});
 	}
 
-	remove(noteId: string): void {
+	remove(noteId: string): boolean {
 		this.debouncer.cancel(noteId);
 		this.forget(noteId);
-		this.handle?.remove(noteId);
-		this.deps.onChanged();
+		const changed = this.handle?.remove(noteId) ?? false;
+		if (changed) this.deps.onChanged();
+		return changed;
 	}
 
-	removeFolder(folderPath: string): void {
+	removeFolder(folderPath: string): boolean {
 		const noteIds = this.idsUnder(folderPath);
-		if (noteIds.length === 0) return;
+		if (noteIds.length === 0) return false;
 
 		for (const noteId of noteIds) {
 			this.debouncer.cancel(noteId);
 			this.forget(noteId);
 		}
-		this.handle?.removeMany(noteIds);
-		this.deps.onChanged();
+		const changed = this.handle?.removeMany(noteIds) ?? false;
+		if (changed) this.deps.onChanged();
+		return changed;
 	}
 
-	rename(oldId: string, newId: string): void {
+	rename(oldId: string, newId: string): boolean {
 		this.debouncer.cancel(oldId);
 		this.forget(oldId);
-		this.handle?.rename(oldId, newId);
-		this.deps.onChanged();
+		const changed = this.handle?.rename(oldId, newId) ?? false;
+		if (changed) this.deps.onChanged();
+		return changed;
 	}
 
-	renameFolder(oldPath: string, newPath: string): void {
+	renameFolder(oldPath: string, newPath: string): boolean {
 		const renames = this.idsUnder(oldPath).map((oldId) => ({
 			oldId,
 			newId: repathToFolder(oldId, oldPath, newPath),
 		}));
-		if (renames.length === 0) return;
+		if (renames.length === 0) return false;
 
 		for (const {oldId} of renames) {
 			this.debouncer.cancel(oldId);
 			this.forget(oldId);
 		}
-		this.handle?.renameMany(renames);
-		this.deps.onChanged();
+		const changed = this.handle?.renameMany(renames) ?? false;
+		if (changed) this.deps.onChanged();
+		return changed;
 	}
 
 	flush(): Promise<void> {

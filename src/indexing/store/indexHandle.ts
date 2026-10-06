@@ -48,13 +48,13 @@ export interface IndexHandle {
 
 	upsert(note: IndexedNote): void;
 
-	remove(noteId: string): void;
+	remove(noteId: string): boolean;
 
-	removeMany(noteIds: string[]): void;
+	removeMany(noteIds: string[]): boolean;
 
-	rename(oldId: string, newId: string): void;
+	rename(oldId: string, newId: string): boolean;
 
-	renameMany(renames: IndexRename[]): void;
+	renameMany(renames: IndexRename[]): boolean;
 
 	clear(): void;
 
@@ -132,23 +132,24 @@ class ResidentIndex implements IndexHandle {
 		this.markDirty();
 	}
 
-	remove(noteId: string): void {
-		if (this.byId.delete(noteId)) this.markDirty();
+	remove(noteId: string): boolean {
+		return this.removeMany([noteId]);
 	}
 
-	removeMany(noteIds: string[]): void {
+	removeMany(noteIds: string[]): boolean {
 		let changed = false;
 		for (const noteId of noteIds) {
 			if (this.byId.delete(noteId)) changed = true;
 		}
 		if (changed) this.markDirty();
+		return changed;
 	}
 
-	rename(oldId: string, newId: string): void {
-		this.renameMany([{oldId, newId}]);
+	rename(oldId: string, newId: string): boolean {
+		return this.renameMany([{oldId, newId}]);
 	}
 
-	renameMany(renames: IndexRename[]): void {
+	renameMany(renames: IndexRename[]): boolean {
 		let changed = false;
 		for (const {oldId, newId} of renames) {
 			if (oldId === newId) continue;
@@ -160,6 +161,7 @@ class ResidentIndex implements IndexHandle {
 			changed = true;
 		}
 		if (changed) this.markDirty();
+		return changed;
 	}
 
 	clear(): void {

@@ -102,9 +102,10 @@ test("mutations that change nothing do not write", async () => {
 	const index = await openWith(files, ["a.md"]);
 	const before = files.writeCount();
 
-	index.removeMany(["missing.md"]);
-	index.renameMany([{oldId: "missing.md", newId: "other.md"}]);
-	index.rename("a.md", "a.md");
+	assert.strictEqual(index.removeMany(["missing.md"]), false);
+	assert.strictEqual(index.remove("missing.md"), false);
+	assert.strictEqual(index.renameMany([{oldId: "missing.md", newId: "other.md"}]), false);
+	assert.strictEqual(index.rename("a.md", "a.md"), false);
 	await index.flush();
 
 	assert.strictEqual(files.writeCount() - before, 0);
@@ -115,8 +116,8 @@ test("renaming keeps the note and its vectors under the new id", async () => {
 	const files = makeFiles();
 	const index = await openWith(files, ["a.md", "b.md"]);
 
-	index.rename("a.md", "renamed-a.md");
-	index.renameMany([{oldId: "b.md", newId: "renamed-b.md"}]);
+	assert.strictEqual(index.rename("a.md", "renamed-a.md"), true);
+	assert.strictEqual(index.renameMany([{oldId: "b.md", newId: "renamed-b.md"}]), true);
 	await index.flush();
 
 	assert.deepStrictEqual(index.ids().sort(), ["renamed-a.md", "renamed-b.md"]);

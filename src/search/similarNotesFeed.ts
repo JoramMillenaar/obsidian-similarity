@@ -35,7 +35,10 @@ type SimilarNotesFeedDeps = {
 	isIgnoredPath: IsIgnoredPath;
 	synchronizeIndex: () => Promise<void>;
 	retryModelLoad: () => Promise<void>;
+	refreshDebounceMs?: number;
 };
+
+const DEFAULT_REFRESH_DEBOUNCE_MS = 100;
 
 const IDLE: SimilarNotesSnapshot = {epoch: 0, noteId: null, items: [], refining: false, notice: {kind: "no-active-note"}};
 
@@ -48,6 +51,8 @@ export function makeSimilarNotesFeed(deps: SimilarNotesFeedDeps): SimilarNotesFe
 	let indexingState: IndexingQueueSnapshot | undefined = backend.getIndexingState();
 	let engineKind = backend.getEngineState().kind;
 	let lastIndexEmpty = false;
+	let refreshTimer: ReturnType<typeof setTimeout> | null = null;
+	const refreshDebounceMs = deps.refreshDebounceMs ?? DEFAULT_REFRESH_DEBOUNCE_MS;
 	const listeners = new Set<(snapshot: SimilarNotesSnapshot) => void>();
 
 	function emit(next: SimilarNotesSnapshot) {
@@ -140,11 +145,17 @@ export function makeSimilarNotesFeed(deps: SimilarNotesFeedDeps): SimilarNotesFe
 			await deps.retryModelLoad();
 		},
 		refresh() {
-			if (noteId === null) return;
-			epoch += 1;
-			void load(epoch);
+			if (refreshTimer !== null) clearTimeout(refreshTimer);
+			refreshTimer = setTimeout(() => {
+				refreshTimer = null;
+				if (noteId === null) return;
+				epoch += 1;
+				void load(epoch);
+			}, refreshDebounceMs);
 		},
 		dispose() {
+			if (refreshTimer !== null) clearTimeout(refreshTimer);
+			refreshTimer = null;
 			unsubscribeIndexingState();
 			unsubscribeRefreshSignal();
 			unsubscribeModelState();
