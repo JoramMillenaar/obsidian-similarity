@@ -169,6 +169,27 @@ body {
 	min-width: 0;
 }
 
+.similarity-path-suggestion {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+}
+
+.similarity-path-suggestion-icon {
+	display: inline-flex;
+	color: var(--text-muted);
+}
+
+.similarity-path-suggestion-icon .svg-icon {
+	width: var(--icon-s);
+	height: var(--icon-s);
+}
+
+.similarity-path-suggestion-text {
+	flex: 1;
+	min-width: 0;
+}
+
 
 .related-title {
 	display: block;
@@ -284,4 +305,16 @@ body {
 	flex-basis: 100%;
 	justify-content: flex-start;
 	margin-top: 8px;
+}
+
+.similarity-ignored-path-icon {
+	display: inline-flex;
+	vertical-align: middle;
+	margin-right: 6px;
+	color: var(--text-muted);
+}
+
+.similarity-ignored-path-icon .svg-icon {
+	width: var(--icon-s);
+	height: var(--icon-s);
 }

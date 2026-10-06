@@ -1,6 +1,5 @@
-import { App, DropdownComponent, Notice, PluginSettingTab, SettingDefinitionItem, ToggleComponent } from "obsidian";
+import { App, DropdownComponent, Notice, PluginSettingTab, Setting, setIcon, SettingDefinitionItem, TFolder, ToggleComponent } from "obsidian";
 import RelatedNotes from "../main";
-import { parseIgnoredPaths } from "../core/rules/ignorePaths";
 import { EMBEDDING_MODELS, MAX_OVERLAP_PERCENT, SEARCH_MODES } from "../constants";
 import { EmbeddingModelId, SearchMode } from "../types";
 import { SettingsRepository } from "../ports";
@@ -8,6 +7,7 @@ import { UpdateSettingsUseCase } from "../app/updateSettings";
 import { EngineStateReader, EngineStatus, ModelRequestSupersededError } from "../embedding/engine";
 import { FEEDBACK_ACTIONS, OpenFeedback } from "./FeedbackModal";
 import { createWarningIcon } from "./warning";
+import { IgnorePathModal } from "./IgnorePathModal";
 
 export type SettingsViewDeps = {
 	settingsRepo: SettingsRepository,
@@ -25,7 +25,6 @@ function capitalize(text: string): string {
 }
 
 export class SettingView extends PluginSettingTab {
-	private ignoredPathsDraft: string;
 	private modelDropdown?: DropdownComponent;
 	private modelDisabledToggle?: ToggleComponent;
 	private modelDisabledSettingEl?: HTMLElement;
@@ -36,7 +35,6 @@ export class SettingView extends PluginSettingTab {
 		private readonly deps: SettingsViewDeps,
 	) {
 		super(app, plugin);
-		this.ignoredPathsDraft = this.deps.settingsRepo.get().ignoredPaths.join("\n");
 		this.deps.engine.subscribe((status) => {
 			this.modelDropdown?.setValue(this.currentModelId(status));
 			this.reflectModelDisabled(status);
@@ -69,6 +67,8 @@ export class SettingView extends PluginSettingTab {
 	}
 
 	getSettingDefinitions(): SettingDefinitionItem[] {
+		const {ignoredPaths} = this.deps.settingsRepo.get();
+
 		return [
 			{
 				name: "Language",
@@ -102,39 +102,41 @@ export class SettingView extends PluginSettingTab {
 				},
 			},
 			{
-				name: "Ignored paths/folders",
-				desc: "One entry per line. Folder paths ignore everything under that folder. Append .md to a filename to ignore a specific note.",
-				render: (setting) => {
-					setting.addTextArea((text) => {
-						text
-							.setPlaceholder("Templates\nArchive/2023\nScratch.md")
-							.setValue(this.ignoredPathsDraft)
-							.onChange((value) => {
-								this.ignoredPathsDraft = value;
-							});
-						text.inputEl.rows = 8;
-						text.inputEl.cols = 40;
-					});
-				},
-			},
-			{
-				name: "Apply ignored paths",
-				desc: "Reindexes your vault to match the list above.",
-				render: (setting) => {
-					setting.addButton((button) => {
-						button.setButtonText("Apply").onClick(() => {
-							const ignoredPaths = parseIgnoredPaths(this.ignoredPathsDraft);
-							this.deps.updateSettings({ignoredPaths})
-								.then(() => {
-									new Notice("Ignored paths updated. Reindexing in the background.");
-								})
-								.catch((error) => {
-									const message = error instanceof Error ? error.message : String(error);
-									new Notice(`Could not update ignored paths: ${message}`);
-								});
-						});
-					});
-				},
+				type: "page",
+				name: "Ignored folders and notes",
+				desc: "Left out of similar notes and search.",
+				displayValue: () => ignoredPaths.length ? String(ignoredPaths.length) : "None",
+				items: [
+					{
+						type: "list",
+						emptyState: "Nothing is ignored.",
+						search: {
+							placeholder: "Search ignored paths",
+							match: (def, query) => def.name.toLowerCase().includes(query.toLowerCase()),
+						},
+						addItem: {
+							name: "Add folder or note",
+							action: () => {
+								new IgnorePathModal(this.app, this.deps.settingsRepo.get().ignoredPaths, (path) => {
+									void this.addIgnoredPath(path);
+								}).open();
+							},
+						},
+						onDelete: (index) => {
+							void this.removeIgnoredPath(ignoredPaths[index]);
+						},
+						items: ignoredPaths.map((path) => ({
+							name: path,
+							render: (setting: Setting) => {
+								const icon = this.ignoredPathIcon(path);
+								setting.setName(path);
+								setIcon(setting.nameEl.createSpan({cls: "similarity-ignored-path-icon"}), icon.name);
+								setting.nameEl.prepend(setting.nameEl.lastElementChild!);
+								setting.nameEl.setAttr("aria-label", icon.label);
+							},
+						})),
+					},
+				],
 			},
 			{
 				name: "Feedback",
@@ -235,6 +237,36 @@ export class SettingView extends PluginSettingTab {
 			return;
 		}
 		await this.deps.updateSettings({[key]: value as number});
+	}
+
+	private ignoredPathIcon(path: string): {name: string, label: string} {
+		const file = this.app.vault.getAbstractFileByPath(path);
+		if (!file) return {name: "file-question", label: "Not found in this vault"};
+		return file instanceof TFolder ? {name: "folder", label: "Folder"} : {name: "file-text", label: "Note"};
+	}
+
+	private async addIgnoredPath(path: string): Promise<void> {
+		const {ignoredPaths} = this.deps.settingsRepo.get();
+		if (ignoredPaths.includes(path)) return;
+		await this.commitIgnoredPaths([...ignoredPaths, path], `Ignoring "${path}".`);
+	}
+
+	private async removeIgnoredPath(path: string): Promise<void> {
+		const {ignoredPaths} = this.deps.settingsRepo.get();
+		if (!ignoredPaths.includes(path)) return;
+		await this.commitIgnoredPaths(ignoredPaths.filter((ignored) => ignored !== path), `No longer ignoring "${path}".`);
+	}
+
+	private async commitIgnoredPaths(ignoredPaths: string[], summary: string): Promise<void> {
+		try {
+			await this.deps.updateSettings({ignoredPaths});
+			new Notice(`${summary} Reindexing in the background.`);
+		} catch (error) {
+			const message = error instanceof Error ? error.message : String(error);
+			new Notice(`Could not update ignored paths: ${message}`);
+		}
+		// Adding or removing entries changes the definitions themselves, so re-render rather than refreshDomState().
+		this.update();
 	}
 
 	private async setModelDisabled(disabled: boolean): Promise<void> {
