@@ -17,18 +17,12 @@ export { ModelNotReadyError, ModelRequestSupersededError } from "./errors";
 
 const RANK: Record<Priority, number> = {high: 2, medium: 1, low: 0};
 
-/** Collaborators the engine needs to load models, read settings, and report progress to the user. */
 export type EmbeddingEngineDeps = {
 	loadEmbedder: LoadEmbeddingPort;
 	settingsRepo: SettingsRepository;
 	status: StatusReporter;
 };
 
-/**
- * Per-call tuning for {@link EmbeddingEngine.embed}. Distinct from `ports`' `EmbedOptions`
- * (the lower-level, `EmbeddingPort`-facing shape) — named differently so the two don't get
- * imported interchangeably.
- */
 export type EmbedRequestOptions = {
 	priority?: Priority;
 };

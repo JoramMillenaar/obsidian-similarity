@@ -11,7 +11,7 @@ import { IndexNoteUseCase, makeIndexNote } from "../app/indexNote";
 import { GetNoteTextUseCase } from "../app/getNoteText";
 import { IsIgnoredPath } from "../app/isIgnoredPath";
 
-export type Unsubscribe = () => void;
+import { Unsubscribe } from "../core/util/unsubscribe";
 
 export type IndexerDeps = {
 	engine: EmbeddingEngine;

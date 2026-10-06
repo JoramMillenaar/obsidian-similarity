@@ -3,8 +3,7 @@ import { InsertWikilinkAtCursorUseCase } from "../app/insertWikilinkAtCursor";
 import { SimilarSearchFeed, SimilarSearchResult } from "../search/similarSearchFeed";
 import { StatusHub } from "../status/statusHub";
 import { BannerState, computeBanner, subscribeBanner } from "./banner";
-import { renderBannerMessage } from "./warning";
-import { WASM_WARNING_MESSAGE } from "../status/notices";
+import { renderBanner } from "./warning";
 import { textForNotice } from "./similarNoticeText";
 import { KeyedDebouncer } from "../core/util/debounce";
 import { RelatedNote } from "../types";
@@ -97,7 +96,7 @@ export class SearchModal extends SuggestModal<RelatedNote> {
 					this.emptyStateText = this.textFor(result);
 					resolve(result.items);
 				} catch (e) {
-					console.error("[Related Notes Search] Failed to get related notes:", e);
+					console.error("[Similarity] Failed to get related notes:", e);
 					this.emptyStateText = this.getNoResultsText();
 					resolve([]);
 				}
@@ -160,7 +159,7 @@ export class SearchModal extends SuggestModal<RelatedNote> {
 			this.emptyStateText = this.textFor(result);
 			return result.items;
 		} catch (e) {
-			console.error("[Related Notes Search] Failed to get initial suggestions:", e);
+			console.error("[Similarity] Failed to get initial suggestions:", e);
 			this.emptyStateText = this.getNoResultsText();
 			return [];
 		}
@@ -211,32 +210,7 @@ export class SearchModal extends SuggestModal<RelatedNote> {
 			return;
 		}
 
-		this.bannerEl.empty();
-		this.bannerEl.toggleClass("is-hidden", !banner.visible);
-
-		if (!banner.visible) {
-			return;
-		}
-
-		renderBannerMessage(this.bannerEl, banner);
-
-		if (banner.wasmWarning) {
-			this.bannerEl.createDiv({
-				cls: "similarity-index-banner-gpu-warning",
-				text: WASM_WARNING_MESSAGE,
-			});
-		}
-
-		if (banner.total > 0) {
-			const progressRow = this.bannerEl.createDiv({cls: "similarity-index-banner-progress"});
-			progressRow.createEl("progress", {
-				cls: "similarity-index-banner-bar",
-				attr: {
-					max: String(banner.total),
-					value: String(Math.min(banner.processed, banner.total)),
-				},
-			});
-		}
+		renderBanner(this.bannerEl, banner);
 	}
 
 }

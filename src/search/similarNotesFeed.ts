@@ -16,7 +16,7 @@ export type SimilarNotesSnapshot = {
 	truncated?: boolean;
 };
 
-export type Unsubscribe = () => void;
+import { Unsubscribe } from "../core/util/unsubscribe";
 
 export interface SimilarNotesFeed {
 	getSnapshot(): SimilarNotesSnapshot;

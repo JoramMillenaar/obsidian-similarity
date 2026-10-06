@@ -3,7 +3,7 @@ import { EmbeddingEngine, EngineStatus } from "../embedding/engine";
 import { Indexer } from "../indexing/indexer";
 import { shouldRefreshOnIndexingChange } from "./notices";
 
-export type Unsubscribe = () => void;
+import { Unsubscribe } from "../core/util/unsubscribe";
 
 export interface StatusHub {
 	getIndexingState(): IndexingQueueSnapshot | undefined;

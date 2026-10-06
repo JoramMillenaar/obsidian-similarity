@@ -2,8 +2,7 @@ import { ItemView, Menu, Notice, setIcon, TFile, WorkspaceLeaf } from "obsidian"
 import { SimilarNotesFeed, SimilarNotesSnapshot } from "../search/similarNotesFeed";
 import { StatusHub } from "../status/statusHub";
 import { BannerState, subscribeBanner } from "./banner";
-import { renderBannerMessage } from "./warning";
-import { WASM_WARNING_MESSAGE } from "../status/notices";
+import { renderBanner } from "./warning";
 import { textForNotice } from "./similarNoticeText";
 import { SEARCH_MODES, VIEW_TYPE_SIMILARITY } from "../constants";
 import { SettingsRepository } from "../ports";
@@ -13,8 +12,8 @@ import { renderSimilarityBar } from "./similarityBar";
 
 export { VIEW_TYPE_SIMILARITY };
 
-export function logError(message: unknown, ...optionalParams: unknown[]) {
-	console.error("[Similarity]:", message, ...optionalParams);
+function logError(message: unknown, ...optionalParams: unknown[]) {
+	console.error("[Similarity]", message, ...optionalParams);
 }
 
 
@@ -290,37 +289,7 @@ export class SimilarNotesListView extends ItemView {
 		const bannerEl = this.bannerEl;
 		if (!bannerEl) return;
 
-		bannerEl.empty();
-		bannerEl.toggleClass("is-hidden", !banner.visible);
-		if (!banner.visible) return;
-
-		renderBannerMessage(bannerEl, banner);
-
-		if (banner.wasmWarning) {
-			bannerEl.createDiv({
-				cls: "similarity-index-banner-gpu-warning",
-				text: WASM_WARNING_MESSAGE,
-			});
-		}
-
-		if (banner.action === "open-settings") {
-			const link = bannerEl.createEl("a", {
-				cls: "similarity-index-banner-link",
-				text: "Re-enable in settings",
-			});
-			link.addEventListener("click", (event) => {
-				event.preventDefault();
-				this.deps.openSettings();
-			});
-		}
-
-		if (banner.total > 0) {
-			const progressRow = bannerEl.createDiv({cls: "similarity-index-banner-progress"});
-			progressRow.createEl("progress", {
-				cls: "similarity-index-banner-bar",
-				attr: {max: String(banner.total), value: String(Math.min(banner.processed, banner.total))},
-			});
-		}
+		renderBanner(bannerEl, banner, () => this.deps.openSettings());
 	}
 
 	private renderRetryAction(container: HTMLElement, retry: RetryAction) {
