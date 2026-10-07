@@ -1,4 +1,4 @@
-/** Quantized unit-vector embedding: see domain/embedding.ts and domain/embeddingCodec.ts. */
+/** Quantized unit-vector embedding: see core/vector/similarity.ts and codec.ts. */
 export type Embedding = Int8Array;
 
 export type EmbeddingModelId =
@@ -53,6 +53,7 @@ export type IndexedNote = {
 	updatedAt: string,
 	// deprecated
 	quant?: EmbeddingQuant,
+	truncated?: boolean,
 };
 
 export type RelatedNote = {
@@ -78,6 +79,7 @@ export type IndexingQueueSnapshot = {
 export interface SimilaritySettings {
 	ignoredPaths: string[];
 	advancedOpen: boolean;
+	showDates: boolean;
 	maxRawMarkdownChars: number;
 	maxExtractedChars: number;
 	maxOverlapPercent: number;
@@ -109,6 +111,7 @@ export type NoteIndexMetadata = {
 	updatedAt: string;
 	chunks: ChunkMetadata[];
 	quant?: EmbeddingQuant;
+	truncated?: boolean;
 };
 
 export type IndexMetadata = NoteIndexMetadata[];

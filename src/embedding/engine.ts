@@ -1,42 +1,26 @@
 import { EmbeddingModelConfig, EmbeddingModelId } from "../types";
-import { EmbeddingPort, EmbeddingResult, LoadEmbeddingPort, SettingsRepository, StatusReporter } from "../ports";
+import { EmbedLane, EmbeddingPort, EmbeddingResult, LoadEmbeddingPort, SettingsRepository, StatusReporter } from "../ports";
 import { EMBEDDING_MODELS, MIN_DOWNLOAD_PROGRESS_BYTES } from "../constants";
 import { ModelNotReadyError, ModelRequestSupersededError } from "./errors";
-import {
-	EngineState,
-	EngineStatus,
-	Job,
-	LoadPhase,
-	PendingModelRequest,
-	Priority,
-	Unsubscribe,
-} from "./types";
+import { EngineState, EngineStatus, LoadPhase, PendingModelRequest, Unsubscribe } from "./types";
 
-export type { EngineStatus, LoadPhase, Unsubscribe, EngineStateReader, Priority } from "./types";
+export type { EngineStatus, LoadPhase, Unsubscribe, EngineStateReader } from "./types";
 export { ModelNotReadyError, ModelRequestSupersededError } from "./errors";
 
-const RANK: Record<Priority, number> = {high: 2, medium: 1, low: 0};
-
-/** Collaborators the engine needs to load models, read settings, and report progress to the user. */
 export type EmbeddingEngineDeps = {
 	loadEmbedder: LoadEmbeddingPort;
 	settingsRepo: SettingsRepository;
 	status: StatusReporter;
 };
 
-/**
- * Per-call tuning for {@link EmbeddingEngine.embed}. Distinct from `ports`' `EmbedOptions`
- * (the lower-level, `EmbeddingPort`-facing shape) — named differently so the two don't get
- * imported interchangeably.
- */
 export type EmbedRequestOptions = {
-	priority?: Priority;
-	maxChunkSize?: number;
+	lane: EmbedLane;
 };
 
 /**
  * Owns the lifecycle of the active embedding model (loading, switching, recovering from
- * failure) and serializes embed requests against it through a priority queue.
+ * failure) and hands embed requests to it. Requests are not queued here: the embedder orders
+ * them per chunk by lane, and unloading it settles whatever it was still working on.
  *
  * The model can be switched off (see {@link disable}): an override that outranks model requests
  * until {@link enable} lifts it. Whether that is remembered, and where, is the caller's business.
@@ -47,10 +31,6 @@ export class EmbeddingEngine {
 	private abortController: AbortController | null = null;
 	private pending: PendingModelRequest | null = null;
 	private disposed = false;
-
-	private readonly queue: Job[] = [];
-	private running: Promise<void> | null = null;
-	private inFlight: Promise<void> | null = null;
 
 	private loadGate: Promise<void> = Promise.resolve();
 
@@ -91,26 +71,14 @@ export class EmbeddingEngine {
 		};
 	}
 
-	/** Queues `text` for embedding by the ready model, resolving with `null` if it produced no chunks. */
-	embed(text: string, options: EmbedRequestOptions = {}): Promise<EmbeddingResult | null> {
-		if (this.disposed) return Promise.reject(new Error("The embedding engine has been disposed."));
-		if (this.state.status !== "ready") return Promise.reject(new ModelNotReadyError(this.state.status));
+	/** Embeds `text` with the ready model, resolving with `null` if it produced no chunks. */
+	async embed(text: string, options: EmbedRequestOptions): Promise<EmbeddingResult | null> {
+		if (this.disposed) throw new Error("The embedding engine has been disposed.");
+		if (this.state.status !== "ready") throw new ModelNotReadyError(this.state.status);
 
 		const {maxOverlapPercent} = this.deps.settingsRepo.get();
-
-		return new Promise<EmbeddingResult | null>((resolve, reject) => {
-			this.enqueue({
-				priority: options.priority ?? "medium",
-				run: async (embedder) => {
-					const result = await embedder.embed(text, {
-						maxOverlapPercent,
-						maxChunkSize: options.maxChunkSize,
-					});
-					resolve(result && result.chunks.length > 0 ? result : null);
-				},
-				cancel: reject,
-			});
-		});
+		const result = await this.state.embedder.embed(text, {maxOverlapPercent, lane: options.lane});
+		return result && result.chunks.length > 0 ? result : null;
 	}
 
 	requestModel(modelId: EmbeddingModelId): Promise<void> {
@@ -138,14 +106,12 @@ export class EmbeddingEngine {
 		this.abortController?.abort();
 		this.abortController = null;
 		this.pending = null;
-		this.cancelQueued("The embedding model has been disabled.");
 
 		const outgoing = this.state.status === "ready" ? this.state.embedder : null;
 		this.state = {status: "disabled"};
 		this.notify();
 		this.deps.status.update("Model disabled.", 4000);
 
-		await this.inFlight;
 		await outgoing?.unload();
 	}
 
@@ -163,7 +129,6 @@ export class EmbeddingEngine {
 		this.abortController?.abort();
 		this.abortController = null;
 		this.pending = null;
-		this.cancelQueued("The embedding engine has been disposed.");
 		if (this.state.status === "ready") void this.state.embedder.unload();
 		this.state = {status: "idle"};
 		this.listeners.clear();
@@ -180,52 +145,6 @@ export class EmbeddingEngine {
 		}
 	}
 
-	private enqueue(job: Job): void {
-		let insertAt = this.queue.length;
-		for (let i = 0; i < this.queue.length; i++) {
-			if (RANK[this.queue[i].priority] < RANK[job.priority]) {
-				insertAt = i;
-				break;
-			}
-		}
-		this.queue.splice(insertAt, 0, job);
-		this.ensureRunning();
-	}
-
-	private ensureRunning(): void {
-		if (this.running || this.disposed) return;
-		if (this.state.status !== "ready" || this.queue.length === 0) return;
-
-		this.running = this.drain().finally(() => {
-			this.running = null;
-			this.ensureRunning();
-		});
-	}
-
-	private async drain(): Promise<void> {
-		while (!this.disposed && this.state.status === "ready" && this.queue.length > 0) {
-			const job = this.queue.shift();
-			if (!job) return;
-
-			const embedder = this.state.embedder;
-			const run = job.run(embedder).then(() => undefined, (error) => {
-				job.cancel(error);
-			});
-			this.inFlight = run;
-
-			try {
-				await run;
-			} finally {
-				this.inFlight = null;
-			}
-		}
-	}
-
-	private cancelQueued(message: string): void {
-		const cancelled = this.queue.splice(0);
-		for (const job of cancelled) job.cancel(new Error(message));
-	}
-
 	private async runRequest(modelId: EmbeddingModelId): Promise<void> {
 		this.abortController?.abort();
 		const controller = new AbortController();
@@ -238,8 +157,6 @@ export class EmbeddingEngine {
 		this.state = {status: "loading", modelId, epoch, progress: null, phase: "downloading"};
 		this.notify();
 
-		this.cancelQueued("The embedding model is being switched.");
-		await this.inFlight;
 		await outgoing?.unload();
 
 		const previousGate = this.loadGate;
@@ -284,7 +201,6 @@ export class EmbeddingEngine {
 			await this.deps.settingsRepo.updatePartial({embeddingModelId: modelId});
 
 			this.deps.status.update(`${label} ${config.label}.`, 4000);
-			this.ensureRunning();
 		} finally {
 			if (!gateOwnedByRecovery) releaseGate();
 		}
@@ -340,7 +256,6 @@ export class EmbeddingEngine {
 				this.state = {status: "ready", modelId: previousModelId, embedder: restored, epoch};
 				this.notify();
 				this.deps.status.update(`Could not load ${config.label} — kept ${previousConfig.label}.`, 6000);
-				this.ensureRunning();
 				return;
 			} catch (restoreError) {
 				if (restoreError instanceof ModelRequestSupersededError) throw restoreError;
@@ -361,7 +276,6 @@ export class EmbeddingEngine {
 			epoch,
 		};
 		this.notify();
-		this.cancelQueued("The embedding model failed to load.");
 		this.deps.status.update(`Failed to load ${EMBEDDING_MODELS[modelId].label}.`, 4000);
 	}
 }

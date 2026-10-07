@@ -3,7 +3,7 @@ import { EmbeddingEngine, EngineStatus } from "../embedding/engine";
 import { Indexer } from "../indexing/indexer";
 import { shouldRefreshOnIndexingChange } from "./notices";
 
-export type Unsubscribe = () => void;
+import { Unsubscribe } from "../core/util/unsubscribe";
 
 export interface StatusHub {
 	getIndexingState(): IndexingQueueSnapshot | undefined;
@@ -57,7 +57,7 @@ export function makeStatusHub(deps: StatusHubDeps): StatusHub {
 		const previous = indexingState;
 		indexingState = next;
 		for (const fn of indexingListeners) fn(next);
-		if (shouldRefreshOnIndexingChange(previous, next, null)) {
+		if (shouldRefreshOnIndexingChange(previous, next)) {
 			scheduleThrottledRefresh();
 		}
 	});

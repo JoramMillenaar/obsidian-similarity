@@ -26,21 +26,21 @@ function makeFakeIndex(ids) {
 		entries: () => [...notes.values()].map(({id, updatedAt, contentHash}) => ({id, updatedAt, contentHash})),
 		query: () => [],
 		upsert: (note) => void notes.set(note.id, note),
-		remove: (id) => void notes.delete(id),
-		removeMany: (many) => many.forEach((id) => notes.delete(id)),
-		rename: (oldId, newId) => {
-			const existing = notes.get(oldId);
-			if (!existing) return;
-			notes.delete(oldId);
-			notes.set(newId, {...existing, id: newId});
+		remove: (id) => notes.delete(id),
+		removeMany: (many) => many.map((id) => notes.delete(id)).some(Boolean),
+		rename(oldId, newId) {
+			return this.renameMany([{oldId, newId}]);
 		},
 		renameMany: (renames) => {
+			let changed = false;
 			for (const {oldId, newId} of renames) {
 				const existing = notes.get(oldId);
-				if (!existing) continue;
+				if (!existing || oldId === newId) continue;
 				notes.delete(oldId);
 				notes.set(newId, {...existing, id: newId});
+				changed = true;
 			}
+			return changed;
 		},
 		clear: () => notes.clear(),
 		stats: () => ({notes: notes.size, chunks: 0, dim: 384}),
@@ -52,6 +52,7 @@ function makeFakeIndex(ids) {
 async function makeHarness(indexed = []) {
 	const index = makeFakeIndex(indexed);
 	const indexedCalls = [];
+	const changes = {count: 0};
 
 	const engine = {
 		status: () => ({kind: "ready", modelId: MODEL_ID}),
@@ -82,12 +83,13 @@ async function makeHarness(indexed = []) {
 		isIgnoredPath: () => false,
 		settingsRepo: {get: () => ({ignoredPaths: [], maxOverlapPercent: 0})},
 		status: {update: () => {}, clear: () => {}},
-		onChanged: () => {},
+		onChanged: () => changes.count++,
 		editDebounceMs: DEBOUNCE_MS,
 	});
 
 	await indexer.useModel(MODEL_ID);
-	return {indexer, index, indexedCalls, ids: () => index.ids().sort()};
+	changes.count = 0;
+	return {indexer, index, indexedCalls, changes, ids: () => index.ids().sort()};
 }
 
 test("rapid edits to one note collapse into a single indexing request", async () => {
@@ -194,4 +196,24 @@ test("deleting a note also drops it from the work queue", async () => {
 	await tick(DEBOUNCE_MS * 4);
 
 	assert.ok(!indexedCalls.includes("doomed.md") || indexedCalls.length <= 1);
+});
+
+test("per-file events trailing a folder operation do not signal a change again", async () => {
+	const files = Array.from({length: 50}, (_, i) => `Projects/note-${i}.md`);
+	const {indexer, changes, ids} = await makeHarness([...files, "Elsewhere/d.md"]);
+
+	// Obsidian fires the folder event and then one event per file inside it.
+	assert.strictEqual(indexer.renameFolder("Projects", "Archive"), true);
+	for (const file of files) {
+		assert.strictEqual(indexer.rename(file, file.replace("Projects/", "Archive/")), false);
+	}
+
+	assert.strictEqual(changes.count, 1, "a folder rename must signal one change, not one per file");
+	assert.strictEqual(ids().filter((id) => id.startsWith("Archive/")).length, 50);
+
+	assert.strictEqual(indexer.removeFolder("Archive"), true);
+	for (const file of files) assert.strictEqual(indexer.remove(file.replace("Projects/", "Archive/")), false);
+
+	assert.strictEqual(changes.count, 2, "a folder delete must signal one change, not one per file");
+	assert.deepStrictEqual(ids(), ["Elsewhere/d.md"]);
 });

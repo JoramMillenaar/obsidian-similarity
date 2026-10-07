@@ -3,9 +3,15 @@ import { Embedding, EmbeddingModelConfig, EmbeddingModelId, EmbeddingQuant } fro
 /** Compute backend a model ran inference on. */
 export type Device = 'wasm' | 'webgpu';
 
+/**
+ * Which inference lane a request runs in. Interactive work (a search query) runs before
+ * background work (indexing) at the next chunk boundary, so it never waits for a whole note.
+ */
+export type EmbedLane = 'interactive' | 'background';
+
 export interface EmbedOptions {
 	maxOverlapPercent: number;
-	maxChunkSize?: number;
+	lane: EmbedLane;
 }
 
 export type EmbeddedChunk = {
@@ -17,8 +23,6 @@ export type EmbeddedChunk = {
 export type EmbeddingMetadata = {
 	embeddingModelId: EmbeddingModelId;
 	quant: EmbeddingQuant;
-	maxOverlapPercent: number;
-	maxChunkSize?: number;
 };
 
 export type EmbeddingResult = {

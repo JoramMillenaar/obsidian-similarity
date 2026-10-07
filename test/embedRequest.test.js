@@ -1,7 +1,7 @@
 const test = require("node:test");
 const assert = require("node:assert");
 
-/** Manual clock, so the 15s ack deadline and 5min work deadline are testable in milliseconds. */
+/** Manual clock, so the 5min request deadline is testable in milliseconds. */
 function makeClock() {
 	let now = 0;
 	let seq = 0;
@@ -106,14 +106,11 @@ function loadMessenger() {
 	return require(path).WorkerMessenger;
 }
 
-test("a request the worker has taken on is never sent a second time", async () => {
+test("a request is sent once and gives up after its deadline", async () => {
 	const sent = [];
-	let acked = 0;
 
-	const {clock} = mountFakeWorker((message, deliver) => {
+	const {clock} = mountFakeWorker((message) => {
 		sent.push(message);
-		acked++;
-		deliver({type: "ack", requestId: message.requestId});
 		// ...and then never finishes, the way a very slow embedding on a phone behaves.
 	});
 
@@ -121,49 +118,24 @@ test("a request the worker has taken on is never sent a second time", async () =
 	const messenger = new WorkerMessenger("<script></script>", MODEL_CONFIG);
 	await messenger.initialize();
 
-	const embed = messenger.sendMessage("a long note", 15);
-	const settled = embed.then(() => "resolved", (error) => error);
+	const settled = messenger.sendMessage("a long note", 15, "background").then(() => "resolved", (error) => error);
 
-	// Past the ack deadline: acknowledged work must not be re-sent behind itself.
 	await clock.advance(60_000);
-	assert.strictEqual(acked, 1);
-	assert.strictEqual(sent.filter((m) => m.type === 'embed').length, 1);
+	assert.strictEqual(sent.filter((m) => m.type === "embed").length, 1, "slow work is never re-sent behind itself");
 
-	// It still gives up eventually rather than hanging on to the request forever.
 	await clock.advance(5 * 60_000);
 	const outcome = await settled;
 	assert.ok(outcome instanceof Error, `expected a rejection, got ${outcome}`);
 	assert.match(outcome.message, /did not finish in time/);
-	assert.strictEqual(sent.filter((m) => m.type === 'embed').length, 1);
+	assert.strictEqual(sent.filter((m) => m.type === "embed").length, 1);
 });
 
-test("a request the worker never acknowledges is retried", async () => {
+test("a request resolves with its result and carries its lane to the worker", async () => {
+	const result = {chunks: [{embedding: [1, 2, 3], start: 0, end: 4}], metadata: {embeddingModelId: MODEL_CONFIG.id}};
 	const sent = [];
 
-	const {clock} = mountFakeWorker((message) => {
-		sent.push(message);
-		// Never acked: nothing received it.
-	});
-
-	const WorkerMessenger = loadMessenger();
-	const messenger = new WorkerMessenger("<script></script>", MODEL_CONFIG);
-	await messenger.initialize();
-
-	const settled = messenger.sendMessage("a note", 15).then(() => "resolved", (error) => error);
-
-	await clock.advance(3 * 15_000 + 1000);
-
-	const outcome = await settled;
-	assert.ok(outcome instanceof Error, `expected a rejection, got ${outcome}`);
-	assert.match(outcome.message, /All 3 attempts/);
-	assert.strictEqual(sent.filter((m) => m.type === 'embed').length, 3);
-});
-
-test("an acknowledged request still resolves with its result", async () => {
-	const result = {chunks: [{embedding: [1, 2, 3], start: 0, end: 4}], metadata: {embeddingModelId: MODEL_CONFIG.id, maxOverlapPercent: 15}};
-
 	mountFakeWorker((message, deliver) => {
-		deliver({type: "ack", requestId: message.requestId});
+		sent.push(message);
 		deliver({type: "embed-result", requestId: message.requestId, data: result});
 	});
 
@@ -171,6 +143,28 @@ test("an acknowledged request still resolves with its result", async () => {
 	const messenger = new WorkerMessenger("<script></script>", MODEL_CONFIG);
 	await messenger.initialize();
 
-	const outcome = await messenger.sendMessage("a note", 15);
-	assert.deepStrictEqual(outcome, result);
+	assert.deepStrictEqual(await messenger.sendMessage("a note", 15, "interactive"), result);
+	assert.strictEqual(sent[0].lane, "interactive");
+});
+
+test("requests in progress at the same time each get their own result", async () => {
+	const held = [];
+
+	mountFakeWorker((message, deliver) => {
+		held.push(() => deliver({type: "embed-result", requestId: message.requestId, data: {chunks: [], metadata: {text: message.payload}}}));
+	});
+
+	const WorkerMessenger = loadMessenger();
+	const messenger = new WorkerMessenger("<script></script>", MODEL_CONFIG);
+	await messenger.initialize();
+
+	const background = messenger.sendMessage("a long note", 15, "background");
+	const query = messenger.sendMessage("a query", 15, "interactive");
+
+	// The query overtakes the note inside the worker, so its answer arrives first.
+	held[1]();
+	held[0]();
+
+	assert.strictEqual((await query).metadata.text, "a query");
+	assert.strictEqual((await background).metadata.text, "a long note");
 });

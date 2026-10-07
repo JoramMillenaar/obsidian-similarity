@@ -113,7 +113,7 @@ function validateEntry(
 ): NoteIndexMetadata | null {
 	if (!isRecord(candidate)) return null;
 
-	const {id, contentHash, updatedAt, chunks, quant} = candidate;
+	const {id, contentHash, updatedAt, chunks, quant, truncated} = candidate;
 	if (!isNonEmptyString(id) || seenIds.has(id)) return null;
 	if (!isNonEmptyString(contentHash) || !isNonEmptyString(updatedAt)) return null;
 	// A v1 entry carries its vector inline and has no chunks at all; a v2 entry
@@ -133,6 +133,7 @@ function validateEntry(
 
 	const entry: NoteIndexMetadata = {id, contentHash, updatedAt, chunks: validated};
 	if (isQuant(quant)) entry.quant = {vocab: quant.vocab, ffn: quant.ffn};
+	if (typeof truncated === "boolean") entry.truncated = truncated;
 	return entry;
 }
 

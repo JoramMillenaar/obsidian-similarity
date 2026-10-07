@@ -13,9 +13,10 @@ export type SimilarNotesSnapshot = {
 	items: RelatedNote[];
 	refining: boolean;
 	notice?: SimilarNotesNotice;
+	truncated?: boolean;
 };
 
-export type Unsubscribe = () => void;
+import { Unsubscribe } from "../core/util/unsubscribe";
 
 export interface SimilarNotesFeed {
 	getSnapshot(): SimilarNotesSnapshot;
@@ -34,7 +35,10 @@ type SimilarNotesFeedDeps = {
 	isIgnoredPath: IsIgnoredPath;
 	synchronizeIndex: () => Promise<void>;
 	retryModelLoad: () => Promise<void>;
+	refreshDebounceMs?: number;
 };
+
+const DEFAULT_REFRESH_DEBOUNCE_MS = 100;
 
 const IDLE: SimilarNotesSnapshot = {epoch: 0, noteId: null, items: [], refining: false, notice: {kind: "no-active-note"}};
 
@@ -47,6 +51,8 @@ export function makeSimilarNotesFeed(deps: SimilarNotesFeedDeps): SimilarNotesFe
 	let indexingState: IndexingQueueSnapshot | undefined = backend.getIndexingState();
 	let engineKind = backend.getEngineState().kind;
 	let lastIndexEmpty = false;
+	let refreshTimer: number | null = null;
+	const refreshDebounceMs = deps.refreshDebounceMs ?? DEFAULT_REFRESH_DEBOUNCE_MS;
 	const listeners = new Set<(snapshot: SimilarNotesSnapshot) => void>();
 
 	function emit(next: SimilarNotesSnapshot) {
@@ -77,6 +83,7 @@ export function makeSimilarNotesFeed(deps: SimilarNotesFeedDeps): SimilarNotesFe
 			items: result.items,
 			refining: result.notice?.kind === "warming-up",
 			notice: result.notice,
+			truncated: result.truncated,
 		});
 	}
 
@@ -85,11 +92,8 @@ export function makeSimilarNotesFeed(deps: SimilarNotesFeedDeps): SimilarNotesFe
 	const unsubscribeIndexingState = backend.subscribeIndexingState((next) => {
 		const previous = indexingState;
 		indexingState = next;
-		const movedOffActiveNote = noteId !== null && previous?.currentNoteId === noteId && next.currentNoteId !== noteId;
-		if (movedOffActiveNote) {
-			void load(epoch);
-		} else if (
-			!shouldRefreshOnIndexingChange(previous, next, noteId)
+		if (
+			!shouldRefreshOnIndexingChange(previous, next)
 			&& snapshot.noteId !== null && !snapshot.refining && BACKEND_NOTICE_KINDS.has(snapshot.notice?.kind)
 		) {
 			emit({...snapshot, notice: backendNoticeFor(lastIndexEmpty, next)});
@@ -138,11 +142,17 @@ export function makeSimilarNotesFeed(deps: SimilarNotesFeedDeps): SimilarNotesFe
 			await deps.retryModelLoad();
 		},
 		refresh() {
-			if (noteId === null) return;
-			epoch += 1;
-			void load(epoch);
+			if (refreshTimer !== null) window.clearTimeout(refreshTimer);
+			refreshTimer = window.setTimeout(() => {
+				refreshTimer = null;
+				if (noteId === null) return;
+				epoch += 1;
+				void load(epoch);
+			}, refreshDebounceMs);
 		},
 		dispose() {
+			if (refreshTimer !== null) window.clearTimeout(refreshTimer);
+			refreshTimer = null;
 			unsubscribeIndexingState();
 			unsubscribeRefreshSignal();
 			unsubscribeModelState();

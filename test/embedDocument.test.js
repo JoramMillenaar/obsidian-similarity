@@ -21,17 +21,14 @@ function makeModel(maxTokens) {
 
 const SENTENCES = "One two three. Four five six. Seven eight nine. Ten eleven twelve.";
 
-test("maxChunkSize narrows the chunk budget below the model's own limit", async () => {
-	// The model's own budget (maxTokens=100, minus the 2-token special-token reserve)
-	// comfortably fits the whole text in a single chunk.
-	const generate = makeGenerateDocumentEmbeddings(makeModel(100));
+test("the model's own token budget decides how the text is chunked", async () => {
+	// maxTokens=100 (minus the 2-token special-token reserve) fits the whole text in one chunk.
+	const roomy = await makeGenerateDocumentEmbeddings(makeModel(100))(SENTENCES);
+	assert.strictEqual(roomy.chunks.length, 1);
 
-	const withoutLimit = await generate(SENTENCES);
-	assert.strictEqual(withoutLimit.chunks.length, 1, "the full model budget fits everything in one chunk");
-
-	const withLimit = await generate(SENTENCES, 0, 4);
-	assert.ok(withLimit.chunks.length > 1, "a smaller maxChunkSize must actually split the text into more chunks");
-	assert.strictEqual(withLimit.metadata.maxChunkSize, 4);
+	// maxTokens=10 leaves a budget of 8, so the same text must be split.
+	const tight = await makeGenerateDocumentEmbeddings(makeModel(10))(SENTENCES);
+	assert.ok(tight.chunks.length > 1);
 });
 
 test("the model's vocab/FFN quantization is reported with every result", async () => {
@@ -39,21 +36,4 @@ test("the model's vocab/FFN quantization is reported with every result", async (
 
 	assert.deepStrictEqual((await generate(SENTENCES)).metadata.quant, {vocab: "q4", ffn: "fp16"});
 	assert.deepStrictEqual((await generate("   ")).metadata.quant, {vocab: "q4", ffn: "fp16"});
-});
-
-test("maxChunkSize larger than the model's own budget still throws", async () => {
-	const generate = makeGenerateDocumentEmbeddings(makeModel(10)); // budget = 10 - 2 = 8
-
-	await assert.rejects(
-		() => generate(SENTENCES, 0, 9),
-		/maxChunkSize \(9\) exceeds the model's max chunk size \(8\)/,
-	);
-});
-
-test("maxChunkSize equal to the model's own budget is accepted and used as-is", async () => {
-	const generate = makeGenerateDocumentEmbeddings(makeModel(10)); // budget = 8
-
-	const result = await generate(SENTENCES, 0, 8);
-	assert.ok(result.chunks.length >= 1);
-	assert.strictEqual(result.metadata.maxChunkSize, 8);
 });

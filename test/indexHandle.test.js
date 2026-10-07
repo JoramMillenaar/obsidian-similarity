@@ -102,9 +102,10 @@ test("mutations that change nothing do not write", async () => {
 	const index = await openWith(files, ["a.md"]);
 	const before = files.writeCount();
 
-	index.removeMany(["missing.md"]);
-	index.renameMany([{oldId: "missing.md", newId: "other.md"}]);
-	index.rename("a.md", "a.md");
+	assert.strictEqual(index.removeMany(["missing.md"]), false);
+	assert.strictEqual(index.remove("missing.md"), false);
+	assert.strictEqual(index.renameMany([{oldId: "missing.md", newId: "other.md"}]), false);
+	assert.strictEqual(index.rename("a.md", "a.md"), false);
 	await index.flush();
 
 	assert.strictEqual(files.writeCount() - before, 0);
@@ -115,8 +116,8 @@ test("renaming keeps the note and its vectors under the new id", async () => {
 	const files = makeFiles();
 	const index = await openWith(files, ["a.md", "b.md"]);
 
-	index.rename("a.md", "renamed-a.md");
-	index.renameMany([{oldId: "b.md", newId: "renamed-b.md"}]);
+	assert.strictEqual(index.rename("a.md", "renamed-a.md"), true);
+	assert.strictEqual(index.renameMany([{oldId: "b.md", newId: "renamed-b.md"}]), true);
 	await index.flush();
 
 	assert.deepStrictEqual(index.ids().sort(), ["renamed-a.md", "renamed-b.md"]);
@@ -169,6 +170,21 @@ test("a note's quantization round-trips, and notes without one stay without one"
 	assert.deepStrictEqual(second.get("new.md").quant, {vocab: "q4", ffn: "fp32"});
 	assert.strictEqual(second.get("legacy.md").quant, undefined);
 	assert.ok(!("quant" in second.get("legacy.md")), "legacy notes must not gain a quant key");
+});
+
+test("truncation round-trips, and notes indexed before it was recorded stay unknown", async () => {
+	const files = makeFiles();
+	const first = await openIndex(files, MODEL_ID, {throttleMs: THROTTLE_MS});
+	first.upsert({...note("cut.md"), truncated: true});
+	first.upsert({...note("whole.md"), truncated: false});
+	first.upsert(note("legacy.md"));
+	await first.close();
+
+	const second = await openIndex(files, MODEL_ID, {throttleMs: THROTTLE_MS});
+
+	assert.strictEqual(second.get("cut.md").truncated, true);
+	assert.strictEqual(second.get("whole.md").truncated, false);
+	assert.ok(!("truncated" in second.get("legacy.md")), "legacy notes must not gain a truncated key");
 });
 
 test("a corrupt sidecar is discarded rather than served", async () => {

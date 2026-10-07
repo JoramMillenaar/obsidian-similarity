@@ -2,20 +2,19 @@ import { ItemView, Menu, Notice, setIcon, TFile, WorkspaceLeaf } from "obsidian"
 import { SimilarNotesFeed, SimilarNotesSnapshot } from "../search/similarNotesFeed";
 import { StatusHub } from "../status/statusHub";
 import { BannerState, subscribeBanner } from "./banner";
-import { renderBannerMessage } from "./warning";
-import { WASM_WARNING_MESSAGE } from "../status/notices";
+import { renderBanner } from "./warning";
 import { textForNotice } from "./similarNoticeText";
 import { SEARCH_MODES, VIEW_TYPE_SIMILARITY } from "../constants";
-import { GetNoteTextUseCase } from "../app/getNoteText";
 import { SettingsRepository } from "../ports";
 import { SearchMode } from "../types";
 import { FEEDBACK_ACTIONS, OpenFeedback } from "./FeedbackModal";
 import { renderSimilarityBar } from "./similarityBar";
+import { noteAgeText } from "./noteAge";
 
 export { VIEW_TYPE_SIMILARITY };
 
-export function logError(message: unknown, ...optionalParams: unknown[]) {
-	console.error("[Similarity]:", message, ...optionalParams);
+function logError(message: unknown, ...optionalParams: unknown[]) {
+	console.error("[Similarity]", message, ...optionalParams);
 }
 
 
@@ -37,7 +36,6 @@ type MessageState = {
 export type SimilarNotesListViewDeps = {
 	similarNotesFeed: SimilarNotesFeed;
 	statusHub: StatusHub;
-	getNoteText: GetNoteTextUseCase;
 	settingsRepo: SettingsRepository;
 	setSearchMode: (mode: SearchMode) => Promise<void>;
 	openSearchModal: () => void;
@@ -64,7 +62,6 @@ export class SimilarNotesListView extends ItemView {
 	private messageEl?: HTMLElement;
 	private renderedItems: string | null = null;
 	private renderedMessage: string | null = null;
-	private truncationCheckId = 0;
 	private unsubscribeSnapshot?: () => void;
 	private unsubscribeBanner?: () => void;
 	private searchModeButtonEl?: HTMLElement;
@@ -196,26 +193,6 @@ export class SimilarNotesListView extends ItemView {
 		this.activePath = active?.path ?? null;
 		this.deps.similarNotesFeed.setActiveNote(this.activePath);
 		this.renderBody();
-		this.checkTruncation(this.activePath);
-	}
-
-	private checkTruncation(noteId: string | null) {
-		const checkId = ++this.truncationCheckId;
-		if (!noteId) {
-			this.renderTruncationNotice(false);
-			return;
-		}
-
-		this.deps.getNoteText(noteId).then(
-			({truncated}) => {
-				if (checkId !== this.truncationCheckId) return;
-				this.renderTruncationNotice(truncated);
-			},
-			() => {
-				if (checkId !== this.truncationCheckId) return;
-				this.renderTruncationNotice(false);
-			},
-		);
 	}
 
 	private renderTruncationNotice(visible: boolean) {
@@ -241,7 +218,10 @@ export class SimilarNotesListView extends ItemView {
 	}
 
 	private renderBody() {
-		if (!this.snapshot || this.snapshot.noteId !== this.activePath) {
+		const current = this.snapshot?.noteId === this.activePath;
+		this.renderTruncationNotice(current && this.snapshot?.truncated === true);
+
+		if (!this.snapshot || !current) {
 			this.renderRelatedList([]);
 			this.renderMessage({text: LOADING_TEXT, cls: "tree-item-self"});
 			return;
@@ -310,37 +290,7 @@ export class SimilarNotesListView extends ItemView {
 		const bannerEl = this.bannerEl;
 		if (!bannerEl) return;
 
-		bannerEl.empty();
-		bannerEl.toggleClass("is-hidden", !banner.visible);
-		if (!banner.visible) return;
-
-		renderBannerMessage(bannerEl, banner);
-
-		if (banner.wasmWarning) {
-			bannerEl.createDiv({
-				cls: "similarity-index-banner-gpu-warning",
-				text: WASM_WARNING_MESSAGE,
-			});
-		}
-
-		if (banner.action === "open-settings") {
-			const link = bannerEl.createEl("a", {
-				cls: "similarity-index-banner-link",
-				text: "Re-enable in settings",
-			});
-			link.addEventListener("click", (event) => {
-				event.preventDefault();
-				this.deps.openSettings();
-			});
-		}
-
-		if (banner.total > 0) {
-			const progressRow = bannerEl.createDiv({cls: "similarity-index-banner-progress"});
-			progressRow.createEl("progress", {
-				cls: "similarity-index-banner-bar",
-				attr: {max: String(banner.total), value: String(Math.min(banner.processed, banner.total))},
-			});
-		}
+		renderBanner(bannerEl, banner, () => this.deps.openSettings());
 	}
 
 	private renderRetryAction(container: HTMLElement, retry: RetryAction) {
@@ -359,6 +309,11 @@ export class SimilarNotesListView extends ItemView {
 				})
 				.finally(() => retryButton.removeAttribute("disabled"));
 		});
+	}
+
+	refresh() {
+		this.renderedItems = null;
+		this.renderBody();
 	}
 
 	private renderRelatedList(related: SimilarNotesSnapshot["items"]) {
@@ -393,8 +348,11 @@ export class SimilarNotesListView extends ItemView {
 
 			textWrapper.createSpan({cls: "related-title", text: title});
 
-			if (parentPath) {
-				textWrapper.createEl("small", {cls: "related-parent", text: parentPath});
+			const age = this.deps.settingsRepo.get().showDates ? noteAgeText(this.app, path) : null;
+			if (parentPath || age) {
+				const meta = textWrapper.createEl("small", {cls: "related-parent"});
+				if (parentPath) meta.appendText(parentPath);
+				if (age) meta.createSpan({cls: "related-age", text: parentPath ? ` · ${age}` : age});
 			}
 
 			const flairOuter = itemSelf.createDiv({cls: "tree-item-flair-outer"});

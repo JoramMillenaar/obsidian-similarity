@@ -30,8 +30,9 @@ export function makeIndexNote(deps: IndexNoteDeps): IndexNoteUseCase {
 		}
 
 		let text: string;
+		let truncated: boolean;
 		try {
-			({text} = await deps.getNoteText(noteId));
+			({text, truncated} = await deps.getNoteText(noteId));
 		} catch {
 			deps.index.remove(noteId);
 			return "removed";
@@ -41,6 +42,7 @@ export function makeIndexNote(deps: IndexNoteDeps): IndexNoteUseCase {
 
 		const existing = deps.index.get(noteId);
 		if (existing && existing.contentHash === contentHash) {
+			if (existing.truncated !== truncated) deps.index.upsert({...existing, truncated});
 			return "unchanged";
 		}
 
@@ -63,6 +65,7 @@ export function makeIndexNote(deps: IndexNoteDeps): IndexNoteUseCase {
 			contentHash,
 			updatedAt: new Date().toISOString(),
 			quant: embedded.metadata.quant,
+			truncated,
 		});
 		return "indexed";
 	}

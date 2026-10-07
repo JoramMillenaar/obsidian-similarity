@@ -19,11 +19,6 @@ export class ObsidianPluginDataStore implements PluginDataStore {
 		return this.cache;
 	}
 
-	async read(): Promise<SimilarityPluginData> {
-		if (this.cache) return this.cache;
-		return this.load();
-	}
-
 	async readRaw(): Promise<Record<string, unknown>> {
 		return (await this.plugin.loadData() as Record<string, unknown> | null) ?? {};
 	}
@@ -31,14 +26,5 @@ export class ObsidianPluginDataStore implements PluginDataStore {
 	async write(data: SimilarityPluginData): Promise<void> {
 		this.cache = data;
 		await this.plugin.saveData(data);
-	}
-
-	async update(
-		updater: (current: SimilarityPluginData) => SimilarityPluginData,
-	): Promise<SimilarityPluginData> {
-		const current = await this.read();
-		const next = updater(current);
-		await this.write(next);
-		return next;
 	}
 }

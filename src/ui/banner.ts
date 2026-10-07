@@ -1,5 +1,6 @@
 import { BannerState, computeBanner } from "../status/notices";
-import { StatusHub, Unsubscribe } from "../status/statusHub";
+import { StatusHub } from "../status/statusHub";
+import { Unsubscribe } from "../core/util/unsubscribe";
 
 export type { BannerState };
 export { computeBanner };

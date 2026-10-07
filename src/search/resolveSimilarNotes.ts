@@ -9,6 +9,7 @@ export type ResolveSimilarNotesResult = {
 	items: RelatedNote[];
 	notice?: SimilarNotesNotice;
 	indexEmpty?: boolean;
+	truncated?: boolean;
 };
 
 export type ResolveSimilarNotesDeps = {
@@ -34,11 +35,11 @@ export async function resolveSimilarNotesForNote(
 
 	// Ranking stored vectors needs no model, so results are fetched before the
 	// engine state is consulted: a downloading or failed model still shows results.
-	const items = await deps.getSimilarNotesForNote({noteId}).catch(() => []);
+	const {items, truncated} = await deps.getSimilarNotesForNote({noteId}).catch(() => ({items: [], truncated: false}));
 
 	const engineNotice = engineNoticeFor(deps.statusHub.getEngineState());
-	if (engineNotice) return {items, notice: engineNotice};
+	if (engineNotice) return {items, notice: engineNotice, truncated};
 
 	const indexEmpty = await deps.isIndexEmpty().catch(() => false);
-	return {items, notice: backendNoticeFor(indexEmpty, deps.statusHub.getIndexingState()), indexEmpty};
+	return {items, notice: backendNoticeFor(indexEmpty, deps.statusHub.getIndexingState()), indexEmpty, truncated};
 }

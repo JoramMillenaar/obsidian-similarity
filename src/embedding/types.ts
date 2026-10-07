@@ -1,8 +1,8 @@
 import { EmbeddingModelId } from "../types";
 import { Device, EmbeddingPort, ModelLoadProgress } from "../ports";
-import { Priority } from "../core/util/priorityQueue";
+import { Unsubscribe } from "../core/util/unsubscribe";
 
-export type { Priority };
+export type { Unsubscribe };
 
 /** Which stage of a model download `EngineStatus`'s "loading" state is in. */
 export type LoadPhase = "downloading" | "finalizing";
@@ -15,8 +15,6 @@ export type EngineStatus =
 	| { kind: "ready"; modelId: EmbeddingModelId; device?: Device }
 	| { kind: "error"; modelId: EmbeddingModelId; message: string; offline: boolean };
 
-/** Cancels a subscription created via `EngineStateReader.subscribe`. */
-export type Unsubscribe = () => void;
 
 /** Read-only view of the engine's status, for consumers that only observe state. */
 export type EngineStateReader = {
@@ -31,13 +29,6 @@ export type EngineState =
 	| { status: "loading"; modelId: EmbeddingModelId; epoch: number; progress: ModelLoadProgress | null; phase: LoadPhase }
 	| { status: "error"; modelId: EmbeddingModelId; message: string; offline: boolean; epoch: number }
 	| { status: "ready"; modelId: EmbeddingModelId; embedder: EmbeddingPort; epoch: number };
-
-/** A single queued embed request awaiting the ready embedder. */
-export type Job = {
-	priority: Priority;
-	run: (embedder: EmbeddingPort) => Promise<unknown>;
-	cancel: (error: unknown) => void;
-};
 
 /** Tracks an in-flight `requestModel` call so duplicate requests for the same model can share it. */
 export type PendingModelRequest = { modelId: EmbeddingModelId; promise: Promise<void> };

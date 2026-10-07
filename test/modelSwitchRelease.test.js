@@ -59,37 +59,30 @@ test("the outgoing model is released before the incoming one starts loading", as
 	]);
 });
 
-test("an in-flight embed finishes before the outgoing model is released", async () => {
+test("embeds go to the model that is ready when they are made, and a switch unloads it", async () => {
 	const events = [];
-	let finishEmbed;
 
 	const engine = makeEngine(async (modelId) => ({
-		embed: () => new Promise((resolve) => {
-			finishEmbed = () => {
-				events.push(`embed-done:${modelId}`);
-				resolve({chunks: [], metadata: {embeddingModelId: modelId, maxOverlapPercent: 0}});
-			};
-		}),
+		embed: async (text, options) => {
+			events.push(`embed:${modelId}:${options.lane}`);
+			return {chunks: [{embedding: new Int8Array(1), start: 0, end: 1}], metadata: {embeddingModelId: modelId}};
+		},
 		async unload() {
 			events.push(`unload:${modelId}`);
 		},
 	}));
 
 	await engine.requestModel(MODEL_ID);
+	await engine.embed("some text", {lane: "interactive"});
+	await engine.requestModel(OTHER_MODEL_ID);
+	await engine.embed("more text", {lane: "background"});
 
-	const embedding = engine.embed("some text");
-	await new Promise((resolve) => setTimeout(resolve, 0));
-
-	const switched = engine.requestModel(OTHER_MODEL_ID);
-	await new Promise((resolve) => setTimeout(resolve, 0));
-
-	assert.deepStrictEqual(events, [], "sessions are not torn down under a running inference");
-
-	finishEmbed();
-	await embedding;
-	await switched;
-
-	assert.deepStrictEqual(events, [`embed-done:${MODEL_ID}`, `unload:${MODEL_ID}`]);
+	// Waiting out the running inference before teardown is the embedder's job (see InferenceQueue).
+	assert.deepStrictEqual(events, [
+		`embed:${MODEL_ID}:interactive`,
+		`unload:${MODEL_ID}`,
+		`embed:${OTHER_MODEL_ID}:background`,
+	]);
 });
 
 test("a synchronous unload still gates the load, and the switch completes", async () => {

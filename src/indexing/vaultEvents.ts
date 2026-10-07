@@ -31,26 +31,23 @@ export function registerVaultEvents(plugin: Plugin, deps: VaultEventDeps): void 
 	plugin.registerEvent(
 		plugin.app.vault.on("delete", (file) => {
 			if (file instanceof TFile) {
-				deps.indexer.remove(file.path);
-				deps.status.update("Note removed from index", 1500);
+				if (deps.indexer.remove(file.path)) deps.status.update("Note removed from index", 1500);
 			} else if (file instanceof TFolder) {
-				deps.indexer.removeFolder(file.path);
-				deps.status.update("Folder removed from index", 1500);
+				if (deps.indexer.removeFolder(file.path)) deps.status.update("Folder removed from index", 1500);
 			}
 		}),
 	);
 
 	plugin.registerEvent(
 		plugin.app.vault.on("rename", (file, oldPath) => {
+			let changed = false;
 			if (file instanceof TFile) {
-				deps.indexer.rename(oldPath, file.path);
+				changed = deps.indexer.rename(oldPath, file.path);
 			} else if (file instanceof TFolder) {
-				deps.indexer.renameFolder(oldPath, file.path);
-			} else {
-				return;
+				changed = deps.indexer.renameFolder(oldPath, file.path);
 			}
 
-			deps.status.update("Index updated (rename)", 1500);
+			if (changed) deps.status.update("Index updated (rename)", 1500);
 		}),
 	);
 

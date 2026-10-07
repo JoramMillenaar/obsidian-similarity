@@ -14,7 +14,9 @@ export default class SimilarNotes extends Plugin {
 		this.appContainer = new AppContainer(this);
 		this.appContainer.status.update("Loading…");
 
-		await this.appContainer.pluginDataStore.load();
+		const isFirstRun = Object.keys(await this.appContainer.pluginDataStore.readRaw()).length === 0;
+		const pluginData = await this.appContainer.pluginDataStore.load();
+		if (isFirstRun) await this.appContainer.pluginDataStore.write(pluginData);
 
 		const openFeedback = (request: FeedbackRequest) => {
 			new FeedbackModal(this.app, request, {
@@ -36,6 +38,7 @@ export default class SimilarNotes extends Plugin {
 				similarSearchFeed: this.appContainer.similarSearchFeed,
 				statusHub: this.appContainer.statusHub,
 				insertWikilinkAtCursor: this.appContainer.insertWikilinkAtCursor,
+				settingsRepo: this.appContainer.settingsRepo,
 			}).open();
 		};
 
@@ -50,7 +53,6 @@ export default class SimilarNotes extends Plugin {
 				new SimilarNotesListView(leaf, {
 					similarNotesFeed: this.appContainer.similarNotesFeed,
 					statusHub: this.appContainer.statusHub,
-					getNoteText: this.appContainer.getNoteText,
 					settingsRepo: this.appContainer.settingsRepo,
 					setSearchMode: this.appContainer.setSearchMode,
 					openSearchModal,
@@ -86,6 +88,10 @@ export default class SimilarNotes extends Plugin {
 			});
 			void initializePlugin(this.appContainer);
 			this.appContainer.similarNotesFeed.refresh();
+
+			if (isFirstRun) {
+				void this.appContainer.vault.activateSimilarityView({reveal: true});
+			}
 		});
 
 		// if (__DEV__) {

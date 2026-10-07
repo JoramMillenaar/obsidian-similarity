@@ -14,28 +14,21 @@ const SPECIAL_TOKEN_RESERVE = 2;
 export function makeGenerateDocumentEmbeddings(model: EmbeddingModel): GenerateDocumentEmbeddings {
 	const chunkTokenBudget = model.config.maxTokens - SPECIAL_TOKEN_RESERVE;
 
-	return async function generateDocumentEmbeddings(text, maxOverlapPercent, maxChunkSize) {
+	return async function generateDocumentEmbeddings(text, maxOverlapPercent, lane) {
 		await model.ready;
 
 		const metadata = {
 			embeddingModelId: model.config.id,
 			quant: model.getQuant(),
-			maxOverlapPercent: maxOverlapPercent ?? 0,
-			maxChunkSize,
 		};
 
 		if (!text.trim()) return { chunks: [], metadata };
 
-		if (maxChunkSize !== undefined && maxChunkSize > chunkTokenBudget) {
-			throw new Error(`maxChunkSize (${maxChunkSize}) exceeds the model's max chunk size (${chunkTokenBudget})`);
-		}
-
-		const effectiveChunkBudget = maxChunkSize ?? chunkTokenBudget;
-		const chunks = chunkText(text, model.countTokens, effectiveChunkBudget, maxOverlapPercent);
+		const chunks = chunkText(text, model.countTokens, chunkTokenBudget, maxOverlapPercent);
 
 		const embedded: EmbeddedChunk[] = [];
 		for (const chunk of chunks) {
-			const data = await model.embed(chunk.text);
+			const data = await model.embed(chunk.text, lane);
 			if (data.length) {
 				embedded.push({ embedding: quantizeEmbedding(normalizeEmbedding(data)), start: chunk.start, end: chunk.end });
 			}

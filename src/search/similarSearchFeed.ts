@@ -3,7 +3,8 @@ import { GetSimilarNotesForNoteUseCase } from "./getSimilarNotesForNote";
 import { GetSimilarNotesForTextUseCase } from "./getSimilarNotesForText";
 import { IsIgnoredPath } from "../app/isIgnoredPath";
 import { backendNoticeFor, engineNoticeFor, SimilarNotesNotice } from "../status/notices";
-import { StatusHub, Unsubscribe } from "../status/statusHub";
+import { StatusHub } from "../status/statusHub";
+import { Unsubscribe } from "../core/util/unsubscribe";
 import { resolveSimilarNotesForNote } from "./resolveSimilarNotes";
 
 export type SimilarSearchResult = {

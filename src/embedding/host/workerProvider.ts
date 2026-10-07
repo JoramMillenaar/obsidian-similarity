@@ -1,4 +1,4 @@
-import { EmbeddingPort, EmbedOptions, EmbeddingResult, LoadEmbeddingPort, ModelLoadProgress } from "../../ports";
+import { EmbeddingPort, EmbedLane, EmbedOptions, EmbeddingResult, LoadEmbeddingPort, ModelLoadProgress } from "../../ports";
 import { EmbeddingModelConfig } from "../../types";
 import { WorkerRequest, WorkerResponse } from "./worker/protocol";
 import { Device, PendingDisposeRequest, PendingWorkerRequest } from "./types";
@@ -25,7 +25,6 @@ import { ModelLoadFailedError } from "./errors";
  * re-testing WebGPU — without it, model loading fails with
  * `Unsupported device: "webgpu". Should be one of: cpu.`
  */
-const EMBED_ACK_TIMEOUT_MS = 15000;
 const EMBED_TIMEOUT_MS = 300000;
 const DISPOSE_TIMEOUT_MS = 10000;
 const READY_TIMEOUT_MS = 300000;
@@ -35,8 +34,9 @@ function abortError(): Error {
 }
 
 /**
- * Owns one Worker's lifecycle: spins it up, waits for it to report ready, sends embed/dispose
- * requests with ack + completion timeouts, and retries embed requests that never got acked.
+ * Owns one Worker's lifecycle: spins it up, waits for it to report ready, and sends embed/dispose
+ * requests, each with a deadline. Embed requests are not queued here: they go straight to the
+ * worker, whose inference queue orders them (see `inferenceQueue.ts`).
  */
 export class WorkerMessenger {
 	private worker: Worker | null = null;
@@ -140,11 +140,6 @@ export class WorkerMessenger {
 			return;
 		}
 
-		if (message.type === 'ack') {
-			this.acknowledge(message.requestId);
-			return;
-		}
-
 		if (message.type === 'embed-result') {
 			const pending = this.pendingRequests.get(message.requestId);
 			if (!pending) return;
@@ -190,65 +185,25 @@ export class WorkerMessenger {
 		this.pendingDisposals.clear();
 	};
 
-	private acknowledge(requestId: number): void {
-		const pending = this.pendingRequests.get(requestId);
-		if (!pending || pending.acked || !pending.extendOnAck) return;
+	/** Sends `payload` to the worker to embed in `lane`, rejecting if it does not finish in time. */
+	sendMessage(payload: string, maxOverlapPercent: number, lane: EmbedLane): Promise<EmbeddingResult> {
+		const worker = this.worker;
+		if (!worker) return Promise.reject(new Error("Could not find the embedding worker. Is it loaded?"));
+		if (this.loadError) return Promise.reject(this.loadError);
+		if (this.crashError) return Promise.reject(this.crashError);
 
-		pending.acked = true;
-		window.clearTimeout(pending.timeoutId);
-		pending.timeoutId = window.setTimeout(() => {
-			if (!this.pendingRequests.delete(requestId)) return;
-			pending.reject(new Error(`Embedding request '${requestId}' did not finish in time`));
-		}, EMBED_TIMEOUT_MS);
-	}
-
-	private trackRequest(
-		requestId: number,
-		timeoutMs: number,
-		timeoutMessage: string,
-		extendOnAck: boolean,
-	): { promise: Promise<EmbeddingResult>; pending: PendingWorkerRequest } {
-		let pending!: PendingWorkerRequest;
-
+		const requestId = this.requestIdCounter++;
 		const promise = new Promise<EmbeddingResult>((resolve, reject) => {
 			const timeoutId = window.setTimeout(() => {
 				if (!this.pendingRequests.delete(requestId)) return;
-				reject(new Error(timeoutMessage));
-			}, timeoutMs);
-
-			pending = {resolve, reject, timeoutId, extendOnAck, acked: false};
-			this.pendingRequests.set(requestId, pending);
+				reject(new Error(`Embedding request '${requestId}' did not finish in time`));
+			}, EMBED_TIMEOUT_MS);
+			this.pendingRequests.set(requestId, {resolve, reject, timeoutId});
 		});
 
-		return {promise, pending};
-	}
-
-	/** Sends `payload` to the worker to embed, retrying if the request is never acknowledged. */
-	async sendMessage(payload: string, maxOverlapPercent: number, maxChunkSize?: number, retries = 3): Promise<EmbeddingResult | null> {
-		if (!this.worker) throw new Error("Could not find the embedding worker. Is it loaded?");
-
-		let lastError: unknown;
-
-		for (let attempt = 0; attempt < retries; attempt++) {
-			if (this.loadError) throw this.loadError;
-			if (this.crashError) throw this.crashError;
-
-			const requestId = this.requestIdCounter++;
-			const message: WorkerRequest = {requestId, type: 'embed', payload, maxOverlapPercent, maxChunkSize};
-			const request = this.trackRequest(requestId, EMBED_ACK_TIMEOUT_MS, `Request with ID '${requestId}' was never acknowledged`, true);
-
-			this.worker.postMessage(message);
-
-			try {
-				return await request.promise;
-			} catch (error) {
-				lastError = error;
-				if (request.pending.acked) throw error;
-				console.warn(`[Similarity] Attempt ${attempt + 1} to send an embed request failed: ${error}`);
-			}
-		}
-
-		throw new Error(`All ${retries} attempts to send the message failed: ${lastError}`);
+		const message: WorkerRequest = {requestId, type: 'embed', payload, maxOverlapPercent, lane};
+		worker.postMessage(message);
+		return promise;
 	}
 
 	/** Asks the worker to dispose the model, then terminates it. Idempotent. */
@@ -308,7 +263,7 @@ class WorkerEmbeddingProvider implements EmbeddingPort {
 	constructor(private readonly messenger: WorkerMessenger, readonly device: Device) {}
 
 	async embed(text: string, options: EmbedOptions): Promise<EmbeddingResult | null> {
-		return await this.messenger.sendMessage(text, options.maxOverlapPercent, options.maxChunkSize);
+		return await this.messenger.sendMessage(text, options.maxOverlapPercent, options.lane);
 	}
 
 	unload(): Promise<void> {

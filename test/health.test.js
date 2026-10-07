@@ -177,6 +177,21 @@ test("corrupt meta is unusable even when the sidecar looks fine", () => {
 	assert.deepStrictEqual(result, {status: "unusable", reason: "corrupt-meta"});
 });
 
+test("an index without truncation info stays healthy, and a malformed flag is dropped without dropping the entry", () => {
+	const result = healthy([
+		entry("a.md", [0], {truncated: true}),
+		entry("b.md", [1], {truncated: "yes"}),
+		entry("c.md", [2]),
+	], 3);
+
+	assert.strictEqual(result.status, "checked");
+	assert.strictEqual(result.droppedIds.length, 0);
+	const [a, b, c] = result.validEntries;
+	assert.strictEqual(a.truncated, true);
+	assert.ok(!("truncated" in b));
+	assert.ok(!("truncated" in c));
+});
+
 test("a valid quant is kept, and a malformed one is dropped without dropping the entry", () => {
 	const result = healthy([
 		entry("a.md", [0], {quant: {vocab: "q4", ffn: "fp16"}}),
