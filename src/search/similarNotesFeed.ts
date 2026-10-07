@@ -51,7 +51,7 @@ export function makeSimilarNotesFeed(deps: SimilarNotesFeedDeps): SimilarNotesFe
 	let indexingState: IndexingQueueSnapshot | undefined = backend.getIndexingState();
 	let engineKind = backend.getEngineState().kind;
 	let lastIndexEmpty = false;
-	let refreshTimer: ReturnType<typeof setTimeout> | null = null;
+	let refreshTimer: number | null = null;
 	const refreshDebounceMs = deps.refreshDebounceMs ?? DEFAULT_REFRESH_DEBOUNCE_MS;
 	const listeners = new Set<(snapshot: SimilarNotesSnapshot) => void>();
 
@@ -142,8 +142,8 @@ export function makeSimilarNotesFeed(deps: SimilarNotesFeedDeps): SimilarNotesFe
 			await deps.retryModelLoad();
 		},
 		refresh() {
-			if (refreshTimer !== null) clearTimeout(refreshTimer);
-			refreshTimer = setTimeout(() => {
+			if (refreshTimer !== null) window.clearTimeout(refreshTimer);
+			refreshTimer = window.setTimeout(() => {
 				refreshTimer = null;
 				if (noteId === null) return;
 				epoch += 1;
@@ -151,7 +151,7 @@ export function makeSimilarNotesFeed(deps: SimilarNotesFeedDeps): SimilarNotesFe
 			}, refreshDebounceMs);
 		},
 		dispose() {
-			if (refreshTimer !== null) clearTimeout(refreshTimer);
+			if (refreshTimer !== null) window.clearTimeout(refreshTimer);
 			refreshTimer = null;
 			unsubscribeIndexingState();
 			unsubscribeRefreshSignal();
