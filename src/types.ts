@@ -79,6 +79,7 @@ export type IndexingQueueSnapshot = {
 export interface SimilaritySettings {
 	ignoredPaths: string[];
 	advancedOpen: boolean;
+	showDates: boolean;
 	maxRawMarkdownChars: number;
 	maxExtractedChars: number;
 	maxOverlapPercent: number;

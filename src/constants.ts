@@ -58,6 +58,7 @@ export const SEARCH_MODES: {id: SearchMode; label: string; desc: string; icon: s
 export const DEFAULT_SETTINGS: SimilaritySettings = {
 	ignoredPaths: [],
 	advancedOpen: false,
+	showDates: true,
 	maxRawMarkdownChars: 20000,
 	maxExtractedChars: 4800,
 	maxOverlapPercent: 15,

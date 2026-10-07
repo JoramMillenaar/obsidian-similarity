@@ -311,6 +311,11 @@ export class SimilarNotesListView extends ItemView {
 		});
 	}
 
+	refresh() {
+		this.renderedItems = null;
+		this.renderBody();
+	}
+
 	private renderRelatedList(related: SimilarNotesSnapshot["items"]) {
 		const list = this.listEl;
 		if (!list) return;
@@ -343,7 +348,7 @@ export class SimilarNotesListView extends ItemView {
 
 			textWrapper.createSpan({cls: "related-title", text: title});
 
-			const age = noteAgeText(this.app, path);
+			const age = this.deps.settingsRepo.get().showDates ? noteAgeText(this.app, path) : null;
 			if (parentPath || age) {
 				const meta = textWrapper.createEl("small", {cls: "related-parent"});
 				if (parentPath) meta.appendText(parentPath);

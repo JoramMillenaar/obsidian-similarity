@@ -28,6 +28,9 @@ export function normalizeSettings(
 		advancedOpen: typeof advancedOpen === "boolean"
 			? advancedOpen
 			: DEFAULT_SETTINGS.advancedOpen,
+		showDates: typeof value?.showDates === "boolean"
+			? value.showDates
+			: DEFAULT_SETTINGS.showDates,
 		maxRawMarkdownChars: normalizedMaxRawMarkdownChars,
 		maxExtractedChars: normalizedMaxExtractedChars,
 		maxOverlapPercent: typeof maxOverlapPercent === "number" && maxOverlapPercent >= 0
