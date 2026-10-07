@@ -73,7 +73,7 @@ export class SettingView extends PluginSettingTab {
 		return [
 			{
 				name: "Language",
-				desc: "Determine which language to support. Changing this option may start an optimization process in the background. You can pick a different one before it finishes to switch again.",
+				desc: "Determine which language to support.",
 				render: (setting) => {
 					setting.addDropdown((dropdown) => {
 						for (const model of Object.values(EMBEDDING_MODELS)) {
@@ -89,22 +89,24 @@ export class SettingView extends PluginSettingTab {
 			},
 			{
 				name: "Search mode",
-				desc: SEARCH_MODES.map((mode) => `${mode.label}: ${mode.desc}`).join(" "),
 				render: (setting) => {
+					const describe = (id: string) => setting.setDesc(SEARCH_MODES.find((mode) => mode.id === id)?.desc ?? "");
 					setting.addDropdown((dropdown) => {
 						for (const mode of SEARCH_MODES) {
 							dropdown.addOption(mode.id, capitalize(mode.label));
 						}
 						dropdown.setValue(this.deps.settingsRepo.get().searchMode);
+						describe(dropdown.getValue());
 						dropdown.onChange((value) => {
+							describe(value);
 							void this.deps.setSearchMode(value as SearchMode);
 						});
 					});
 				},
 			},
 			{
-				name: "Show dates",
-				desc: "Show how long ago each note was created in similar notes and search results.",
+				name: "Show dates (beta)",
+				desc: "Show how long ago each note was created in similar notes and search results. (experimental feature)",
 				control: {type: "toggle", key: "showDates"},
 			},
 			{
