@@ -192,17 +192,12 @@ body {
 
 
 .similarity-suggestion-age {
-	font-style: italic;
 	opacity: 0.7;
 	white-space: nowrap;
 }
 
 .related-title {
 	display: block;
-}
-
-.related-age {
-	font-style: italic;
 }
 
 .related-parent {
