@@ -14,9 +14,16 @@ export function createWarningIcon(parent: HTMLElement): HTMLElement {
  * when the caller provides `onOpenSettings`.
  */
 export function renderBanner(bannerEl: HTMLElement, banner: BannerState, onOpenSettings?: () => void): void {
-	bannerEl.empty();
+	// Keep the progress row across renders so the fill can transition instead of being recreated.
+	const existingRow = bannerEl.querySelector<HTMLElement>(":scope > .similarity-index-banner-progress");
+	for (const child of Array.from(bannerEl.children)) {
+		if (child !== existingRow) child.remove();
+	}
 	bannerEl.toggleClass("is-hidden", !banner.visible);
-	if (!banner.visible) return;
+	if (!banner.visible) {
+		existingRow?.remove();
+		return;
+	}
 
 	const row = bannerEl.createDiv({cls: "similarity-index-banner-message"});
 	if (banner.tone === "warning") createWarningIcon(row);
@@ -40,11 +47,22 @@ export function renderBanner(bannerEl: HTMLElement, banner: BannerState, onOpenS
 		});
 	}
 
-	if (banner.total > 0) {
-		const progressRow = bannerEl.createDiv({cls: "similarity-index-banner-progress"});
-		progressRow.createEl("progress", {
-			cls: "similarity-index-banner-bar",
-			attr: {max: String(banner.total), value: String(Math.min(banner.processed, banner.total))},
-		});
+	if (banner.total <= 0) {
+		existingRow?.remove();
+		return;
 	}
+
+	// Newly created elements were appended after the kept row; move them in front of it.
+	if (existingRow) {
+		const fresh = Array.from(bannerEl.children).filter((c) => c !== existingRow);
+		for (const child of fresh) bannerEl.insertBefore(child, existingRow);
+	}
+
+	const progressRow = existingRow ?? bannerEl.createDiv({cls: "similarity-index-banner-progress"});
+	let fill = progressRow.querySelector<HTMLElement>(".similarity-bar-fill");
+	if (!fill) {
+		const bar = progressRow.createDiv({cls: "similarity-bar similarity-tier-2 similarity-index-banner-bar"});
+		fill = bar.createDiv({cls: "similarity-bar-fill"});
+	}
+	fill.setCssProps({"--similarity-fill": `${Math.min(banner.processed / banner.total, 1) * 100}%`});
 }

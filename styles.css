@@ -55,9 +55,13 @@
 	gap: 8px;
 }
 
-.similarity-index-banner-bar {
+.similarity-bar.similarity-index-banner-bar {
 	flex: 1;
-	height: 6px;
+	width: auto;
+}
+
+.similarity-index-banner-bar .similarity-bar-fill {
+	transition: width 0.3s ease-out;
 }
 
 .similarity-index-banner-label {
