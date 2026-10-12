@@ -21,6 +21,7 @@ export function renderBanner(bannerEl: HTMLElement, banner: BannerState, onOpenS
 	}
 	bannerEl.toggleClass("is-hidden", !banner.visible);
 	if (!banner.visible) {
+		delete bannerEl.dataset.message;
 		existingRow?.remove();
 		return;
 	}
@@ -28,6 +29,11 @@ export function renderBanner(bannerEl: HTMLElement, banner: BannerState, onOpenS
 	const row = bannerEl.createDiv({cls: "similarity-index-banner-message"});
 	if (banner.tone === "warning") createWarningIcon(row);
 	row.createSpan({text: banner.message});
+	// The row is rebuilt on every progress tick; only fade in when the text actually changed.
+	if (banner.rotating && bannerEl.dataset.message !== undefined && bannerEl.dataset.message !== banner.message) {
+		row.addClass("is-entering");
+	}
+	bannerEl.dataset.message = banner.message;
 
 	if (banner.wasmWarning) {
 		bannerEl.createDiv({
