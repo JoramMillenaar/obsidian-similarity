@@ -358,3 +358,49 @@ body {
 .similarity-path-search-setting input[type="search"] {
 	width: 100%;
 }
+
+/* Tier sections in the sidebar mirror Obsidian's backlinks pane headings. */
+.similarity-tier-section > .tree-item-self {
+	color: var(--nav-heading-color);
+}
+
+.similarity-tier-section > .tree-item-self .tree-item-inner {
+	font-weight: var(--nav-heading-weight);
+}
+
+.similarity-tier-section > .tree-item-self.is-collapsed {
+	color: var(--nav-heading-color-collapsed);
+}
+
+@media (hover: hover) {
+	.similarity-tier-section > .tree-item-self:hover {
+		color: var(--nav-heading-color-hover);
+	}
+
+	.similarity-tier-section > .tree-item-self.is-collapsed:hover {
+		color: var(--nav-heading-color-collapsed-hover);
+	}
+}
+
+.similarity-tier-section > .tree-item-children {
+	margin-inline-start: 0;
+	padding-inline-start: 0;
+	border-inline-start: 0;
+}
+
+/* Tier headings in the search modal mirror the search-suggest group headings. */
+.suggestion-item.mod-group.similarity-suggestion-group {
+	margin: 0;
+	padding: 0 0 0 var(--size-4-2);
+	color: var(--text-muted);
+	cursor: default;
+	font-weight: var(--font-semibold);
+	font-size: var(--font-ui-smaller);
+	border-radius: 0;
+}
+
+.suggestion-item.mod-group.similarity-suggestion-group:not(:first-child) {
+	margin-top: 6px;
+	padding-top: 6px;
+	border-top: var(--border-width) solid var(--background-modifier-border);
+}

@@ -6,10 +6,12 @@ import { renderBanner } from "./warning";
 import { textForNotice } from "./similarNoticeText";
 import { SEARCH_MODES, VIEW_TYPE_SIMILARITY } from "../constants";
 import { SettingsRepository } from "../ports";
-import { SearchMode } from "../types";
+import { RelatedNote, SearchMode, SimilarityTier } from "../types";
 import { FEEDBACK_ACTIONS, OpenFeedback } from "./FeedbackModal";
 import { renderSimilarityBar } from "./similarityBar";
 import { noteAgeText } from "./noteAge";
+import { groupByTier } from "./tierSections";
+import { SIMILARITY_TIER_LABELS } from "../core/vector/similarityTier";
 
 export { VIEW_TYPE_SIMILARITY };
 
@@ -65,6 +67,7 @@ export class SimilarNotesListView extends ItemView {
 	private unsubscribeSnapshot?: () => void;
 	private unsubscribeBanner?: () => void;
 	private searchModeButtonEl?: HTMLElement;
+	private collapsedTiers = new Set<SimilarityTier>();
 
 	constructor(leaf: WorkspaceLeaf, private deps: SimilarNotesListViewDeps) {
 		super(leaf);
@@ -326,38 +329,69 @@ export class SimilarNotesListView extends ItemView {
 
 		list.empty();
 
-		related.forEach((note) => {
-			const path = note.id;
+		for (const section of groupByTier(related)) {
+			const sectionEl = list.createDiv({cls: "tree-item similarity-tier-section"});
+			const children = this.renderSectionHeader(sectionEl, section.tier, section.items.length);
+			section.items.forEach((note) => this.renderRelatedItem(children, note));
+		}
+	}
 
-			const listItem = list.createDiv({cls: "tree-item"});
-			const itemSelf = listItem.createDiv({
-				cls: "tree-item-self tag-pane-tag is-clickable",
-			});
-			this.bindOpenOnClick(itemSelf, path);
-			itemSelf.addEventListener("mouseover", (event: MouseEvent) => {
-				this.triggerHoverPreview(event, itemSelf, path);
-			});
+	private renderSectionHeader(sectionEl: HTMLElement, tier: SimilarityTier, count: number): HTMLElement {
+		const header = sectionEl.createDiv({cls: "tree-item-self is-clickable mod-collapsible"});
+		const icon = header.createDiv({cls: "tree-item-icon collapse-icon"});
+		setIcon(icon, "right-triangle");
+		header.createDiv({cls: "tree-item-inner", text: SIMILARITY_TIER_LABELS[tier]});
+		header.createDiv({cls: "tree-item-flair-outer"}).createSpan({cls: "tree-item-flair", text: String(count)});
 
-			const itemInner = itemSelf.createDiv({cls: "tree-item-inner"});
+		const children = sectionEl.createDiv({cls: "tree-item-children"});
+		const applyCollapsed = (collapsed: boolean) => {
+			header.toggleClass("is-collapsed", collapsed);
+			icon.toggleClass("is-collapsed", collapsed);
+			if (collapsed) children.hide();
+			else children.show();
+		};
+		applyCollapsed(this.collapsedTiers.has(tier));
 
-			const title = path.split("/").pop()?.replace(/\.md$/i, "") ?? path;
-			const parentPath = path.includes("/") ? path.split("/").slice(0, -1).join("/") : "";
-			const itemInnerText = itemInner.createDiv({cls: "tree-item-inner-text"});
-
-			const textWrapper = itemInnerText.createDiv({cls: "related-text"});
-
-			textWrapper.createSpan({cls: "related-title", text: title});
-
-			const age = this.deps.settingsRepo.get().showDates ? noteAgeText(this.app, path) : null;
-			if (parentPath || age) {
-				const meta = textWrapper.createEl("small", {cls: "related-parent"});
-				if (parentPath) meta.appendText(parentPath);
-				if (age) meta.createSpan({cls: "related-age", text: parentPath ? ` · ${age}` : age});
-			}
-
-			const flairOuter = itemSelf.createDiv({cls: "tree-item-flair-outer"});
-			renderSimilarityBar(flairOuter, note);
+		header.addEventListener("click", () => {
+			const collapsed = !this.collapsedTiers.has(tier);
+			if (collapsed) this.collapsedTiers.add(tier);
+			else this.collapsedTiers.delete(tier);
+			applyCollapsed(collapsed);
 		});
+		return children;
+	}
+
+	private renderRelatedItem(list: HTMLElement, note: RelatedNote) {
+		const path = note.id;
+
+		const listItem = list.createDiv({cls: "tree-item"});
+		const itemSelf = listItem.createDiv({
+			cls: "tree-item-self tag-pane-tag is-clickable",
+		});
+		this.bindOpenOnClick(itemSelf, path);
+		itemSelf.addEventListener("mouseover", (event: MouseEvent) => {
+			this.triggerHoverPreview(event, itemSelf, path);
+		});
+
+		const itemInner = itemSelf.createDiv({cls: "tree-item-inner"});
+
+		const title = path.split("/").pop()?.replace(/\.md$/i, "") ?? path;
+		const parentPath = path.includes("/") ? path.split("/").slice(0, -1).join("/") : "";
+		const itemInnerText = itemInner.createDiv({cls: "tree-item-inner-text"});
+
+		const textWrapper = itemInnerText.createDiv({cls: "related-text"});
+
+		textWrapper.createSpan({cls: "related-title", text: title});
+
+		const age = this.deps.settingsRepo.get().showDates ? noteAgeText(this.app, path) : null;
+		if (parentPath || age) {
+			const meta = textWrapper.createEl("small", {cls: "related-parent"});
+			if (parentPath) meta.appendText(parentPath);
+			if (age) meta.createSpan({cls: "related-age", text: parentPath ? ` · ${age}` : age});
+		}
+
+		const flairOuter = itemSelf.createDiv({cls: "tree-item-flair-outer"});
+		renderSimilarityBar(flairOuter, note);
 	}
 
 	private bindOpenOnClick(itemSelf: HTMLElement, path: string) {
