@@ -3,9 +3,11 @@ export type IndexingMessageContext = {
 };
 
 export const INDEXING_WELCOME_MESSAGE =
-	"Thanks for using Similarity! I'm reading through your notes to learn what each one is about. All of this happens on your device.";
+	"I'm reading through your notes to learn what each one is about. All of this happens on your device.";
 
 export const INDEXING_FINISHING_MESSAGE = "Finishing up. Just a few more notes to read.";
+
+export const INDEXING_DONE_MESSAGE = "All done! Every note has been read, so related notes are ready to explore.";
 
 const FINISHING_RATIO = 0.9;
 const FINISHING_REMAINING = 3;

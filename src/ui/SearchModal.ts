@@ -2,8 +2,8 @@ import { App, Notice, Platform, SuggestModal, TFile } from "obsidian";
 import { InsertWikilinkAtCursorUseCase } from "../app/insertWikilinkAtCursor";
 import { SimilarSearchFeed, SimilarSearchResult } from "../search/similarSearchFeed";
 import { StatusHub } from "../status/statusHub";
-import { BannerState, computeBanner, subscribeBanner } from "./banner";
-import { renderBanner } from "./warning";
+import { computeBanner } from "./banner";
+import { mountBanner } from "./bannerView";
 import { textForNotice } from "./similarNoticeText";
 import { KeyedDebouncer } from "../core/util/debounce";
 import { RelatedNote, SimilarityTier } from "../types";
@@ -27,7 +27,6 @@ export class SearchModal extends SuggestModal<RelatedNote> {
 	private isAutoRefreshing = false;
 	private unsubscribeBanner?: () => void;
 	private unsubscribeRefreshSignal?: () => void;
-	private bannerEl?: HTMLElement;
 	private tierHeadings = new Map<string, SimilarityTier>();
 
 	private static readonly DEFAULT_EMPTY_STATE = "Type to search related notes.";
@@ -68,7 +67,10 @@ export class SearchModal extends SuggestModal<RelatedNote> {
 
 	onOpen(): void {
 		void super.onOpen();
-		this.unsubscribeBanner = subscribeBanner(this.deps.statusHub, (banner) => this.renderBanner(banner));
+		const resultsParent = this.resultContainerEl.parentElement;
+		if (resultsParent) {
+			this.unsubscribeBanner = mountBanner(resultsParent, this.deps.statusHub, {before: this.resultContainerEl});
+		}
 		this.unsubscribeRefreshSignal = this.deps.similarSearchFeed.subscribeRefreshSignal(() => {
 			this.isAutoRefreshing = true;
 			this.inputEl.dispatchEvent(new Event("input"));
@@ -222,25 +224,4 @@ export class SearchModal extends SuggestModal<RelatedNote> {
 		const banner = computeBanner(this.deps.statusHub.getEngineState(), indexingState);
 		return banner.visible && banner.tone === "info";
 	}
-
-	private renderBanner(banner: BannerState) {
-		if (!this.bannerEl) {
-			this.bannerEl = this.resultContainerEl.parentElement?.insertBefore(
-				createBannerElement(),
-				this.resultContainerEl,
-			) ?? undefined;
-		}
-		if (!this.bannerEl) {
-			return;
-		}
-
-		renderBanner(this.bannerEl, banner);
-	}
-
-}
-
-function createBannerElement() {
-	const element = createDiv();
-	element.className = "similarity-index-banner is-hidden";
-	return element;
 }

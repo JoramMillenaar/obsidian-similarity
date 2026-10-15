@@ -28,7 +28,34 @@
 	align-self: flex-start;
 }
 
+/* Outer grid row animates 0fr <-> 1fr so the banner opens and collapses smoothly. */
 .similarity-index-banner {
+	display: grid;
+	grid-template-rows: 0fr;
+	opacity: 0;
+	visibility: hidden;
+	transition:
+		grid-template-rows 0.35s cubic-bezier(0.2, 0, 0, 1),
+		opacity 0.2s ease,
+		visibility 0s linear 0.35s;
+}
+
+.similarity-index-banner.is-shown {
+	grid-template-rows: 1fr;
+	opacity: 1;
+	visibility: visible;
+	transition:
+		grid-template-rows 0.4s cubic-bezier(0.2, 0, 0, 1),
+		opacity 0.3s ease 0.08s,
+		visibility 0s;
+}
+
+.similarity-index-banner-clip {
+	min-height: 0;
+	overflow: hidden;
+}
+
+.similarity-index-banner-card {
 	margin-bottom: 12px;
 	padding: 10px 12px;
 	border: 1px solid var(--background-modifier-border);
@@ -39,29 +66,59 @@
 	gap: 8px;
 }
 
-.similarity-index-banner.is-hidden {
-	display: none;
-}
-
 .similarity-index-banner-message {
+	position: relative;
+	overflow: hidden;
 	color: var(--text-muted);
 	font-size: var(--font-ui-small);
 	line-height: 1.4;
 }
 
-.similarity-index-banner-message.is-entering {
-	animation: similarity-banner-message-in 0.4s ease-out;
+.similarity-index-banner-line.is-entering {
+	animation: similarity-banner-line-in 0.45s cubic-bezier(0.2, 0, 0, 1) 0.12s both;
 }
 
-@keyframes similarity-banner-message-in {
-	from { opacity: 0; transform: translateY(2px); }
+/* The outgoing line overlays the incoming one while it fades, so the text crossfades in place. */
+.similarity-index-banner-line.is-leaving {
+	position: absolute;
+	inset: 0 0 auto 0;
+	pointer-events: none;
+	animation: similarity-banner-line-out 0.2s ease-in forwards;
+}
+
+@keyframes similarity-banner-line-in {
+	from { opacity: 0; transform: translateY(4px); }
 	to { opacity: 1; transform: none; }
 }
 
-@media (prefers-reduced-motion: reduce) {
-	.similarity-index-banner-message.is-entering {
-		animation: none;
-	}
+@keyframes similarity-banner-line-out {
+	from { opacity: 1; transform: none; }
+	to { opacity: 0; transform: translateY(-4px); }
+}
+
+.similarity-index-banner-icon {
+	display: inline-flex;
+	vertical-align: middle;
+	margin-right: 6px;
+}
+
+.similarity-index-banner-icon .svg-icon {
+	width: var(--icon-s);
+	height: var(--icon-s);
+}
+
+.similarity-index-banner-card[data-tone="warning"] .similarity-index-banner-icon {
+	color: var(--color-orange);
+}
+
+.similarity-index-banner-card[data-tone="success"] .similarity-index-banner-icon {
+	color: var(--similarity-tier-3-color);
+	animation: similarity-banner-pop 0.5s cubic-bezier(0.3, 1.5, 0.5, 1) 0.15s both;
+}
+
+@keyframes similarity-banner-pop {
+	from { opacity: 0; transform: scale(0.4); }
+	to { opacity: 1; transform: none; }
 }
 
 .similarity-index-banner-progress {
@@ -75,14 +132,22 @@
 	width: auto;
 }
 
+/* Width is driven per frame from JS; only the colour change (to done) transitions here. */
 .similarity-index-banner-bar .similarity-bar-fill {
-	transition: width 0.3s ease-out;
+	transition: background-color 0.5s ease;
 }
 
-.similarity-index-banner-label {
-	color: var(--text-faint);
-	font-size: var(--font-smaller);
-	white-space: nowrap;
+/* A soft sheen while working, so a slow stretch still reads as alive. */
+.similarity-index-banner-card[data-tone="info"] .similarity-bar-fill {
+	background-image: linear-gradient(90deg, transparent 0%, rgba(255, 255, 255, 0.28) 50%, transparent 100%);
+	background-size: 50% 100%;
+	background-repeat: no-repeat;
+	animation: similarity-banner-sheen 2.4s ease-in-out infinite;
+}
+
+@keyframes similarity-banner-sheen {
+	from { background-position: -100% 0; }
+	to { background-position: 200% 0; }
 }
 
 .similarity-index-banner-gpu-warning {
@@ -93,6 +158,20 @@
 
 .similarity-index-banner-link {
 	font-size: var(--font-ui-smaller);
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.similarity-index-banner,
+	.similarity-index-banner.is-shown {
+		transition: none;
+	}
+
+	.similarity-index-banner-line.is-entering,
+	.similarity-index-banner-line.is-leaving,
+	.similarity-index-banner-card .similarity-index-banner-icon,
+	.similarity-index-banner-card .similarity-bar-fill {
+		animation: none;
+	}
 }
 
 .similarity-warning-icon {

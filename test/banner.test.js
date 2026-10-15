@@ -173,6 +173,7 @@ const {
 	IndexingMessages,
 	INDEXING_WELCOME_MESSAGE,
 	INDEXING_FINISHING_MESSAGE,
+	INDEXING_DONE_MESSAGE,
 	isNearlyDone,
 	titleFromNoteId,
 } = require("../dist/status/indexingMessages.js");
@@ -214,8 +215,9 @@ test("the indexing banner rotates to a new message on a timer and stops once ind
 		assert.notStrictEqual(rotated.message, INDEXING_WELCOME_MESSAGE);
 		assert.strictEqual(rotated.processed, 2, "rotation keeps the progress");
 
+		const rotationTimers = timers.filter((t) => t.ms > 1000 && !t.fired);
 		indexer.push({...IDLE_INDEXING});
-		assert.ok(timers.filter((t) => t.ms > 1000 && !t.fired).every((t) => t.cleared), "rotation stops when the banner hides");
+		assert.ok(rotationTimers.every((t) => t.cleared), "rotation stops when indexing ends");
 
 		unsubscribe();
 		hub.dispose();
@@ -275,4 +277,82 @@ test("isNearlyDone covers the last stretch of both large and small queues", () =
 	assert.strictEqual(isNearlyDone(90, 100), true);
 	assert.strictEqual(isNearlyDone(500, 1000), false);
 	assert.strictEqual(isNearlyDone(4, 10), false);
+});
+
+function withFakeTimers(run) {
+	const realWindow = global.window;
+	const timers = [];
+	global.window = {
+		setTimeout: (fn, ms) => { timers.push({fn, ms, cleared: false}); return timers.length; },
+		clearTimeout: (id) => { if (timers[id - 1]) timers[id - 1].cleared = true; },
+	};
+	try {
+		run(timers);
+	} finally {
+		global.window = realWindow;
+	}
+}
+
+test("a finished indexing run shows a done banner with a full bar, then hides", () => {
+	withFakeTimers((timers) => {
+		const {hub, indexer} = makeHub();
+		const seen = [];
+		const unsubscribe = subscribeBanner(hub, (banner) => seen.push(banner), 0);
+		indexer.push({...IDLE_INDEXING, isRunning: true, pending: 40, processed: 2, total: 42});
+		const before = timers.length;
+		indexer.push({...IDLE_INDEXING, processed: 42, total: 42});
+
+		const done = seen[seen.length - 1];
+		assert.strictEqual(done.visible, true);
+		assert.strictEqual(done.tone, "success");
+		assert.strictEqual(done.message, INDEXING_DONE_MESSAGE);
+		assert.strictEqual(done.processed, 42);
+		assert.strictEqual(done.total, 42);
+
+		const hold = timers.slice(before).find((t) => !t.cleared);
+		assert.ok(hold, "a timer ends the done state");
+		hold.fn();
+		assert.strictEqual(seen[seen.length - 1].visible, false);
+
+		unsubscribe();
+		hub.dispose();
+	});
+});
+
+test("no done banner for runs that never showed one, or that ended in an error", () => {
+	withFakeTimers(() => {
+		const {hub, indexer} = makeHub();
+		const seen = [];
+		const unsubscribe = subscribeBanner(hub, (banner) => seen.push(banner), 0);
+
+		indexer.push({...IDLE_INDEXING, isRunning: true, pending: 3, total: 3});
+		indexer.push({...IDLE_INDEXING, processed: 3, total: 3});
+		assert.strictEqual(seen[seen.length - 1].visible, false, "small runs finish silently");
+
+		indexer.push({...IDLE_INDEXING, isRunning: true, pending: 40, processed: 2, total: 42});
+		indexer.push({...IDLE_INDEXING, processed: 2, total: 42, fatalError: "boom"});
+		assert.strictEqual(seen[seen.length - 1].visible, false, "a failed run is not 'done'");
+
+		unsubscribe();
+		hub.dispose();
+	});
+});
+
+test("a new run during the done state replaces it and cancels the hold", () => {
+	withFakeTimers((timers) => {
+		const {hub, indexer} = makeHub();
+		const seen = [];
+		const unsubscribe = subscribeBanner(hub, (banner) => seen.push(banner), 0);
+		indexer.push({...IDLE_INDEXING, isRunning: true, pending: 40, processed: 2, total: 42});
+		const before = timers.length;
+		indexer.push({...IDLE_INDEXING, processed: 42, total: 42});
+		const hold = timers.slice(before).find((t) => !t.cleared);
+
+		indexer.push({...IDLE_INDEXING, isRunning: true, pending: 20, processed: 0, total: 20});
+		assert.strictEqual(seen[seen.length - 1].tone, "info");
+		assert.strictEqual(hold.cleared, true);
+
+		unsubscribe();
+		hub.dispose();
+	});
 });

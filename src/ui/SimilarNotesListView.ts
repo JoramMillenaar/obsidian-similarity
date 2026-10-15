@@ -1,8 +1,7 @@
 import { ItemView, Menu, Notice, setIcon, TFile, WorkspaceLeaf } from "obsidian";
 import { SimilarNotesFeed, SimilarNotesSnapshot } from "../search/similarNotesFeed";
 import { StatusHub } from "../status/statusHub";
-import { BannerState, subscribeBanner } from "./banner";
-import { renderBanner } from "./warning";
+import { mountBanner } from "./bannerView";
 import { textForNotice } from "./similarNoticeText";
 import { SEARCH_MODES, VIEW_TYPE_SIMILARITY } from "../constants";
 import { SettingsRepository } from "../ports";
@@ -58,7 +57,6 @@ function signatureForMessage(message: MessageState): string {
 export class SimilarNotesListView extends ItemView {
 	private snapshot: SimilarNotesSnapshot | undefined;
 	private activePath: string | null = null;
-	private bannerEl?: HTMLElement;
 	private truncationNoticeEl?: HTMLElement;
 	private listEl?: HTMLElement;
 	private messageEl?: HTMLElement;
@@ -165,7 +163,8 @@ export class SimilarNotesListView extends ItemView {
 		this.containerEl.prepend(navHeader);
 
 		this.contentEl.empty();
-		this.bannerEl = this.contentEl.createDiv({cls: "similarity-index-banner is-hidden"});
+		this.unsubscribeBanner?.();
+		this.unsubscribeBanner = mountBanner(this.contentEl, this.deps.statusHub, {onOpenSettings: () => this.deps.openSettings()});
 		this.truncationNoticeEl = this.contentEl.createDiv({cls: "similarity-truncation-notice is-hidden"});
 		const body = this.contentEl.createDiv();
 		this.listEl = body.createDiv();
@@ -186,7 +185,6 @@ export class SimilarNotesListView extends ItemView {
 			this.renderBody();
 			this.updateSearchModeButton();
 		});
-		this.unsubscribeBanner = subscribeBanner(this.deps.statusHub, (banner) => this.renderBanner(banner));
 
 		this.syncActiveNote();
 	}
@@ -287,13 +285,6 @@ export class SimilarNotesListView extends ItemView {
 			});
 		}
 		if (message.retry) this.renderRetryAction(container, message.retry);
-	}
-
-	private renderBanner(banner: BannerState) {
-		const bannerEl = this.bannerEl;
-		if (!bannerEl) return;
-
-		renderBanner(bannerEl, banner, () => this.deps.openSettings());
 	}
 
 	private renderRetryAction(container: HTMLElement, retry: RetryAction) {
