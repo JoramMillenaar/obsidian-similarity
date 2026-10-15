@@ -1,7 +1,7 @@
 import { BannerState, computeBanner } from "../status/notices";
 import { StatusHub } from "../status/statusHub";
 import { Unsubscribe } from "../core/util/unsubscribe";
-import { IndexingMessages, titleFromNoteId } from "../status/indexingMessages";
+import { INDEXING_FINISHING_MESSAGE, IndexingMessages, isNearlyDone, titleFromNoteId } from "../status/indexingMessages";
 import { IndexingQueueSnapshot } from "../types";
 
 export type { BannerState };
@@ -15,6 +15,7 @@ type Rotation = {
 	messages: IndexingMessages;
 	message: string;
 	recentTitles: string[];
+	finishing: boolean;
 	timer: number;
 };
 
@@ -36,6 +37,7 @@ export function subscribeBanner(
 		if (!rotation) return;
 		rotation.timer = window.setTimeout(() => {
 			if (!rotation) return;
+			if (rotation.finishing) return;
 			rotation.message = rotation.messages.next({recentTitles: rotation.recentTitles});
 			scheduleRotation();
 			flush();
@@ -53,9 +55,14 @@ export function subscribeBanner(
 				messages,
 				message: messages.next({recentTitles: []}),
 				recentTitles: [],
+				finishing: false,
 				timer: 0,
 			};
 			scheduleRotation();
+		}
+		if (!rotation.finishing && isNearlyDone(indexing.processed, indexing.total)) {
+			rotation.finishing = true;
+			rotation.message = INDEXING_FINISHING_MESSAGE;
 		}
 		const title = titleFromNoteId(indexing.currentNoteId);
 		const titles = rotation.recentTitles;

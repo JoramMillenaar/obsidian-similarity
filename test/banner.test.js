@@ -172,6 +172,8 @@ test("a disabled model raises a warning banner that outranks indexing progress",
 const {
 	IndexingMessages,
 	INDEXING_WELCOME_MESSAGE,
+	INDEXING_FINISHING_MESSAGE,
+	isNearlyDone,
 	titleFromNoteId,
 } = require("../dist/status/indexingMessages.js");
 
@@ -236,4 +238,41 @@ test("note ids become readable titles, and untitled notes are skipped", () => {
 	assert.strictEqual(titleFromNoteId("Top level.md"), "Top level");
 	assert.strictEqual(titleFromNoteId("Inbox/Untitled 3.md"), undefined);
 	assert.strictEqual(titleFromNoteId(undefined), undefined);
+});
+
+test("the banner switches to a finishing message near the end and does not rotate away from it", () => {
+	const realWindow = global.window;
+	const timers = [];
+	global.window = {
+		setTimeout: (fn, ms) => { timers.push({fn, ms, cleared: false}); return timers.length; },
+		clearTimeout: (id) => { if (timers[id - 1]) timers[id - 1].cleared = true; },
+	};
+	try {
+		const {hub, indexer} = makeHub();
+		const seen = [];
+		const unsubscribe = subscribeBanner(hub, (banner) => seen.push(banner), 0);
+		indexer.push({...IDLE_INDEXING, isRunning: true, pending: 40, processed: 2, total: 42});
+		indexer.push({...IDLE_INDEXING, isRunning: true, pending: 4, processed: 38, total: 42});
+		assert.strictEqual(seen[seen.length - 1].message, INDEXING_FINISHING_MESSAGE);
+
+		const count = seen.length;
+		for (const t of timers.filter((t) => t.ms > 1000 && !t.cleared)) t.fn();
+		assert.strictEqual(seen.length, count, "rotation timers no longer emit new messages");
+		indexer.push({...IDLE_INDEXING, isRunning: true, pending: 3, processed: 39, total: 42});
+		assert.strictEqual(seen[seen.length - 1].message, INDEXING_FINISHING_MESSAGE);
+
+		unsubscribe();
+		hub.dispose();
+	} finally {
+		global.window = realWindow;
+	}
+});
+
+test("isNearlyDone covers the last stretch of both large and small queues", () => {
+	assert.strictEqual(isNearlyDone(0, 0), false);
+	assert.strictEqual(isNearlyDone(2, 42), false);
+	assert.strictEqual(isNearlyDone(38, 42), true);
+	assert.strictEqual(isNearlyDone(90, 100), true);
+	assert.strictEqual(isNearlyDone(500, 1000), false);
+	assert.strictEqual(isNearlyDone(4, 10), false);
 });

@@ -5,6 +5,16 @@ export type IndexingMessageContext = {
 export const INDEXING_WELCOME_MESSAGE =
 	"Thanks for using Similarity! I'm reading through your notes to learn what each one is about. All of this happens on your device.";
 
+export const INDEXING_FINISHING_MESSAGE = "Finishing up. Just a few more notes to read.";
+
+const FINISHING_RATIO = 0.9;
+const FINISHING_REMAINING = 3;
+
+export function isNearlyDone(processed: number, total: number): boolean {
+	if (total <= 0) return false;
+	return processed / total >= FINISHING_RATIO || total - processed <= FINISHING_REMAINING;
+}
+
 const GENERAL_MESSAGES = [
 	"Your notes never leave this device. No accounts, no cloud, no tracking.",
 	"This sidebar shows notes related to the one you have open, even if they aren't linked.",
