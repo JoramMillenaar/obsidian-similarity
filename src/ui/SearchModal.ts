@@ -2,14 +2,16 @@ import { App, Notice, Platform, SuggestModal, TFile } from "obsidian";
 import { InsertWikilinkAtCursorUseCase } from "../app/insertWikilinkAtCursor";
 import { SimilarSearchFeed, SimilarSearchResult } from "../search/similarSearchFeed";
 import { StatusHub } from "../status/statusHub";
-import { BannerState, computeBanner, subscribeBanner } from "./banner";
-import { renderBanner } from "./warning";
+import { computeBanner } from "./banner";
+import { mountBanner } from "./bannerView";
 import { textForNotice } from "./similarNoticeText";
 import { KeyedDebouncer } from "../core/util/debounce";
-import { RelatedNote } from "../types";
+import { RelatedNote, SimilarityTier } from "../types";
 import { renderSimilarityBar } from "./similarityBar";
 import { SettingsRepository } from "../ports";
 import { noteAgeText } from "./noteAge";
+import { groupByTier } from "./tierSections";
+import { SIMILARITY_TIER_LABELS } from "../core/vector/similarityTier";
 
 export type SearchModalDeps = {
 	similarSearchFeed: SimilarSearchFeed;
@@ -25,7 +27,7 @@ export class SearchModal extends SuggestModal<RelatedNote> {
 	private isAutoRefreshing = false;
 	private unsubscribeBanner?: () => void;
 	private unsubscribeRefreshSignal?: () => void;
-	private bannerEl?: HTMLElement;
+	private tierHeadings = new Map<string, SimilarityTier>();
 
 	private static readonly DEFAULT_EMPTY_STATE = "Type to search related notes.";
 	private static readonly LOADING_EMPTY_STATE = "Searching similar notes...";
@@ -65,7 +67,10 @@ export class SearchModal extends SuggestModal<RelatedNote> {
 
 	onOpen(): void {
 		void super.onOpen();
-		this.unsubscribeBanner = subscribeBanner(this.deps.statusHub, (banner) => this.renderBanner(banner));
+		const resultsParent = this.resultContainerEl.parentElement;
+		if (resultsParent) {
+			this.unsubscribeBanner = mountBanner(resultsParent, this.deps.statusHub, {before: this.resultContainerEl});
+		}
 		this.unsubscribeRefreshSignal = this.deps.similarSearchFeed.subscribeRefreshSignal(() => {
 			this.isAutoRefreshing = true;
 			this.inputEl.dispatchEvent(new Event("input"));
@@ -97,7 +102,7 @@ export class SearchModal extends SuggestModal<RelatedNote> {
 				try {
 					const result = await this.deps.similarSearchFeed.resolveForQuery(query);
 					this.emptyStateText = this.textFor(result);
-					resolve(result.items);
+					resolve(this.sortIntoTiers(result.items));
 				} catch (e) {
 					console.error("[Similarity] Failed to get related notes:", e);
 					this.emptyStateText = this.getNoResultsText();
@@ -140,7 +145,22 @@ export class SearchModal extends SuggestModal<RelatedNote> {
 		new Notice("Could not insert link: no active editor.");
 	}
 
+	private sortIntoTiers(items: RelatedNote[]): RelatedNote[] {
+		this.tierHeadings.clear();
+		const sorted: RelatedNote[] = [];
+		for (const section of groupByTier(items)) {
+			this.tierHeadings.set(section.items[0].id, section.tier);
+			sorted.push(...section.items);
+		}
+		return sorted;
+	}
+
 	renderSuggestion(value: RelatedNote, el: HTMLElement): void {
+		const headingTier = this.tierHeadings.get(value.id);
+		if (headingTier !== undefined) {
+			const heading = createDiv({cls: "suggestion-item mod-group similarity-suggestion-group", text: SIMILARITY_TIER_LABELS[headingTier]});
+			el.before(heading);
+		}
 		let fileName = value.id;
 		if (fileName.endsWith(".md")) fileName = fileName.slice(0, -3);
 		el.addClass("similarity-suggestion");
@@ -163,7 +183,7 @@ export class SearchModal extends SuggestModal<RelatedNote> {
 			const active = this.app.workspace.getActiveFile();
 			const result = await this.deps.similarSearchFeed.resolveForNote(active?.path ?? null);
 			this.emptyStateText = this.textFor(result);
-			return result.items;
+			return this.sortIntoTiers(result.items);
 		} catch (e) {
 			console.error("[Similarity] Failed to get initial suggestions:", e);
 			this.emptyStateText = this.getNoResultsText();
@@ -204,25 +224,4 @@ export class SearchModal extends SuggestModal<RelatedNote> {
 		const banner = computeBanner(this.deps.statusHub.getEngineState(), indexingState);
 		return banner.visible && banner.tone === "info";
 	}
-
-	private renderBanner(banner: BannerState) {
-		if (!this.bannerEl) {
-			this.bannerEl = this.resultContainerEl.parentElement?.insertBefore(
-				createBannerElement(),
-				this.resultContainerEl,
-			) ?? undefined;
-		}
-		if (!this.bannerEl) {
-			return;
-		}
-
-		renderBanner(this.bannerEl, banner);
-	}
-
-}
-
-function createBannerElement() {
-	const element = createDiv();
-	element.className = "similarity-index-banner is-hidden";
-	return element;
 }

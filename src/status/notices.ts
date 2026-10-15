@@ -1,5 +1,6 @@
 import { IndexingQueueSnapshot } from "../types";
 import { EngineStatus } from "../embedding/engine";
+import { INDEXING_DONE_MESSAGE, INDEXING_WELCOME_MESSAGE } from "./indexingMessages";
 
 /**
  * Everything the user can be told about why results are (or are not) showing.
@@ -25,8 +26,9 @@ export type BannerState = {
 	processed: number;
 	total: number;
 	wasmWarning: boolean;
-	tone: "info" | "warning";
+	tone: "info" | "warning" | "success";
 	action?: "open-settings";
+	rotating?: boolean;
 };
 
 const MIN_ITEMS_FOR_INDEXING_BANNER = 8;
@@ -112,11 +114,23 @@ function indexingBanner(indexing: IndexingQueueSnapshot, engine: EngineStatus): 
 
 	return {
 		visible: true,
-		message: "Optimizing your experience. Results may shift as more notes are processed.",
+		message: INDEXING_WELCOME_MESSAGE,
 		processed: indexing.processed,
 		total: indexing.total,
 		wasmWarning: engine.kind === "ready" && engine.device === "wasm",
 		tone: "info",
+		rotating: true,
+	};
+}
+
+export function indexingDoneBanner(total: number): BannerState {
+	return {
+		visible: true,
+		message: INDEXING_DONE_MESSAGE,
+		processed: total,
+		total,
+		wasmWarning: false,
+		tone: "success",
 	};
 }
 
