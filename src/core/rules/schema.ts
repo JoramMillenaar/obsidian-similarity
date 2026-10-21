@@ -5,7 +5,6 @@ export function normalizeSettings(
 	value: Partial<SimilaritySettings> | undefined,
 ): SimilaritySettings {
 	const ignored = value?.ignoredPaths;
-	const advancedOpen = value?.advancedOpen;
 	const maxRawMarkdownChars = value?.maxRawMarkdownChars;
 	const maxExtractedChars = value?.maxExtractedChars;
 	const searchMode = value?.searchMode;
@@ -23,9 +22,6 @@ export function normalizeSettings(
 		ignoredPaths: Array.isArray(ignored)
 			? ignored
 			: DEFAULT_SETTINGS.ignoredPaths,
-		advancedOpen: typeof advancedOpen === "boolean"
-			? advancedOpen
-			: DEFAULT_SETTINGS.advancedOpen,
 		maxRawMarkdownChars: normalizedMaxRawMarkdownChars,
 		maxExtractedChars: normalizedMaxExtractedChars,
 		searchMode: typeof searchMode === "string" && SEARCH_MODES.some((mode) => mode.id === searchMode)

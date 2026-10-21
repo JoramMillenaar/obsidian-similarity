@@ -1,4 +1,13 @@
-import { App, Notice, PluginSettingTab, Setting, setIcon, SettingDefinitionItem, TFolder, ToggleComponent } from "obsidian";
+import {
+	App,
+	Notice,
+	PluginSettingTab,
+	setIcon,
+	Setting,
+	SettingDefinitionItem,
+	TFolder,
+	ToggleComponent
+} from "obsidian";
 import SimilarNotes from "../main";
 import { SEARCH_MODES } from "../constants";
 import { SearchMode } from "../types";
@@ -117,6 +126,48 @@ export class SettingView extends PluginSettingTab {
 				],
 			},
 			{
+				name: "Max raw markdown characters",
+				desc: "Upper bound applied before MarkdownRenderer runs.",
+				control: {
+					type: "number",
+					key: "maxRawMarkdownChars",
+					min: 1,
+					validate: (value) =>
+						value <= 0 ? "Max raw markdown characters must be greater than 0." : undefined,
+				},
+			},
+			{
+				name: "Max extracted characters",
+				desc: "Upper bound for prepared plain text after extraction.",
+				control: {
+					type: "number",
+					key: "maxExtractedChars",
+					min: 1,
+					validate: (value) =>
+						value <= 0 ? "Max extracted characters must be greater than 0." : undefined,
+				},
+			},
+			{
+				name: "Disable local AI on this device",
+				desc: "Turns the AI model off on this device only (this setting is not synced). Similar notes keep working from what was already indexed, but nothing new is indexed and text search is unavailable. Use this if the model crashes or slows this device down.",
+				render: (setting) => {
+					setting.addToggle((toggle) => {
+						toggle.setValue(this.isModelDisabled());
+						toggle.onChange((value) => {
+							void this.setModelDisabled(value);
+						});
+						this.modelDisabledToggle = toggle;
+					});
+					setting.nameEl.prepend(createWarningIcon(setting.nameEl));
+					this.modelDisabledSettingEl = setting.settingEl;
+					setting.settingEl.toggleClass("similarity-setting-warning", this.isModelDisabled());
+					return () => {
+						this.modelDisabledToggle = undefined;
+						this.modelDisabledSettingEl = undefined;
+					};
+				},
+			},
+			{
 				name: "Feedback",
 				desc: "Found a bug or have an idea? Reports open in your browser or mail client, so you see exactly what is sent.",
 				render: (setting) => {
@@ -128,82 +179,20 @@ export class SettingView extends PluginSettingTab {
 					}
 				},
 			},
-			{
-				name: "Show advanced settings",
-				control: {type: "toggle", key: "advancedOpen", disabled: () => this.isModelDisabled()},
-			},
-			{
-				type: "group",
-				heading: "Advanced",
-				// Forced open while the model is disabled so the warning below can't be missed.
-				visible: () => this.deps.settingsRepo.get().advancedOpen || this.isModelDisabled(),
-				items: [
-					{
-						name: "Disable local AI on this device",
-						desc: "Turns the AI model off on this device only (this setting is not synced). Similar notes keep working from what was already indexed, but nothing new is indexed and text search is unavailable. Use this if the model crashes or slows this device down.",
-						render: (setting) => {
-							setting.addToggle((toggle) => {
-								toggle.setValue(this.isModelDisabled());
-								toggle.onChange((value) => {
-									void this.setModelDisabled(value);
-								});
-								this.modelDisabledToggle = toggle;
-							});
-							setting.nameEl.prepend(createWarningIcon(setting.nameEl));
-							this.modelDisabledSettingEl = setting.settingEl;
-							setting.settingEl.toggleClass("similarity-setting-warning", this.isModelDisabled());
-							return () => {
-								this.modelDisabledToggle = undefined;
-								this.modelDisabledSettingEl = undefined;
-							};
-						},
-					},
-					{
-						name: "Max raw markdown characters",
-						desc: "Upper bound applied before MarkdownRenderer runs.",
-						control: {
-							type: "number",
-							key: "maxRawMarkdownChars",
-							min: 1,
-							validate: (value) =>
-								value <= 0 ? "Max raw markdown characters must be greater than 0." : undefined,
-						},
-					},
-					{
-						name: "Max extracted characters",
-						desc: "Upper bound for prepared plain text after extraction.",
-						control: {
-							type: "number",
-							key: "maxExtractedChars",
-							min: 1,
-							validate: (value) =>
-								value <= 0 ? "Max extracted characters must be greater than 0." : undefined,
-						},
-					},
-				],
-			},
 		];
 	}
 
 	getControlValue(key: string): unknown {
 		const settings = this.deps.settingsRepo.get();
 
-		if (key === "advancedOpen") {
-			return settings.advancedOpen || this.isModelDisabled();
-		}
 		return settings[key as NumericSettingKey];
 	}
 
 	async setControlValue(key: string, value: unknown): Promise<void> {
-		if (key === "advancedOpen") {
-			await this.deps.settingsRepo.updatePartial({advancedOpen: value as boolean});
-			this.refreshDomState();
-			return;
-		}
 		await this.deps.updateSettings({[key]: value as number});
 	}
 
-	private ignoredPathIcon(path: string): {name: string, label: string} {
+	private ignoredPathIcon(path: string): { name: string, label: string } {
 		const file = this.app.vault.getAbstractFileByPath(path);
 		if (!file) return {name: "file-question", label: "Not found in this vault"};
 		return file instanceof TFolder ? {name: "folder", label: "Folder"} : {name: "file-text", label: "Note"};
