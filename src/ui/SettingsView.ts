@@ -7,7 +7,6 @@ import { UpdateSettingsUseCase } from "../app/updateSettings";
 import { EngineStateReader, EngineStatus, ModelRequestSupersededError } from "../embedding/engine";
 import { FEEDBACK_ACTIONS, OpenFeedback } from "./FeedbackModal";
 import { createWarningIcon } from "./warning";
-import { SimilarNotesListView, VIEW_TYPE_SIMILARITY } from "./SimilarNotesListView";
 import { IgnorePathSuggest } from "./IgnorePathSuggest";
 
 export type SettingsViewDeps = {
@@ -79,11 +78,6 @@ export class SettingView extends PluginSettingTab {
 						});
 					});
 				},
-			},
-			{
-				name: "Show dates (beta)",
-				desc: "Show how long ago each note was created in similar notes and search results. (experimental feature)",
-				control: {type: "toggle", key: "showDates"},
 			},
 			{
 				type: "page",
@@ -197,7 +191,6 @@ export class SettingView extends PluginSettingTab {
 		if (key === "advancedOpen") {
 			return settings.advancedOpen || this.isModelDisabled();
 		}
-		if (key === "showDates") return settings.showDates;
 		return settings[key as NumericSettingKey];
 	}
 
@@ -205,13 +198,6 @@ export class SettingView extends PluginSettingTab {
 		if (key === "advancedOpen") {
 			await this.deps.settingsRepo.updatePartial({advancedOpen: value as boolean});
 			this.refreshDomState();
-			return;
-		}
-		if (key === "showDates") {
-			await this.deps.settingsRepo.updatePartial({showDates: value as boolean});
-			for (const leaf of this.app.workspace.getLeavesOfType(VIEW_TYPE_SIMILARITY)) {
-				if (leaf.view instanceof SimilarNotesListView) leaf.view.refresh();
-			}
 			return;
 		}
 		await this.deps.updateSettings({[key]: value as number});

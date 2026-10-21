@@ -38,7 +38,6 @@ export default class SimilarNotes extends Plugin {
 				similarSearchFeed: this.appContainer.similarSearchFeed,
 				statusHub: this.appContainer.statusHub,
 				insertWikilinkAtCursor: this.appContainer.insertWikilinkAtCursor,
-				settingsRepo: this.appContainer.settingsRepo,
 			}).open();
 		};
 

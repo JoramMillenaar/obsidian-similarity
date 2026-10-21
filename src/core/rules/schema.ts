@@ -26,9 +26,6 @@ export function normalizeSettings(
 		advancedOpen: typeof advancedOpen === "boolean"
 			? advancedOpen
 			: DEFAULT_SETTINGS.advancedOpen,
-		showDates: typeof value?.showDates === "boolean"
-			? value.showDates
-			: DEFAULT_SETTINGS.showDates,
 		maxRawMarkdownChars: normalizedMaxRawMarkdownChars,
 		maxExtractedChars: normalizedMaxExtractedChars,
 		searchMode: typeof searchMode === "string" && SEARCH_MODES.some((mode) => mode.id === searchMode)
