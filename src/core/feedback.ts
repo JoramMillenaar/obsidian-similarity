@@ -20,7 +20,6 @@ export type EnvironmentInfo = DeviceInfo & {
 	searchMode: SearchMode;
 	maxRawMarkdownChars: number;
 	maxExtractedChars: number;
-	maxOverlapPercent: number;
 };
 
 export type FeedbackReport = {
@@ -58,7 +57,7 @@ function formatEnvironment(env: EnvironmentInfo): string {
 	return [
 		`Similarity ${env.pluginVersion} · Obsidian ${env.obsidianVersion} · ${env.platform}`,
 		`Model: ${model} · ${env.indexedNotes} notes indexed`,
-		`Search mode: ${env.searchMode} · limits ${env.maxRawMarkdownChars}/${env.maxExtractedChars}/${env.maxOverlapPercent}%`,
+		`Search mode: ${env.searchMode} · limits ${env.maxRawMarkdownChars}/${env.maxExtractedChars}`,
 		`Hardware: ${hardware}`,
 		`UA: ${env.userAgent}`,
 	].join("\n");

@@ -10,11 +10,10 @@ export type { GenerateDocumentEmbeddings } from './types';
 // of the model's max sequence length.
 const SPECIAL_TOKEN_RESERVE = 2;
 
-/** Builds a function that chunks a document to fit `model`'s token budget and embeds each chunk. */
 export function makeGenerateDocumentEmbeddings(model: EmbeddingModel): GenerateDocumentEmbeddings {
 	const chunkTokenBudget = model.config.maxTokens - SPECIAL_TOKEN_RESERVE;
 
-	return async function generateDocumentEmbeddings(text, maxOverlapPercent, lane) {
+	return async function generateDocumentEmbeddings(text, lane) {
 		await model.ready;
 
 		const metadata = {
@@ -24,13 +23,18 @@ export function makeGenerateDocumentEmbeddings(model: EmbeddingModel): GenerateD
 
 		if (!text.trim()) return { chunks: [], metadata };
 
-		const chunks = chunkText(text, model.countTokens, chunkTokenBudget, maxOverlapPercent);
+		const {maxOverlapPercent, minSentenceWords} = model.config;
+		const chunks = chunkText(text, model.countTokens, chunkTokenBudget, maxOverlapPercent, 0, minSentenceWords);
 
 		const embedded: EmbeddedChunk[] = [];
 		for (const chunk of chunks) {
-			const data = await model.embed(chunk.text, lane);
-			if (data.length) {
-				embedded.push({ embedding: quantizeEmbedding(normalizeEmbedding(data)), start: chunk.start, end: chunk.end });
+			const vectors = await model.embedSentences(chunk.sentences.map((sentence) => sentence.text), lane);
+			for (let i = chunk.overlap; i < chunk.sentences.length; i++) {
+				const data = vectors[i];
+				const {start, end} = chunk.sentences[i];
+				if (data.length) {
+					embedded.push({ embedding: quantizeEmbedding(normalizeEmbedding(data)), start, end });
+				}
 			}
 		}
 		return { chunks: embedded, metadata };

@@ -1,6 +1,8 @@
 import esbuild from "esbuild";
 import process from "process";
 import { builtinModules } from "module";
+import { readFile } from "fs/promises";
+import path from "path";
 
 const banner =
 `/*
@@ -11,15 +13,6 @@ if you want to view the source, please visit the github repository of this plugi
 
 const prod = (process.argv[2] === "production");
 
-const workerBuild = await esbuild.build({
-	entryPoints: ["src/embedding/host/worker/bootstrap.ts"],
-	bundle: true,
-	platform: "browser",
-	format: "iife",
-	target: "esnext",
-	write: false,
-	minify: prod,
-});
 // Obsidian's BrowserWindow sets `nodeIntegrationInWorker: true` (with `contextIsolation: false`),
 // so a Worker created here still gets a real Node `process` global, injected as a plain mutable
 // property (not a locked-down proxy). @huggingface/transformers treats `process.release.name === 'node'`
@@ -30,7 +23,37 @@ const workerBuild = await esbuild.build({
 // evaluates (import hoisting would otherwise run transformers.js's env detection first), so it's
 // prepended as raw text ahead of the bundle rather than written as part of bootstrap.ts.
 const workerEnvironmentShim = `try { delete self.process; } catch (e) { try { self.process = undefined; } catch (e2) {} }\n`;
-const workerCodeString = JSON.stringify(workerEnvironmentShim + workerBuild.outputFiles[0].text);
+
+/**
+ * Inlines the bundled embedding worker where workerProvider.ts names
+ * `__WORKER_CONTENTS_PLACEHOLDER__`. The worker is bundled again on every build, and its sources
+ * are watched too: main.ts doesn't import them, so otherwise a dev watcher would keep inlining
+ * the worker it bundled when it started, running it against a newer main bundle.
+ */
+const embeddingWorker = {
+	name: "embedding-worker",
+	setup(build) {
+		build.onLoad({filter: /[\\/]src[\\/]embedding[\\/]host[\\/]workerProvider\.ts$/}, async (args) => {
+			const worker = await esbuild.build({
+				entryPoints: ["src/embedding/host/worker/bootstrap.ts"],
+				bundle: true,
+				platform: "browser",
+				format: "iife",
+				target: "esnext",
+				write: false,
+				minify: prod,
+				metafile: true,
+			});
+			const workerCode = JSON.stringify(workerEnvironmentShim + worker.outputFiles[0].text);
+			const source = await readFile(args.path, "utf8");
+			return {
+				contents: source.replaceAll("__WORKER_CONTENTS_PLACEHOLDER__", () => workerCode),
+				loader: "ts",
+				watchFiles: Object.keys(worker.metafile.inputs).map((input) => path.resolve(input)),
+			};
+		});
+	},
+};
 
 const context = await esbuild.context({
 	banner: {
@@ -61,8 +84,8 @@ const context = await esbuild.context({
 	treeShaking: true,
 	outfile: "main.js",
 	minify: prod,
+	plugins: [embeddingWorker],
 	define: {
-		__WORKER_CONTENTS_PLACEHOLDER__: workerCodeString, // Inline the bundled embedding worker code
 		__DEV__: JSON.stringify(!prod), // Dev-only features; folds to `false` in production so they're tree-shaken out
 	},
 });

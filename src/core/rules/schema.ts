@@ -1,5 +1,5 @@
 import { DeviceSettings, IndexMetadata, ModelIndexFile, SCHEMA_VERSION, SimilarityPluginData, SimilaritySettings } from "../../types";
-import { DEFAULT_DEVICE_SETTINGS, DEFAULT_SETTINGS, EMBEDDING_MODELS, MAX_OVERLAP_PERCENT, SEARCH_MODES } from "../../constants";
+import { DEFAULT_DEVICE_SETTINGS, DEFAULT_SETTINGS, SEARCH_MODES } from "../../constants";
 
 export function normalizeSettings(
 	value: Partial<SimilaritySettings> | undefined,
@@ -8,8 +8,6 @@ export function normalizeSettings(
 	const advancedOpen = value?.advancedOpen;
 	const maxRawMarkdownChars = value?.maxRawMarkdownChars;
 	const maxExtractedChars = value?.maxExtractedChars;
-	const maxOverlapPercent = value?.maxOverlapPercent;
-	const embeddingModelId = value?.embeddingModelId;
 	const searchMode = value?.searchMode;
 	const lastAppliedMaxRawMarkdownChars = value?.lastAppliedMaxRawMarkdownChars;
 	const lastAppliedMaxExtractedChars = value?.lastAppliedMaxExtractedChars;
@@ -33,12 +31,6 @@ export function normalizeSettings(
 			: DEFAULT_SETTINGS.showDates,
 		maxRawMarkdownChars: normalizedMaxRawMarkdownChars,
 		maxExtractedChars: normalizedMaxExtractedChars,
-		maxOverlapPercent: typeof maxOverlapPercent === "number" && maxOverlapPercent >= 0
-			? Math.min(maxOverlapPercent, MAX_OVERLAP_PERCENT)
-			: DEFAULT_SETTINGS.maxOverlapPercent,
-		embeddingModelId: typeof embeddingModelId === "string" && embeddingModelId in EMBEDDING_MODELS
-			? embeddingModelId
-			: DEFAULT_SETTINGS.embeddingModelId,
 		searchMode: typeof searchMode === "string" && SEARCH_MODES.some((mode) => mode.id === searchMode)
 			? searchMode
 			: DEFAULT_SETTINGS.searchMode,

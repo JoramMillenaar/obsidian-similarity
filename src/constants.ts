@@ -1,4 +1,4 @@
-import { DeviceSettings, EmbeddingModelConfig, EmbeddingModelId, SearchMode, SimilaritySettings } from "./types";
+import { DeprecatedModelId, DeviceSettings, EmbeddingModelConfig, EmbeddingModelId, SearchMode, SimilaritySettings } from "./types";
 
 export const VIEW_TYPE_SIMILARITY = "similarity";
 
@@ -6,37 +6,28 @@ export const MAX_OVERLAP_PERCENT = 50;
 
 export const MIN_DOWNLOAD_PROGRESS_BYTES = 1_000_000;
 
-export const EMBEDDING_MODELS: Record<EmbeddingModelId, EmbeddingModelConfig> = {
-	"xenova-all-MiniLM-L6-v2": {
-		id: "xenova-all-MiniLM-L6-v2",
-		label: "English",
-		repoId: "JoramMillenaar/all-MiniLM-L6-v2-vocab-quantized",
-		dim: 384,
-		maxTokens: 256,
-		pooling: "mean",
-		tierThresholds: [0.46, 0.64, 0.85],
-	},
-	"xenova-paraphrase-multilingual-MiniLM-L12-v2": {
-		id: "xenova-paraphrase-multilingual-MiniLM-L12-v2",
-		label: "Multilingual (slower)",
-		repoId: "JoramMillenaar/paraphrase-multilingual-MiniLM-L12-v2-vocab-quantized",
-		dim: 384,
-		maxTokens: 128,
-		pooling: "mean",
-		tierThresholds: [0.51, 0.72, 0.90],
-	},
-	"xenova-bge-small-zh-v1.5": {
-		id: "xenova-bge-small-zh-v1.5",
-		label: "Chinese",
-		repoId: "JoramMillenaar/bge-small-zh-v1.5-vocab-quantized",
-		dim: 512,
-		maxTokens: 512,
-		pooling: "cls",
-		tierThresholds: [0.64, 0.80, 0.87],
-	},
+
+export const EMBEDDING_MODEL: EmbeddingModelConfig = {
+	id: "xenova-paraphrase-multilingual-MiniLM-L12-v2-late",
+	label: "Multilingual",
+	repoId: "JoramMillenaar/paraphrase-multilingual-MiniLM-L12-v2-vocab-quantized",
+	dim: 384,
+	maxTokens: 128,
+	maxOverlapPercent: 15,
+	minSentenceWords: 5,
+	tierThresholds: [0.51, 0.72, 0.90],
 };
 
-export const DEFAULT_EMBEDDING_MODEL_ID: EmbeddingModelId = "xenova-all-MiniLM-L6-v2";
+export const EMBEDDING_MODELS: Record<EmbeddingModelId, EmbeddingModelConfig> = {
+	[EMBEDDING_MODEL.id]: EMBEDDING_MODEL,
+};
+
+
+export const DEPRECATED_MODEL_IDS: readonly DeprecatedModelId[] = [
+	"xenova-all-MiniLM-L6-v2",
+	"xenova-paraphrase-multilingual-MiniLM-L12-v2",
+	"xenova-bge-small-zh-v1.5",
+];
 
 export const DEFAULT_SEARCH_MODE: SearchMode = "granular";
 
@@ -61,8 +52,6 @@ export const DEFAULT_SETTINGS: SimilaritySettings = {
 	showDates: true,
 	maxRawMarkdownChars: 20000,
 	maxExtractedChars: 4800,
-	maxOverlapPercent: 15,
-	embeddingModelId: DEFAULT_EMBEDDING_MODEL_ID,
 	searchMode: DEFAULT_SEARCH_MODE,
 	lastAppliedMaxRawMarkdownChars: 20000,
 	lastAppliedMaxExtractedChars: 4800,

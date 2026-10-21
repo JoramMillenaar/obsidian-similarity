@@ -1,5 +1,6 @@
 import { normalizePath, Plugin } from "obsidian";
 
+/** The single vector file written before indexes were kept per model (English model only). */
 export class LegacyEmbeddingFileStore {
 	private readonly path: string;
 
@@ -10,16 +11,11 @@ export class LegacyEmbeddingFileStore {
 		this.path = normalizePath(`${dir}/embeddings.bin`);
 	}
 
-	async read(): Promise<ArrayBuffer | null> {
+	/** Resolves with whether there was anything to delete. */
+	async remove(): Promise<boolean> {
 		const adapter = this.plugin.app.vault.adapter;
-		if (!(await adapter.exists(this.path))) return null;
-		return await adapter.readBinary(this.path);
-	}
-
-	async remove(): Promise<void> {
-		const adapter = this.plugin.app.vault.adapter;
-		if (await adapter.exists(this.path)) {
-			await adapter.remove(this.path);
-		}
+		if (!(await adapter.exists(this.path))) return false;
+		await adapter.remove(this.path);
+		return true;
 	}
 }

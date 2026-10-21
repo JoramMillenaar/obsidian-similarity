@@ -10,6 +10,8 @@ export interface TextChunk {
 	text: string;
 	start: number;
 	end: number;
+	sentences: Sentence[];
+	overlap: number;
 }
 
 export type TokenCounter = (text: string) => number;
@@ -21,6 +23,16 @@ interface Atom extends Sentence {
 // Yields each sentence with its span in `text`. Offsets are of the TRIMMED
 // sentence, so a chunk's [start, end) maps back onto the caller's own string.
 const sentenceSegmenter = new Intl.Segmenter('und', {granularity: 'sentence'});
+
+const wordSegmenter = new Intl.Segmenter('und', {granularity: 'word'});
+
+export function countWords(text: string): number {
+	let words = 0;
+	for (const {isWordLike} of wordSegmenter.segment(text)) {
+		if (isWordLike) words++;
+	}
+	return words;
+}
 
 export function segmentSentences(text: string): Sentence[] {
 	const sentences: Sentence[] = [];
@@ -78,6 +90,30 @@ function packAtoms(atoms: Atom[], budget: number, minTokens: number): Atom[][] {
 	return runs;
 }
 
+function mergeShortSentences(atoms: Atom[], minWords: number): Sentence[] {
+	const groups: Atom[][] = [];
+	let current: Atom[] = [];
+	let words = 0;
+	for (const atom of atoms) {
+		current.push(atom);
+		words += countWords(atom.text);
+		if (words >= minWords) {
+			groups.push(current);
+			current = [];
+			words = 0;
+		}
+	}
+	if (current.length > 0) {
+		if (groups.length > 0) groups[groups.length - 1].push(...current);
+		else groups.push(current);
+	}
+	return groups.map((group) => ({
+		text: group.map((atom) => atom.text).join(' '),
+		start: group[0].start,
+		end: group[group.length - 1].end,
+	}));
+}
+
 function splitOversizedSentence(
 	sentence: Atom,
 	source: string,
@@ -102,7 +138,7 @@ function splitOversizedSentence(
 		const text = source.slice(start, end);
 		// Recount on the joined slice: subword tokenizers aren't additive, so the
 		// sum of per-word counts is only an estimate. A piece can still land over
-		// budget here, in which case the caller's tokenizer truncates it.
+		// budget here, in which case the model truncates it.
 		return {text, start, end, tokens: countTokens(text)};
 	});
 }
@@ -112,7 +148,8 @@ export function chunkText(
 	countTokens: TokenCounter,
 	chunkTokenBudget: number,
 	maxOverlapPercent = 0,
-	minChunkTokens = 0
+	minChunkTokens = 0,
+	minSentenceWords = 0
 ): TextChunk[] {
 	const clampedPercent = Math.max(0, Math.min(maxOverlapPercent, MAX_OVERLAP_PERCENT));
 	const overlapBudget = Math.floor((chunkTokenBudget * clampedPercent) / 100);
@@ -147,12 +184,18 @@ export function chunkText(
 	};
 
 	return runs.map((canonical, index) => {
-		const embedded = index === 0 ? canonical : [...carryOverlap(runs[index - 1]), ...canonical];
+		const carried = index === 0 ? [] : carryOverlap(runs[index - 1]);
+		const embedded = [...carried, ...canonical];
 		const chunkText = embedded.map((atom) => atom.text).join(' ');
 		return {
 			text: chunkText,
 			start: embedded[0].start,
 			end: embedded[embedded.length - 1].end,
+			sentences: [
+				...carried.map(({text, start, end}) => ({text, start, end})),
+				...mergeShortSentences(canonical, minSentenceWords),
+			],
+			overlap: carried.length,
 		};
 	});
 }

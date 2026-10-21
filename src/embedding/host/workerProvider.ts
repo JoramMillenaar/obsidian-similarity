@@ -186,7 +186,7 @@ export class WorkerMessenger {
 	};
 
 	/** Sends `payload` to the worker to embed in `lane`, rejecting if it does not finish in time. */
-	sendMessage(payload: string, maxOverlapPercent: number, lane: EmbedLane): Promise<EmbeddingResult> {
+	sendMessage(payload: string, lane: EmbedLane): Promise<EmbeddingResult> {
 		const worker = this.worker;
 		if (!worker) return Promise.reject(new Error("Could not find the embedding worker. Is it loaded?"));
 		if (this.loadError) return Promise.reject(this.loadError);
@@ -201,7 +201,7 @@ export class WorkerMessenger {
 			this.pendingRequests.set(requestId, {resolve, reject, timeoutId});
 		});
 
-		const message: WorkerRequest = {requestId, type: 'embed', payload, maxOverlapPercent, lane};
+		const message: WorkerRequest = {requestId, type: 'embed', payload, lane};
 		worker.postMessage(message);
 		return promise;
 	}
@@ -263,7 +263,7 @@ class WorkerEmbeddingProvider implements EmbeddingPort {
 	constructor(private readonly messenger: WorkerMessenger, readonly device: Device) {}
 
 	async embed(text: string, options: EmbedOptions): Promise<EmbeddingResult | null> {
-		return await this.messenger.sendMessage(text, options.maxOverlapPercent, options.lane);
+		return await this.messenger.sendMessage(text, options.lane);
 	}
 
 	unload(): Promise<void> {

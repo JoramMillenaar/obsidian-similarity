@@ -1,4 +1,4 @@
-import { env, pipeline, FeatureExtractionPipeline, ProgressInfo } from '@huggingface/transformers';
+import { env, pipeline, FeatureExtractionPipeline, ProgressInfo, Tensor } from '@huggingface/transformers';
 import { EmbeddingModelConfig, EmbeddingQuant } from '../../types';
 import { Device, ModelLoadProgressCallback } from './types';
 import { EmbedLane } from '../../ports';
@@ -54,6 +54,41 @@ function webGpuVariant(f16: boolean): ModelVariant {
 	return {device: 'webgpu', dtype: ffn, modelFileName: 'model_vocab4', quant: {vocab: 'q4', ffn}};
 }
 
+type SpecialTokens = {prefix: number[]; suffix: number[]};
+
+type Tokenizer = FeatureExtractionPipeline['tokenizer'];
+
+function specialTokensOf(tokenizer: Tokenizer): SpecialTokens {
+	const bare = tokenizer.encode('a', {add_special_tokens: false});
+	const full = tokenizer.encode('a', {add_special_tokens: true});
+	for (let at = 0; at + bare.length <= full.length; at++) {
+		if (bare.every((id, i) => full[at + i] === id)) {
+			return {prefix: full.slice(0, at), suffix: full.slice(at + bare.length)};
+		}
+	}
+	return {prefix: [], suffix: []};
+}
+
+type RowRange = [start: number, end: number];
+
+function meanPool(hidden: Float32Array, dim: number, ranges: RowRange[]): Float32Array {
+	const pooled = new Float32Array(dim);
+	let count = 0;
+	for (const [start, end] of ranges) {
+		for (let row = start; row < end; row++) {
+			const offset = row * dim;
+			for (let k = 0; k < dim; k++) pooled[k] += hidden[offset + k];
+			count++;
+		}
+	}
+	if (count > 0) for (let k = 0; k < dim; k++) pooled[k] /= count;
+	return pooled;
+}
+
+function int64Tensor(values: number[]): Tensor {
+	return new Tensor('int64', BigInt64Array.from(values, (value) => BigInt(value)), [1, values.length]);
+}
+
 function describeLoadFailure(error: unknown, config: EmbeddingModelConfig): string {
 	const detail = error instanceof Error ? error.message : String(error);
 	const looksLikeNetwork = !navigator.onLine || /failed to fetch|network|load model file/i.test(detail);
@@ -63,16 +98,15 @@ function describeLoadFailure(error: unknown, config: EmbeddingModelConfig): stri
 	return `Could not load the ${config.label} model: ${detail}`;
 }
 
-/** Wraps a single loaded transformers.js feature-extraction pipeline: loads it, runs prioritized, serialized inference, and disposes it. */
 export class EmbeddingModel {
 	#pipeline: FeatureExtractionPipeline | null = null;
+	#specialTokens: SpecialTokens = {prefix: [], suffix: []};
 	#variant: ModelVariant = WASM_VARIANT;
 	readonly #queue = new InferenceQueue();
 	#disposed = false;
 	readonly config: EmbeddingModelConfig;
 	ready: Promise<void>;
 
-	/** `allowWebGpu: false` forces the WASM backend without probing for a GPU adapter (used on mobile). */
 	constructor(config: EmbeddingModelConfig, onProgress?: ModelLoadProgressCallback, allowWebGpu = true) {
 		this.config = config;
 		this.ready = this.#initialize(onProgress, allowWebGpu);
@@ -111,6 +145,7 @@ export class EmbeddingModel {
 			await loaded.dispose();
 			return;
 		}
+		this.#specialTokens = specialTokensOf(loaded.tokenizer);
 		this.#pipeline = loaded;
 	}
 
@@ -127,7 +162,6 @@ export class EmbeddingModel {
 		});
 	}
 
-	/** Releases the underlying pipeline once any in-flight `embed` call has settled. Safe to call more than once. */
 	async dispose(): Promise<void> {
 		if (this.#disposed) return;
 		this.#disposed = true;
@@ -140,34 +174,47 @@ export class EmbeddingModel {
 		await loaded.dispose();
 	}
 
-	/** Token count for `text` under this model's tokenizer, excluding special tokens. */
 	countTokens = (text: string): number => {
 		if (!this.#pipeline) throw new Error("pipeline not yet initialized");
 		return this.#pipeline.tokenizer.encode(text, {add_special_tokens: false}).length;
 	};
 
-	/**
-	 * Runs inference for one chunk in `lane`; see {@link InferenceQueue} for the ordering.
-	 * Not normalized here — `embedDocument.ts` always L2-normalizes the result itself right
-	 * before quantizing, so normalizing again at the pipeline level would just redo that work.
-	 */
-	embed(input: string, lane: EmbedLane): Promise<Float32Array> {
+	embedSentences(sentences: string[], lane: EmbedLane): Promise<Float32Array[]> {
 		return this.#queue.run(lane, async () => {
-			if (!this.#pipeline) throw new Error("pipeline not yet initialized");
-			const result: { data: Float32Array } = await this.#pipeline(input, {
-				pooling: this.config.pooling,
-				normalize: false,
+			const loaded = this.#pipeline;
+			if (!loaded) throw new Error("pipeline not yet initialized");
+
+			const {prefix, suffix} = this.#specialTokens;
+			const contentEnd = this.config.maxTokens - suffix.length;
+			const ids = [...prefix];
+			const spans: RowRange[] = [];
+			for (const sentence of sentences) {
+				const start = ids.length;
+				const tokens = loaded.tokenizer.encode(sentence, {add_special_tokens: false});
+				ids.push(...tokens.slice(0, Math.max(0, contentEnd - start)));
+				spans.push([start, ids.length]);
+			}
+			ids.push(...suffix);
+
+			const output = await loaded.model({
+				input_ids: int64Tensor(ids),
+				attention_mask: int64Tensor(ids.map(() => 1)),
 			});
-			return result.data;
+			const states: Tensor = output.last_hidden_state ?? output.logits ?? output.token_embeddings;
+			const hidden = states.to('float32');
+			const data = hidden.data as Float32Array;
+			const dim = hidden.dims[2];
+			const edges: RowRange[] = [[0, prefix.length], [ids.length - suffix.length, ids.length]];
+			return spans.map(([start, end]) => (
+				end > start ? meanPool(data, dim, [[start, end], ...edges]) : new Float32Array(0)
+			));
 		});
 	}
 
-	/** The compute backend ('wasm' or 'webgpu') this model ended up loading on. */
 	getDevice(): Device {
 		return this.#variant.device;
 	}
 
-	/** Vocab/FFN precision of the model file this ended up loading. */
 	getQuant(): EmbeddingQuant {
 		return this.#variant.quant;
 	}

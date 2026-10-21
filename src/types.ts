@@ -1,12 +1,12 @@
-/** Quantized unit-vector embedding: see core/vector/similarity.ts and codec.ts. */
 export type Embedding = Int8Array;
 
-export type EmbeddingModelId =
+
+export type EmbeddingModelId = "xenova-paraphrase-multilingual-MiniLM-L12-v2-late";
+
+export type DeprecatedModelId =
 	| "xenova-all-MiniLM-L6-v2"
 	| "xenova-paraphrase-multilingual-MiniLM-L12-v2"
 	| "xenova-bge-small-zh-v1.5";
-
-export type PoolingStrategy = "mean" | "cls";
 
 export type EmbeddingQuant = {
 	vocab: "q4" | "q8";
@@ -19,7 +19,8 @@ export type EmbeddingModelConfig = {
 	repoId: string;
 	dim: number;
 	maxTokens: number;
-	pooling: PoolingStrategy;
+	maxOverlapPercent: number;
+	minSentenceWords: number;
 	tierThresholds: TierThresholds;
 };
 
@@ -82,8 +83,6 @@ export interface SimilaritySettings {
 	showDates: boolean;
 	maxRawMarkdownChars: number;
 	maxExtractedChars: number;
-	maxOverlapPercent: number;
-	embeddingModelId: EmbeddingModelId;
 	searchMode: SearchMode;
 	lastAppliedMaxRawMarkdownChars: number;
 	lastAppliedMaxExtractedChars: number;
