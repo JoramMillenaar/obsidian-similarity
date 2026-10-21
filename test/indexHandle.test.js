@@ -249,3 +249,60 @@ test("query labels each result with the index model's tier and scaled score", as
 	assert.strictEqual(loose.tier, 0);
 	assert.ok(loose.scaledScore > 0 && loose.scaledScore < 0.25);
 });
+
+function fullRanking(index, noteId, mode) {
+	return index.query(index.get(noteId).chunks.map((c) => c.embedding), {excludeId: noteId, minScore: 0, mode});
+}
+
+test("queryNote stays equal to a full ranking as the index changes underneath it", async () => {
+	const files = makeFiles();
+	const index = await openIndex(files, MODEL_ID, {throttleMs: THROTTLE_MS});
+
+	index.upsert(note("self.md", [vec(127, 0), vec(90, 90)]));
+	index.upsert(note("a.md", [vec(120, 40)]));
+	index.upsert(note("b.md", [vec(0, 127)]));
+	index.upsert(note("c.md", [vec(60, 100)]));
+
+	const check = (label, mode = "granular") => assert.deepStrictEqual(
+		index.queryNote("self.md", {minScore: 0, mode}),
+		fullRanking(index, "self.md", mode),
+		label,
+	);
+
+	check("initial ranking");
+	index.upsert(note("d.md", [vec(127, 5)]));
+	check("after a new note is indexed");
+	index.upsert(note("a.md", [vec(5, 127)]));
+	check("after a ranked note is re-indexed with different vectors");
+	index.remove("d.md");
+	check("after a ranked note is removed");
+	index.rename("c.md", "renamed.md");
+	check("after a note is renamed");
+	index.upsert(note("self.md", [vec(0, 127)]));
+	check("after the query note itself is re-indexed");
+	check("in average mode", "average");
+	check("back in granular mode");
+
+	assert.strictEqual(index.queryNote("missing.md"), null);
+});
+
+test("queryNote re-scores only notes whose vectors changed since the last query", async () => {
+	const files = makeFiles();
+	const index = await openIndex(files, MODEL_ID, {throttleMs: THROTTLE_MS});
+
+	index.upsert(note("self.md", [vec(127, 0)]));
+	const stale = note("stale.md", [vec(127, 0)]);
+	index.upsert(stale);
+	index.queryNote("self.md", {minScore: 0});
+
+	// Stored notes are immutable by contract; mutating one in place reveals whether its cached score was reused.
+	stale.chunks[0].embedding.set(vec(0, 127));
+	index.upsert(note("new.md", [vec(127, 0)]));
+	const cached = index.queryNote("self.md", {minScore: 0});
+	assert.strictEqual(cached.find((r) => r.id === "stale.md").score, 1, "an unchanged note must not be re-scored");
+	assert.strictEqual(cached.find((r) => r.id === "new.md").score, 1, "a newly indexed note must be scored");
+
+	index.upsert({...stale, chunks: stale.chunks.slice()});
+	const rescored = index.queryNote("self.md", {minScore: 0});
+	assert.strictEqual(rescored.find((r) => r.id === "stale.md").score, 0, "a re-indexed note must be re-scored");
+});

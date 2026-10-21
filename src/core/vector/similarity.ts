@@ -63,23 +63,39 @@ function vectorsForSide(chunks: Embedding[], mode: SearchMode): Embedding[] {
 	return [averageEmbedding(chunks)];
 }
 
-export function scoreSimilarity(mode: SearchMode, queryChunks: Embedding[], candidateChunks: Embedding[]): number {
-	return maxPairwiseSimilarity(vectorsForSide(queryChunks, mode), vectorsForSide(candidateChunks, mode));
+export function makeNoteScorer(mode: SearchMode, queryChunks: Embedding[]): (candidateChunks: Embedding[]) => number {
+	const query = vectorsForSide(queryChunks, mode);
+	return (candidateChunks) => maxPairwiseSimilarity(query, vectorsForSide(candidateChunks, mode));
+}
+
+export type ScoredNote = Pick<RelatedNote, "id" | "score">;
+
+export function selectTopScores(
+	scores: Iterable<ScoredNote>,
+	options: {limit?: number; minScore?: number} = {},
+): ScoredNote[] {
+	const {limit = 10, minScore = 0.25} = options;
+	const kept: ScoredNote[] = [];
+	for (const r of scores) {
+		if (Number.isFinite(r.score) && r.score >= minScore) kept.push(r);
+	}
+	return kept.sort((a, b) => b.score - a.score).slice(0, limit);
 }
 
 export function rankSimilarNotes(
 	queryChunks: Embedding[],
 	notes: IndexedNote[],
 	options: {excludeId?: string; limit?: number; minScore?: number; mode?: SearchMode} = {},
-): Pick<RelatedNote, "id" | "score">[] {
-	const {excludeId, limit = 10, minScore = 0.25, mode = "granular"} = options;
+): ScoredNote[] {
+	const {excludeId, mode = "granular"} = options;
+	const score = makeNoteScorer(mode, queryChunks);
 
-	return notes
-		.filter((n) => (excludeId ? n.id !== excludeId : true))
-		.map((n) => ({id: n.id, score: scoreSimilarity(mode, queryChunks, n.chunks.map((chunk) => chunk.embedding))}))
-		.filter((r) => Number.isFinite(r.score) && r.score >= minScore)
-		.sort((a, b) => b.score - a.score)
-		.slice(0, limit);
+	return selectTopScores(
+		notes
+			.filter((n) => (excludeId ? n.id !== excludeId : true))
+			.map((n) => ({id: n.id, score: score(n.chunks.map((chunk) => chunk.embedding))})),
+		options,
+	);
 }
 
 export function dotProductSimilarity(a: Embedding, b: Embedding): number {

@@ -48,7 +48,7 @@ test("an unsupported file is never reported as truncated or even searched", asyn
 
 function searchWith(indexed) {
 	return makeGetSimilarNotesForNote({
-		index: {get: () => indexed, query: () => []},
+		index: {get: () => indexed, queryNote: () => (indexed ? [] : null)},
 	})({noteId: "a.md"});
 }
 
