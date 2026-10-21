@@ -61,7 +61,7 @@ async function makeHarness(backlog) {
 		},
 		isIgnoredPath: () => false,
 		settingsRepo: {
-			get: () => ({ignoredPaths: [], maxRawMarkdownChars: 1, maxExtractedChars: 1, lastAppliedMaxRawMarkdownChars: 1, lastAppliedMaxExtractedChars: 1}),
+			get: () => ({ignoredPaths: [], maxRawMarkdownChars: 1, lastAppliedMaxRawMarkdownChars: 1}),
 			updatePartial: async () => {},
 		},
 		status: {update: () => {}, clear: () => {}},

@@ -27,7 +27,7 @@ export type SettingsViewDeps = {
 	openFeedback: OpenFeedback,
 }
 
-type NumericSettingKey = "maxRawMarkdownChars" | "maxExtractedChars";
+type NumericSettingKey = "maxRawMarkdownChars";
 
 function capitalize(text: string): string {
 	return text.charAt(0).toUpperCase() + text.slice(1);
@@ -126,25 +126,14 @@ export class SettingView extends PluginSettingTab {
 				],
 			},
 			{
-				name: "Max raw markdown characters",
-				desc: "Upper bound applied before MarkdownRenderer runs.",
+				name: "Max markdown characters",
+				desc: "Only this many characters of each note's markdown are indexed. Higher values cover long notes fully but make indexing slower.",
 				control: {
 					type: "number",
 					key: "maxRawMarkdownChars",
 					min: 1,
 					validate: (value) =>
-						value <= 0 ? "Max raw markdown characters must be greater than 0." : undefined,
-				},
-			},
-			{
-				name: "Max extracted characters",
-				desc: "Upper bound for prepared plain text after extraction.",
-				control: {
-					type: "number",
-					key: "maxExtractedChars",
-					min: 1,
-					validate: (value) =>
-						value <= 0 ? "Max extracted characters must be greater than 0." : undefined,
+						value <= 0 ? "Max markdown characters must be greater than 0." : undefined,
 				},
 			},
 			{

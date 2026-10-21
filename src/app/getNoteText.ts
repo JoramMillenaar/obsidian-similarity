@@ -2,7 +2,7 @@ import { SettingsRepository, Vault } from "../ports";
 
 export type NoteText = {
 	text: string;
-	/** Whether the note's markdown or extracted text was longer than the configured character caps. */
+	/** Whether the note's markdown was longer than the configured character cap. */
 	truncated: boolean;
 };
 
@@ -16,15 +16,11 @@ export function makeGetNoteText(deps: {
 		const note = await deps.vault.getNote(noteId);
 		if (!note) throw new Error(`Could not find note with noteId '${noteId}'`);
 
-		const settings = deps.settingsRepo.get();
-		const truncatedRaw = note.markdown.length > settings.maxRawMarkdownChars;
-		const boundedMarkdown = note.markdown.slice(0, settings.maxRawMarkdownChars);
-		const extractedText = await deps.vault.extractText(boundedMarkdown);
-		const fullText = `${note.title}\n${extractedText}`;
-		const truncatedExtracted = fullText.length > settings.maxExtractedChars;
+		const {maxRawMarkdownChars} = deps.settingsRepo.get();
+		const extractedText = await deps.vault.extractText(note.markdown.slice(0, maxRawMarkdownChars));
 		return {
-			text: fullText.slice(0, settings.maxExtractedChars),
-			truncated: truncatedRaw || truncatedExtracted,
+			text: `${note.title}\n${extractedText}`,
+			truncated: note.markdown.length > maxRawMarkdownChars,
 		};
 	};
 }

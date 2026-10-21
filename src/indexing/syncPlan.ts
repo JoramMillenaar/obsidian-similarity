@@ -29,8 +29,7 @@ export function makeBuildIndexSyncPlan(deps: {
 			.map((entry) => entry.id)
 			.filter((id) => !candidateIds.has(id));
 
-		const rawCapIncreased = settings.maxRawMarkdownChars > settings.lastAppliedMaxRawMarkdownChars;
-		const extractedCapIncreased = settings.maxExtractedChars > settings.lastAppliedMaxExtractedChars;
+		const capIncreased = settings.maxRawMarkdownChars > settings.lastAppliedMaxRawMarkdownChars;
 
 		const staleCandidates = candidates.filter((candidate) => {
 			const indexed = indexedById.get(candidate.id);
@@ -39,7 +38,7 @@ export function makeBuildIndexSyncPlan(deps: {
 
 			if (indexed.truncated === undefined) return true;
 
-			return (rawCapIncreased || extractedCapIncreased) && indexed.truncated;
+			return capIncreased && indexed.truncated;
 		});
 
 		return {

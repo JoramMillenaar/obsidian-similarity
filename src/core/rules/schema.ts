@@ -1,39 +1,37 @@
 import { DeviceSettings, IndexMetadata, ModelIndexFile, SCHEMA_VERSION, SimilarityPluginData, SimilaritySettings } from "../../types";
 import { DEFAULT_DEVICE_SETTINGS, DEFAULT_SETTINGS, SEARCH_MODES } from "../../constants";
 
+type StoredSettings = Partial<SimilaritySettings> & {
+	lastAppliedMaxExtractedChars?: unknown;
+};
+
 export function normalizeSettings(
-	value: Partial<SimilaritySettings> | undefined,
+	value: StoredSettings | undefined,
 ): SimilaritySettings {
 	const ignored = value?.ignoredPaths;
-	const maxRawMarkdownChars = value?.maxRawMarkdownChars;
-	const maxExtractedChars = value?.maxExtractedChars;
 	const searchMode = value?.searchMode;
-	const lastAppliedMaxRawMarkdownChars = value?.lastAppliedMaxRawMarkdownChars;
-	const lastAppliedMaxExtractedChars = value?.lastAppliedMaxExtractedChars;
+	const maxRawMarkdownChars = positiveNumber(value?.maxRawMarkdownChars) ?? DEFAULT_SETTINGS.maxRawMarkdownChars;
 
-	const normalizedMaxRawMarkdownChars = typeof maxRawMarkdownChars === "number" && maxRawMarkdownChars > 0
-		? maxRawMarkdownChars
-		: DEFAULT_SETTINGS.maxRawMarkdownChars;
-	const normalizedMaxExtractedChars = typeof maxExtractedChars === "number" && maxExtractedChars > 0
-		? maxExtractedChars
-		: DEFAULT_SETTINGS.maxExtractedChars;
+	let lastAppliedMaxRawMarkdownChars = positiveNumber(value?.lastAppliedMaxRawMarkdownChars) ?? maxRawMarkdownChars;
+	const lastAppliedMaxExtractedChars = positiveNumber(value?.lastAppliedMaxExtractedChars);
+	if (lastAppliedMaxExtractedChars !== undefined) {
+		lastAppliedMaxRawMarkdownChars = Math.min(lastAppliedMaxRawMarkdownChars, lastAppliedMaxExtractedChars);
+	}
 
 	return {
 		ignoredPaths: Array.isArray(ignored)
 			? ignored
 			: DEFAULT_SETTINGS.ignoredPaths,
-		maxRawMarkdownChars: normalizedMaxRawMarkdownChars,
-		maxExtractedChars: normalizedMaxExtractedChars,
+		maxRawMarkdownChars,
 		searchMode: typeof searchMode === "string" && SEARCH_MODES.some((mode) => mode.id === searchMode)
 			? searchMode
 			: DEFAULT_SETTINGS.searchMode,
-		lastAppliedMaxRawMarkdownChars: typeof lastAppliedMaxRawMarkdownChars === "number" && lastAppliedMaxRawMarkdownChars > 0
-			? lastAppliedMaxRawMarkdownChars
-			: normalizedMaxRawMarkdownChars,
-		lastAppliedMaxExtractedChars: typeof lastAppliedMaxExtractedChars === "number" && lastAppliedMaxExtractedChars > 0
-			? lastAppliedMaxExtractedChars
-			: normalizedMaxExtractedChars,
+		lastAppliedMaxRawMarkdownChars,
 	};
+}
+
+function positiveNumber(value: unknown): number | undefined {
+	return typeof value === "number" && value > 0 ? value : undefined;
 }
 
 export function normalizePluginData(

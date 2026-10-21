@@ -266,16 +266,12 @@ export class Indexer {
 				this.setBacklog(plan.idsToSeed);
 				await this.whenDrained();
 
-				// Record the caps this pass just synced against, so a future increase can be
+				// Record the cap this pass just synced against, so a future increase can be
 				// noticed even if the notes affected weren't touched again in the meantime.
 				const settings = this.deps.settingsRepo.get();
-				if (
-					settings.lastAppliedMaxRawMarkdownChars !== settings.maxRawMarkdownChars ||
-					settings.lastAppliedMaxExtractedChars !== settings.maxExtractedChars
-				) {
+				if (settings.lastAppliedMaxRawMarkdownChars !== settings.maxRawMarkdownChars) {
 					await this.deps.settingsRepo.updatePartial({
 						lastAppliedMaxRawMarkdownChars: settings.maxRawMarkdownChars,
-						lastAppliedMaxExtractedChars: settings.maxExtractedChars,
 					});
 				}
 			} catch (error) {

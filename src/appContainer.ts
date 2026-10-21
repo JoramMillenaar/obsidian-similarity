@@ -169,7 +169,7 @@ export class AppContainer {
 
 	collectEnvironment(): EnvironmentInfo {
 		const engine = this.engine.status();
-		const {searchMode, maxRawMarkdownChars, maxExtractedChars} = this.settingsRepo.get();
+		const {searchMode, maxRawMarkdownChars} = this.settingsRepo.get();
 		return {
 			...collectDeviceInfo(this.plugin),
 			engineState: engine.kind,
@@ -178,7 +178,6 @@ export class AppContainer {
 			indexedNotes: this.indexer.index()?.stats().notes ?? 0,
 			searchMode,
 			maxRawMarkdownChars,
-			maxExtractedChars,
 		};
 	}
 
