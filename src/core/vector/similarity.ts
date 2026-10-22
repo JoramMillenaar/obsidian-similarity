@@ -77,7 +77,8 @@ function passageOf(v: Embedding, model: ScoreNullModel): Passage {
 
 const meanSquare = (model: ScoreNullModel) => (model.mean ? dotFloat(model.mean, model.mean) * QUANT_SCALE * QUANT_SCALE : 0);
 
-function centeredBest(a: Embedding[], b: Embedding[], model: ScoreNullModel): number {
+/** The best centered passage-pair cosine, one pair at a time. The reference for {@link makeBestScorer}. */
+export function bestPairCosine(a: Embedding[], b: Embedding[], model: ScoreNullModel): number {
 	const meanSq = meanSquare(model);
 	const right = b.map((v) => passageOf(v, model));
 	let best = -Infinity;
@@ -90,6 +91,88 @@ function centeredBest(a: Embedding[], b: Embedding[], model: ScoreNullModel): nu
 		}
 	}
 	return best / (QUANT_SCALE * QUANT_SCALE);
+}
+
+/**
+ * Two int8 query vectors share one float64 lane: `lo + hi * 2^26`. Multiplying that by a
+ * candidate component computes both products at once, and as long as every dot product stays
+ * below 2^23 in magnitude the packed sum is an exact integer under 2^53 that splits back into
+ * both dots. That bound holds up to MAX_PACKED_DIM (127 * 127 * dim < 2^23).
+ */
+const PACK_SHIFT = 2 ** 26;
+const MAX_PACKED_DIM = Math.floor((2 ** 23 - 1) / (QUANT_SCALE * QUANT_SCALE));
+
+function packQueryPairs(query: Embedding[], dim: number): Float64Array {
+	const pairs = Math.ceil(query.length / 2);
+	const packed = new Float64Array(pairs * dim);
+	for (let p = 0; p < pairs; p++) {
+		const lo = query[2 * p];
+		// An odd last vector is paired with itself: a duplicate can't change the maximum.
+		const hi = query[2 * p + 1] ?? lo;
+		const base = p * dim;
+		for (let i = 0; i < dim; i++) packed[base + i] = lo[i] + hi[i] * PACK_SHIFT;
+	}
+	return packed;
+}
+
+/**
+ * Same result as {@link bestPairCosine}, bit for bit, but about twice as fast: each pass over a
+ * candidate vector computes the exact integer dots of eight query vectors at once, which are then
+ * unpacked and centered and normalized per pair exactly as the reference does.
+ */
+function makeBestScorer(query: Embedding[], model: ScoreNullModel): (candidates: Embedding[]) => number {
+	const dim = query[0].length;
+	if (dim > MAX_PACKED_DIM) return (candidates) => bestPairCosine(query, candidates, model);
+
+	const meanSq = meanSquare(model);
+	const packed = packQueryPairs(query, dim);
+	const pairs = Math.ceil(query.length / 2);
+	// Per query vector (the odd last one doubled, like its packed lane): shift, proj and invNorm.
+	const passages = Array.from({length: 2 * pairs}, (_, k) => passageOf(query[Math.min(k, query.length - 1)], model));
+	const shift = Float64Array.from(passages, (p) => p.shift);
+	const proj = Float64Array.from(passages, (p) => p.proj);
+	const invNorm = Float64Array.from(passages, (p) => p.invNorm);
+
+	return (candidates) => {
+		let best = -Infinity;
+		const consider = (sum: number, p: number, qShift: number, qProj: number, qInvNorm: number) => {
+			const hiDot = Math.round(sum / PACK_SHIFT);
+			const loDot = sum - hiDot * PACK_SHIFT;
+			const lo = 2 * p;
+			const hi = lo + 1;
+			const loCos = (loDot - shift[lo] - qShift + meanSq - proj[lo] * qProj) * invNorm[lo] * qInvNorm;
+			const hiCos = (hiDot - shift[hi] - qShift + meanSq - proj[hi] * qProj) * invNorm[hi] * qInvNorm;
+			if (loCos > best) best = loCos;
+			if (hiCos > best) best = hiCos;
+		};
+
+		for (const c of candidates) {
+			const q = passageOf(c, model);
+			let p = 0;
+			for (; p + 4 <= pairs; p += 4) {
+				const b0 = p * dim, b1 = b0 + dim, b2 = b1 + dim, b3 = b2 + dim;
+				let s0 = 0, s1 = 0, s2 = 0, s3 = 0;
+				for (let i = 0; i < dim; i++) {
+					const x = c[i];
+					s0 += packed[b0 + i] * x;
+					s1 += packed[b1 + i] * x;
+					s2 += packed[b2 + i] * x;
+					s3 += packed[b3 + i] * x;
+				}
+				consider(s0, p, q.shift, q.proj, q.invNorm);
+				consider(s1, p + 1, q.shift, q.proj, q.invNorm);
+				consider(s2, p + 2, q.shift, q.proj, q.invNorm);
+				consider(s3, p + 3, q.shift, q.proj, q.invNorm);
+			}
+			for (; p < pairs; p++) {
+				const base = p * dim;
+				let s = 0;
+				for (let i = 0; i < dim; i++) s += packed[base + i] * c[i];
+				consider(s, p, q.shift, q.proj, q.invNorm);
+			}
+		}
+		return best / (QUANT_SCALE * QUANT_SCALE);
+	};
 }
 
 /**
@@ -121,16 +204,19 @@ export function makeMatchScorer(
 	queryChunks: Embedding[],
 	model: ScoreNullModel,
 ): (candidateChunks: Embedding[]) => number {
-	const queryMean = kind === "average" && queryChunks.length ? centeredMean(queryChunks, model) : null;
+	if (!queryChunks.length) return () => -Infinity;
 
-	return (candidateChunks) => {
-		if (!queryChunks.length || !candidateChunks.length) return -Infinity;
-		const pairs = queryChunks.length * candidateChunks.length;
-		if (queryMean) {
-			return correctMean(model, dotFloat(queryMean, centeredMean(candidateChunks, model)), pairs);
-		}
-		return correctBest(model, centeredBest(queryChunks, candidateChunks, model), pairs);
-	};
+	if (kind === "average") {
+		const queryMean = centeredMean(queryChunks, model);
+		return (candidateChunks) => candidateChunks.length
+			? correctMean(model, dotFloat(queryMean, centeredMean(candidateChunks, model)), queryChunks.length * candidateChunks.length)
+			: -Infinity;
+	}
+
+	const best = makeBestScorer(queryChunks, model);
+	return (candidateChunks) => candidateChunks.length
+		? correctBest(model, best(candidateChunks), queryChunks.length * candidateChunks.length)
+		: -Infinity;
 }
 
 export type NoteMatch = Pick<RelatedNote, "score" | "match">;
