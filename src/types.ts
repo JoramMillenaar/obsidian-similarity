@@ -1,3 +1,5 @@
+import type { ScoreNullModel } from "./core/vector/nullModel";
+
 export type Embedding = Int8Array;
 
 
@@ -21,7 +23,11 @@ export type EmbeddingModelConfig = {
 	maxTokens: number;
 	maxOverlapPercent: number;
 	minSentenceWords: number;
+	/** On the null-corrected score scale (see core/vector/nullModel.ts), like everything below. */
 	tierThresholds: TierThresholds;
+	/** Results scoring below this are not shown. */
+	minScore: number;
+	scoreNull: ScoreNullModel;
 };
 
 export type TierThresholds = readonly [number, number, number];

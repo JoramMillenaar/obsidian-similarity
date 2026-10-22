@@ -245,7 +245,7 @@ test("query labels each result with the index model's tier and scaled score", as
 	const loose = results.find((r) => r.id === "loose.md");
 
 	assert.strictEqual(same.tier, 3);
-	assert.strictEqual(same.scaledScore, 1);
+	assert.ok(same.scaledScore > 0.999999);
 	assert.strictEqual(loose.tier, 0);
 	assert.ok(loose.scaledScore > 0 && loose.scaledScore < 0.25);
 });
@@ -299,10 +299,10 @@ test("queryNote re-scores only notes whose vectors changed since the last query"
 	stale.chunks[0].embedding.set(vec(0, 127));
 	index.upsert(note("new.md", [vec(127, 0)]));
 	const cached = index.queryNote("self.md", {minScore: 0});
-	assert.strictEqual(cached.find((r) => r.id === "stale.md").score, 1, "an unchanged note must not be re-scored");
-	assert.strictEqual(cached.find((r) => r.id === "new.md").score, 1, "a newly indexed note must be scored");
+	assert.ok(cached.find((r) => r.id === "stale.md").score > 0.999999, "an unchanged note must not be re-scored");
+	assert.ok(cached.find((r) => r.id === "new.md").score > 0.999999, "a newly indexed note must be scored");
 
 	index.upsert({...stale, chunks: stale.chunks.slice()});
 	const rescored = index.queryNote("self.md", {minScore: 0});
-	assert.strictEqual(rescored.find((r) => r.id === "stale.md").score, 0, "a re-indexed note must be re-scored");
+	assert.ok(rescored.find((r) => r.id === "stale.md").score < 0.5, "a re-indexed note must be re-scored");
 });

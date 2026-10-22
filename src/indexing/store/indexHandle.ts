@@ -126,7 +126,8 @@ class ResidentIndex implements IndexHandle {
 	}
 
 	query(queryChunks: Embedding[], options: QueryOptions = {}): RelatedNote[] {
-		return this.withTiers(rankSimilarNotes(queryChunks, [...this.byId.values()], options));
+		const {scoreNull, minScore} = EMBEDDING_MODELS[this.modelId];
+		return this.withTiers(rankSimilarNotes(queryChunks, [...this.byId.values()], scoreNull, {...options, minScore: options.minScore ?? minScore}));
 	}
 
 	queryNote(noteId: string, options: Omit<QueryOptions, "excludeId"> = {}): RelatedNote[] | null {
@@ -150,7 +151,7 @@ class ResidentIndex implements IndexHandle {
 			if (hit && hit.chunks === note.chunks) {
 				value = hit.score;
 			} else {
-				score ??= makeNoteScorer(mode, queryNote.chunks.map((chunk) => chunk.embedding));
+				score ??= makeNoteScorer(mode, queryNote.chunks.map((chunk) => chunk.embedding), EMBEDDING_MODELS[this.modelId].scoreNull);
 				value = score(note.chunks.map((chunk) => chunk.embedding));
 			}
 			scores.set(note.id, {chunks: note.chunks, score: value});
@@ -158,7 +159,7 @@ class ResidentIndex implements IndexHandle {
 		}
 
 		this.memo = {noteId, query: queryNote.chunks, mode, scores};
-		return this.withTiers(selectTopScores(ranked, options));
+		return this.withTiers(selectTopScores(ranked, {...options, minScore: options.minScore ?? EMBEDDING_MODELS[this.modelId].minScore}));
 	}
 
 	private withTiers(results: ScoredNote[]): RelatedNote[] {

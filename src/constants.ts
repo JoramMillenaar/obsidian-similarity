@@ -1,3 +1,4 @@
+import { MULTILINGUAL_LATE_MIN_SCORE, MULTILINGUAL_LATE_NULL, MULTILINGUAL_LATE_TIERS } from "./core/vector/nullModels";
 import { DeprecatedModelId, DeviceSettings, EmbeddingModelConfig, EmbeddingModelId, SearchMode, SimilaritySettings } from "./types";
 
 export const VIEW_TYPE_SIMILARITY = "similarity";
@@ -15,7 +16,9 @@ export const EMBEDDING_MODEL: EmbeddingModelConfig = {
 	maxTokens: 128,
 	maxOverlapPercent: 15,
 	minSentenceWords: 5,
-	tierThresholds: [0.51, 0.72, 0.90],
+	tierThresholds: MULTILINGUAL_LATE_TIERS,
+	minScore: MULTILINGUAL_LATE_MIN_SCORE,
+	scoreNull: MULTILINGUAL_LATE_NULL,
 };
 
 export const EMBEDDING_MODELS: Record<EmbeddingModelId, EmbeddingModelConfig> = {
