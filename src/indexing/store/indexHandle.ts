@@ -1,9 +1,9 @@
-import { Embedding, EmbeddingModelId, IndexedNote, NoteChunk, RelatedNote, SCHEMA_VERSION, SearchMode } from "../../types";
+import { Embedding, EmbeddingModelId, IndexedNote, NoteChunk, RelatedNote, SCHEMA_VERSION } from "../../types";
 import { EmbeddingFileStore, ModelIndexMetaStore } from "../../ports";
 import { DecodedEmbeddings, decodeEmbeddings, encodeEmbeddings } from "../../core/vector/codec";
 import { packForStorage, unpackFromStorage } from "../../core/vector/packing";
 import { checkIndexHealth, MetaState, SidecarState } from "../../core/rules/health";
-import { makeNoteScorer, rankSimilarNotes, ScoredNote, selectTopScores } from "../../core/vector/similarity";
+import { makeNoteScorer, NoteMatch, rankSimilarNotes, ScoredNote, selectTopScores } from "../../core/vector/similarity";
 import { scaleScore, similarityTier } from "../../core/vector/similarityTier";
 import { EMBEDDING_MODELS } from "../../constants";
 
@@ -26,7 +26,6 @@ export type QueryOptions = {
 	excludeId?: string;
 	limit?: number;
 	minScore?: number;
-	mode?: SearchMode;
 };
 
 export interface IndexHandle {
@@ -73,8 +72,7 @@ const DEFAULT_WRITE_THROTTLE_MS = 1000;
 type NoteQueryMemo = {
 	noteId: string;
 	query: NoteChunk[];
-	mode: SearchMode;
-	scores: Map<string, { chunks: NoteChunk[]; score: number }>;
+	scores: Map<string, { chunks: NoteChunk[]; match: NoteMatch }>;
 };
 
 class ResidentIndex implements IndexHandle {
@@ -134,31 +132,29 @@ class ResidentIndex implements IndexHandle {
 		const queryNote = this.byId.get(noteId);
 		if (!queryNote) return null;
 
-		const mode = options.mode ?? "granular";
 		const previous = this.memo;
-		const reusable = previous !== null
-			&& previous.noteId === noteId && previous.query === queryNote.chunks && previous.mode === mode;
-		const known = reusable ? previous.scores : new Map<string, { chunks: NoteChunk[]; score: number }>();
+		const reusable = previous !== null && previous.noteId === noteId && previous.query === queryNote.chunks;
+		const known = reusable ? previous.scores : new Map<string, { chunks: NoteChunk[]; match: NoteMatch }>();
 
-		let score: ((candidateChunks: Embedding[]) => number) | null = null;
-		const scores = new Map<string, { chunks: NoteChunk[]; score: number }>();
+		let score: ((candidateChunks: Embedding[]) => NoteMatch) | null = null;
+		const scores = new Map<string, { chunks: NoteChunk[]; match: NoteMatch }>();
 		const ranked: ScoredNote[] = [];
 		for (const note of this.byId.values()) {
 			if (note.id === noteId) continue;
 
 			const hit = known.get(note.id);
-			let value: number;
+			let match: NoteMatch;
 			if (hit && hit.chunks === note.chunks) {
-				value = hit.score;
+				match = hit.match;
 			} else {
-				score ??= makeNoteScorer(mode, queryNote.chunks.map((chunk) => chunk.embedding), EMBEDDING_MODELS[this.modelId].scoreNull);
-				value = score(note.chunks.map((chunk) => chunk.embedding));
+				score ??= makeNoteScorer(queryNote.chunks.map((chunk) => chunk.embedding), EMBEDDING_MODELS[this.modelId].scoreNull);
+				match = score(note.chunks.map((chunk) => chunk.embedding));
 			}
-			scores.set(note.id, {chunks: note.chunks, score: value});
-			ranked.push({id: note.id, score: value});
+			scores.set(note.id, {chunks: note.chunks, match});
+			ranked.push({id: note.id, ...match});
 		}
 
-		this.memo = {noteId, query: queryNote.chunks, mode, scores};
+		this.memo = {noteId, query: queryNote.chunks, scores};
 		return this.withTiers(selectTopScores(ranked, {...options, minScore: options.minScore ?? EMBEDDING_MODELS[this.modelId].minScore}));
 	}
 

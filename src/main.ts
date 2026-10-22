@@ -27,7 +27,6 @@ export default class SimilarNotes extends Plugin {
 		this.addSettingTab(new SettingView(this.app, this, {
 			settingsRepo: this.appContainer.settingsRepo,
 			updateSettings: this.appContainer.updateSettings,
-			setSearchMode: this.appContainer.setSearchMode,
 			setModelDisabled: this.appContainer.setModelDisabled,
 			engine: this.appContainer.engine,
 			openFeedback,
@@ -52,8 +51,6 @@ export default class SimilarNotes extends Plugin {
 				new SimilarNotesListView(leaf, {
 					similarNotesFeed: this.appContainer.similarNotesFeed,
 					statusHub: this.appContainer.statusHub,
-					settingsRepo: this.appContainer.settingsRepo,
-					setSearchMode: this.appContainer.setSearchMode,
 					openSearchModal,
 					openSettings,
 					openFeedback,

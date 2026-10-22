@@ -9,8 +9,6 @@ import {
 	ToggleComponent
 } from "obsidian";
 import SimilarNotes from "../main";
-import { SEARCH_MODES } from "../constants";
-import { SearchMode } from "../types";
 import { SettingsRepository } from "../ports";
 import { UpdateSettingsUseCase } from "../app/updateSettings";
 import { EngineStateReader, EngineStatus, ModelRequestSupersededError } from "../embedding/engine";
@@ -21,17 +19,12 @@ import { IgnorePathSuggest } from "./IgnorePathSuggest";
 export type SettingsViewDeps = {
 	settingsRepo: SettingsRepository,
 	updateSettings: UpdateSettingsUseCase,
-	setSearchMode: (mode: SearchMode) => Promise<void>,
 	setModelDisabled: (disabled: boolean) => Promise<void>,
 	engine: EngineStateReader,
 	openFeedback: OpenFeedback,
 }
 
 type NumericSettingKey = "maxRawMarkdownChars";
-
-function capitalize(text: string): string {
-	return text.charAt(0).toUpperCase() + text.slice(1);
-}
 
 export class SettingView extends PluginSettingTab {
 	private modelDisabledToggle?: ToggleComponent;
@@ -71,23 +64,6 @@ export class SettingView extends PluginSettingTab {
 		const {ignoredPaths} = this.deps.settingsRepo.get();
 
 		return [
-			{
-				name: "Search mode",
-				render: (setting) => {
-					const describe = (id: string) => setting.setDesc(SEARCH_MODES.find((mode) => mode.id === id)?.desc ?? "");
-					setting.addDropdown((dropdown) => {
-						for (const mode of SEARCH_MODES) {
-							dropdown.addOption(mode.id, capitalize(mode.label));
-						}
-						dropdown.setValue(this.deps.settingsRepo.get().searchMode);
-						describe(dropdown.getValue());
-						dropdown.onChange((value) => {
-							describe(value);
-							void this.deps.setSearchMode(value as SearchMode);
-						});
-					});
-				},
-			},
 			{
 				type: "page",
 				name: "Ignored folders and notes",

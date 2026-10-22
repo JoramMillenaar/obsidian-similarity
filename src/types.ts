@@ -66,11 +66,14 @@ export type IndexedNote = {
 export type RelatedNote = {
 	id: string;
 	score: number;
+	/** Which comparison scored highest; both share one scale, so the better of the two ranks the note. */
+	match: MatchKind;
 	tier: SimilarityTier;
 	scaledScore: number;
 };
 
-export type SearchMode = "granular" | "average";
+/** Precise: the best passage-pair match. Average: the mean over all passage pairs. */
+export type MatchKind = "precise" | "average";
 
 export type IndexingQueueSnapshot = {
 	isRunning: boolean;
@@ -86,7 +89,6 @@ export type IndexingQueueSnapshot = {
 export interface SimilaritySettings {
 	ignoredPaths: string[];
 	maxRawMarkdownChars: number;
-	searchMode: SearchMode;
 	lastAppliedMaxRawMarkdownChars: number;
 }
 

@@ -7,7 +7,7 @@ import { mountBanner } from "./bannerView";
 import { textForNotice } from "./similarNoticeText";
 import { KeyedDebouncer } from "../core/util/debounce";
 import { RelatedNote, SimilarityTier } from "../types";
-import { renderSimilarityBar } from "./similarityBar";
+import { renderMatchIcon, renderSimilarityBar } from "./similarityBar";
 import { noteAgeText } from "./noteAge";
 import { groupByTier } from "./tierSections";
 import { SIMILARITY_TIER_LABELS } from "../core/vector/similarityTier";
@@ -162,6 +162,7 @@ export class SearchModal extends SuggestModal<RelatedNote> {
 		let fileName = value.id;
 		if (fileName.endsWith(".md")) fileName = fileName.slice(0, -3);
 		el.addClass("similarity-suggestion");
+		renderMatchIcon(el, value, "similarity-suggestion-icon");
 		const titleEl = el.createDiv({text: fileName, cls: "similarity-suggestion-title"});
 		titleEl.addClass("internal-link");
 

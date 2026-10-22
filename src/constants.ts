@@ -1,5 +1,5 @@
 import { MULTILINGUAL_LATE_MIN_SCORE, MULTILINGUAL_LATE_NULL, MULTILINGUAL_LATE_TIERS } from "./core/vector/nullModels";
-import { DeprecatedModelId, DeviceSettings, EmbeddingModelConfig, EmbeddingModelId, SearchMode, SimilaritySettings } from "./types";
+import { DeprecatedModelId, DeviceSettings, EmbeddingModelConfig, EmbeddingModelId, MatchKind, SimilaritySettings } from "./types";
 
 export const VIEW_TYPE_SIMILARITY = "similarity";
 
@@ -32,27 +32,22 @@ export const DEPRECATED_MODEL_IDS: readonly DeprecatedModelId[] = [
 	"xenova-bge-small-zh-v1.5",
 ];
 
-export const DEFAULT_SEARCH_MODE: SearchMode = "granular";
-
-export const SEARCH_MODES: {id: SearchMode; label: string; desc: string; icon: string}[] = [
-	{
-		id: "granular",
-		label: "precise match",
-		desc: "Compares every passage of this note against every passage of each candidate, keeping the best match (default).",
+export const MATCH_KINDS: Record<MatchKind, {label: string; desc: string; icon: string}> = {
+	precise: {
+		label: "Precise match",
+		desc: "A passage of this note closely matches a passage of the other.",
 		icon: "locate",
 	},
-	{
-		id: "average",
-		label: "average match",
-		desc: "Compares the overall averaged meaning of this note against the overall averaged meaning of each candidate.",
+	average: {
+		label: "Average match",
+		desc: "The notes as a whole are about the same thing.",
 		icon: "blend",
 	},
-];
+};
 
 export const DEFAULT_SETTINGS: SimilaritySettings = {
 	ignoredPaths: [],
 	maxRawMarkdownChars: 20_000,
-	searchMode: DEFAULT_SEARCH_MODE,
 	lastAppliedMaxRawMarkdownChars: 20_000,
 };
 

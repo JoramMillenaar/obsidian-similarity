@@ -1,5 +1,4 @@
 import { Platform, Plugin } from "obsidian";
-import { SearchMode } from "./types";
 import { ObsidianStatusBar } from "./obsidian/obsidianStatusBar";
 import { ObsidianVault } from "./obsidian/obsidianVault";
 import { BinaryEmbeddingFileStore } from "./obsidian/binaryEmbeddingFileStore";
@@ -54,7 +53,6 @@ export class AppContainer {
 	readonly similarSearchFeed: SimilarSearchFeed;
 	readonly insertWikilinkAtCursor: InsertWikilinkAtCursorUseCase;
 	readonly updateSettings: UpdateSettingsUseCase;
-	readonly setSearchMode: (mode: SearchMode) => Promise<void>;
 	readonly setModelDisabled: SetModelDisabledUseCase;
 	readonly removeDeprecatedData: RemoveDeprecatedDataUseCase;
 
@@ -118,7 +116,7 @@ export class AppContainer {
 		this.getSimilarNotesForNote = async (args) => {
 			const index = this.indexer.index();
 			if (!index) return {items: [], truncated: false};
-			return makeGetSimilarNotesForNote({index})({mode: this.settingsRepo.get().searchMode, ...args});
+			return makeGetSimilarNotesForNote({index})(args);
 		};
 
 		this.getSimilarNotesForText = async (args) => {
@@ -127,7 +125,7 @@ export class AppContainer {
 			return makeGetSimilarNotesForText({
 				index,
 				embed: (text) => this.engine.embed(text, {lane: "interactive"}),
-			})({mode: this.settingsRepo.get().searchMode, ...args});
+			})(args);
 		};
 
 		this.isIndexEmpty = async () => this.indexer.index()?.isEmpty() ?? true;
@@ -156,11 +154,6 @@ export class AppContainer {
 
 		this.insertWikilinkAtCursor = makeInsertWikilinkAtCursor({vault: this.vault});
 
-		this.setSearchMode = async (mode) => {
-			await this.settingsRepo.updatePartial({searchMode: mode});
-			this.similarNotesFeed.refresh();
-		};
-
 		this.setModelDisabled = makeSetModelDisabled({
 			deviceSettingsRepo: this.deviceSettingsRepo,
 			engine: this.engine,
@@ -169,14 +162,13 @@ export class AppContainer {
 
 	collectEnvironment(): EnvironmentInfo {
 		const engine = this.engine.status();
-		const {searchMode, maxRawMarkdownChars} = this.settingsRepo.get();
+		const {maxRawMarkdownChars} = this.settingsRepo.get();
 		return {
 			...collectDeviceInfo(this.plugin),
 			engineState: engine.kind,
 			modelId: "modelId" in engine ? engine.modelId : undefined,
 			device: engine.kind === "ready" ? engine.device : undefined,
 			indexedNotes: this.indexer.index()?.stats().notes ?? 0,
-			searchMode,
 			maxRawMarkdownChars,
 		};
 	}

@@ -250,8 +250,8 @@ test("query labels each result with the index model's tier and scaled score", as
 	assert.ok(loose.scaledScore > 0 && loose.scaledScore < 0.25);
 });
 
-function fullRanking(index, noteId, mode) {
-	return index.query(index.get(noteId).chunks.map((c) => c.embedding), {excludeId: noteId, minScore: 0, mode});
+function fullRanking(index, noteId) {
+	return index.query(index.get(noteId).chunks.map((c) => c.embedding), {excludeId: noteId, minScore: 0});
 }
 
 test("queryNote stays equal to a full ranking as the index changes underneath it", async () => {
@@ -263,9 +263,9 @@ test("queryNote stays equal to a full ranking as the index changes underneath it
 	index.upsert(note("b.md", [vec(0, 127)]));
 	index.upsert(note("c.md", [vec(60, 100)]));
 
-	const check = (label, mode = "granular") => assert.deepStrictEqual(
-		index.queryNote("self.md", {minScore: 0, mode}),
-		fullRanking(index, "self.md", mode),
+	const check = (label) => assert.deepStrictEqual(
+		index.queryNote("self.md", {minScore: 0}),
+		fullRanking(index, "self.md"),
 		label,
 	);
 
@@ -280,8 +280,6 @@ test("queryNote stays equal to a full ranking as the index changes underneath it
 	check("after a note is renamed");
 	index.upsert(note("self.md", [vec(0, 127)]));
 	check("after the query note itself is re-indexed");
-	check("in average mode", "average");
-	check("back in granular mode");
 
 	assert.strictEqual(index.queryNote("missing.md"), null);
 });

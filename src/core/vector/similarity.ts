@@ -1,4 +1,4 @@
-import { Embedding, IndexedNote, RelatedNote, SearchMode } from "../../types";
+import { Embedding, IndexedNote, MatchKind, RelatedNote } from "../../types";
 import { QUANT_SCALE } from "./codec";
 import { correctBest, correctMean, ScoreNullModel } from "./nullModel";
 
@@ -116,12 +116,12 @@ function centeredMean(vectors: Embedding[], model: ScoreNullModel): Float32Array
 	return out;
 }
 
-export function makeNoteScorer(
-	mode: SearchMode,
+export function makeMatchScorer(
+	kind: MatchKind,
 	queryChunks: Embedding[],
 	model: ScoreNullModel,
 ): (candidateChunks: Embedding[]) => number {
-	const queryMean = mode === "average" && queryChunks.length ? centeredMean(queryChunks, model) : null;
+	const queryMean = kind === "average" && queryChunks.length ? centeredMean(queryChunks, model) : null;
 
 	return (candidateChunks) => {
 		if (!queryChunks.length || !candidateChunks.length) return -Infinity;
@@ -133,7 +133,20 @@ export function makeNoteScorer(
 	};
 }
 
-export type ScoredNote = Pick<RelatedNote, "id" | "score">;
+export type NoteMatch = Pick<RelatedNote, "score" | "match">;
+
+/** Scores a candidate both ways and keeps the better; they share one scale, so either can win (precise on a tie). */
+export function makeNoteScorer(queryChunks: Embedding[], model: ScoreNullModel): (candidateChunks: Embedding[]) => NoteMatch {
+	const precise = makeMatchScorer("precise", queryChunks, model);
+	const average = makeMatchScorer("average", queryChunks, model);
+	return (candidateChunks) => {
+		const best = precise(candidateChunks);
+		const mean = average(candidateChunks);
+		return mean > best ? {score: mean, match: "average"} : {score: best, match: "precise"};
+	};
+}
+
+export type ScoredNote = Pick<RelatedNote, "id" | "score" | "match">;
 
 export function selectTopScores(
 	scores: Iterable<ScoredNote>,
@@ -151,15 +164,15 @@ export function rankSimilarNotes(
 	queryChunks: Embedding[],
 	notes: IndexedNote[],
 	model: ScoreNullModel,
-	options: {excludeId?: string; limit?: number; minScore?: number; mode?: SearchMode} = {},
+	options: {excludeId?: string; limit?: number; minScore?: number} = {},
 ): ScoredNote[] {
-	const {excludeId, mode = "granular"} = options;
-	const score = makeNoteScorer(mode, queryChunks, model);
+	const {excludeId} = options;
+	const score = makeNoteScorer(queryChunks, model);
 
 	return selectTopScores(
 		notes
 			.filter((n) => (excludeId ? n.id !== excludeId : true))
-			.map((n) => ({id: n.id, score: score(n.chunks.map((chunk) => chunk.embedding))})),
+			.map((n) => ({id: n.id, ...score(n.chunks.map((chunk) => chunk.embedding))})),
 		options,
 	);
 }

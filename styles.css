@@ -262,6 +262,21 @@ body {
 	gap: 12px;
 }
 
+.similarity-match-icon {
+	display: inline-flex;
+	align-items: center;
+	color: var(--text-faint);
+}
+
+.similarity-match-icon .svg-icon {
+	width: var(--icon-xs);
+	height: var(--icon-xs);
+}
+
+.similarity-suggestion .similarity-match-icon {
+	margin-inline-end: -4px;
+}
+
 .similarity-suggestion-title {
 	flex: 1;
 	min-width: 0;

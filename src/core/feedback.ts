@@ -1,5 +1,3 @@
-import { SearchMode } from "../types";
-
 export type FeedbackKind = "bug" | "feedback";
 
 export type DeviceInfo = {
@@ -17,7 +15,6 @@ export type EnvironmentInfo = DeviceInfo & {
 	modelId?: string;
 	device?: string;
 	indexedNotes: number;
-	searchMode: SearchMode;
 	maxRawMarkdownChars: number;
 };
 
@@ -56,7 +53,7 @@ function formatEnvironment(env: EnvironmentInfo): string {
 	return [
 		`Similarity ${env.pluginVersion} · Obsidian ${env.obsidianVersion} · ${env.platform}`,
 		`Model: ${model} · ${env.indexedNotes} notes indexed`,
-		`Search mode: ${env.searchMode} · limit ${env.maxRawMarkdownChars}`,
+		`Character limit: ${env.maxRawMarkdownChars}`,
 		`Hardware: ${hardware}`,
 		`UA: ${env.userAgent}`,
 	].join("\n");

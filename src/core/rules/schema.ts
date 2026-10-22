@@ -1,5 +1,5 @@
 import { DeviceSettings, IndexMetadata, ModelIndexFile, SCHEMA_VERSION, SimilarityPluginData, SimilaritySettings } from "../../types";
-import { DEFAULT_DEVICE_SETTINGS, DEFAULT_SETTINGS, SEARCH_MODES } from "../../constants";
+import { DEFAULT_DEVICE_SETTINGS, DEFAULT_SETTINGS } from "../../constants";
 
 type StoredSettings = Partial<SimilaritySettings> & {
 	lastAppliedMaxExtractedChars?: unknown;
@@ -9,7 +9,6 @@ export function normalizeSettings(
 	value: StoredSettings | undefined,
 ): SimilaritySettings {
 	const ignored = value?.ignoredPaths;
-	const searchMode = value?.searchMode;
 	const maxRawMarkdownChars = positiveNumber(value?.maxRawMarkdownChars) ?? DEFAULT_SETTINGS.maxRawMarkdownChars;
 
 	let lastAppliedMaxRawMarkdownChars = positiveNumber(value?.lastAppliedMaxRawMarkdownChars) ?? maxRawMarkdownChars;
@@ -23,9 +22,6 @@ export function normalizeSettings(
 			? ignored
 			: DEFAULT_SETTINGS.ignoredPaths,
 		maxRawMarkdownChars,
-		searchMode: typeof searchMode === "string" && SEARCH_MODES.some((mode) => mode.id === searchMode)
-			? searchMode
-			: DEFAULT_SETTINGS.searchMode,
 		lastAppliedMaxRawMarkdownChars,
 	};
 }

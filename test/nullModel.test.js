@@ -1,7 +1,7 @@
 const test = require("node:test");
 const assert = require("node:assert");
 const {correctBest, correctMean} = require("../dist/core/vector/nullModel.js");
-const {makeNoteScorer} = require("../dist/core/vector/similarity.js");
+const {makeMatchScorer, makeNoteScorer} = require("../dist/core/vector/similarity.js");
 const {EMBEDDING_MODEL} = require("../dist/constants.js");
 
 const MODEL = EMBEDDING_MODEL.scoreNull;
@@ -57,8 +57,8 @@ function unit(seed, dim = 384) {
 test("a note compared with itself scores (near) 1 in precise mode, regardless of length", () => {
 	const short = [unit(1)];
 	const long = [unit(2), unit(3), unit(4), unit(5)];
-	assert.ok(makeNoteScorer("granular", short, MODEL)(short) > 0.999);
-	assert.ok(makeNoteScorer("granular", long, MODEL)(long) > 0.99);
+	assert.ok(makeMatchScorer("precise", short, MODEL)(short) > 0.999);
+	assert.ok(makeMatchScorer("precise", long, MODEL)(long) > 0.99);
 });
 
 test("average mode scores the mean of all passage-pair similarities, without renormalizing", () => {
@@ -66,10 +66,24 @@ test("average mode scores the mean of all passage-pair similarities, without ren
 	const b = [unit(13)];
 	const cosine = (u, v) => u.reduce((sum, x, i) => sum + x * v[i], 0) / Math.hypot(...u) / Math.hypot(...v);
 	const mean = (cosine(a[0], b[0]) + cosine(a[1], b[0])) / 2;
-	assert.ok(Math.abs(makeNoteScorer("average", a, MODEL)(b) - correctMean(MODEL, mean, 2)) < 1e-6);
+	assert.ok(Math.abs(makeMatchScorer("average", a, MODEL)(b) - correctMean(MODEL, mean, 2)) < 1e-6);
 });
 
 test("an empty note never ranks", () => {
-	assert.strictEqual(makeNoteScorer("granular", [unit(1)], MODEL)([]), -Infinity);
-	assert.strictEqual(makeNoteScorer("average", [], MODEL)([unit(1)]), -Infinity);
+	assert.strictEqual(makeMatchScorer("precise", [unit(1)], MODEL)([]), -Infinity);
+	assert.strictEqual(makeMatchScorer("average", [], MODEL)([unit(1)]), -Infinity);
+});
+
+test("a note ranks by the better of its precise and average match, labelled with which one won", () => {
+	const query = [unit(21), unit(22), unit(23)];
+	for (const candidate of [[unit(21)], [unit(24), unit(25)], query, [unit(21), unit(22)]]) {
+		const precise = makeMatchScorer("precise", query, MODEL)(candidate);
+		const average = makeMatchScorer("average", query, MODEL)(candidate);
+		const expected = average > precise ? {score: average, match: "average"} : {score: precise, match: "precise"};
+		assert.deepStrictEqual(makeNoteScorer(query, MODEL)(candidate), expected);
+	}
+	// The same passage repeated: every pair agrees, which the mean rewards and the max penalizes.
+	const repeated = [unit(31), unit(31)];
+	const near = [unit(31).map((x, i) => (i % 7 === 0 ? -x : x)), unit(31).map((x, i) => (i % 7 === 0 ? -x : x))];
+	assert.strictEqual(makeNoteScorer(repeated, MODEL)(near).match, "average");
 });
