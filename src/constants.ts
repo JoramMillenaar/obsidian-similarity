@@ -36,12 +36,12 @@ export const MATCH_KINDS: Record<MatchKind, {label: string; desc: string; icon: 
 	precise: {
 		label: "Precise match",
 		desc: "A passage of this note closely matches a passage of the other.",
-		icon: "locate",
+		icon: "pilcrow",
 	},
 	average: {
 		label: "Average match",
 		desc: "The notes as a whole are about the same thing.",
-		icon: "blend",
+		icon: "sticky-note",
 	},
 };
 
