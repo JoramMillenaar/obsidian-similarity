@@ -1,17 +1,21 @@
 import { EmbeddingModel } from '../model';
 import { makeGenerateDocumentEmbeddings, GenerateDocumentEmbeddings } from '../embedDocument';
 import { WorkerRequest, WorkerResponse } from './protocol';
+import { handleRerankerRequest } from '../../../reranking/worker';
+import { isRerankerRequest, RerankerRequest, RerankerResponse } from '../../../reranking/protocol';
 
 /**
- * Entry point bundled into the embedding Worker. Owns the worker-side model instance and
+ * Entry point bundled into the model Worker. Owns the worker-side model instance and
  * dispatches `WorkerRequest` messages from the host, replying with `WorkerResponse` messages.
+ * The reranker runs in a Worker of its own started from this same bundle, and its messages
+ * are handed to reranking/worker.ts instead.
  */
 
 let model: EmbeddingModel | null = null;
 let generateDocumentEmbeddings: GenerateDocumentEmbeddings | null = null;
 
-function post(message: WorkerResponse): void {
-	(self as unknown as { postMessage(message: WorkerResponse): void }).postMessage(message);
+function post(message: WorkerResponse | RerankerResponse): void {
+	(self as unknown as { postMessage(message: WorkerResponse | RerankerResponse): void }).postMessage(message);
 }
 
 /** Creates the worker-side model and reports 'ready' or 'model-load-error' once loading settles. */
@@ -72,6 +76,7 @@ async function handleMessage(message: WorkerRequest): Promise<void> {
 	if (message.type === 'dispose') return handleDispose(message);
 }
 
-self.addEventListener('message', (event: MessageEvent<WorkerRequest>) => {
-	void handleMessage(event.data);
+self.addEventListener('message', (event: MessageEvent<WorkerRequest | RerankerRequest>) => {
+	const message = event.data;
+	void (isRerankerRequest(message) ? handleRerankerRequest(message, post) : handleMessage(message));
 });

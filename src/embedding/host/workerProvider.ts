@@ -3,6 +3,7 @@ import { EmbeddingModelConfig } from "../../types";
 import { WorkerRequest, WorkerResponse } from "./worker/protocol";
 import { Device, PendingDisposeRequest, PendingWorkerRequest } from "./types";
 import { ModelLoadFailedError } from "./errors";
+import { modelWorkerScript, startWorker } from "../../workerScript";
 
 /**
  * Runs the embedding model in a dedicated Worker instead of calling `EmbeddingModel` directly
@@ -59,10 +60,7 @@ export class WorkerMessenger {
 		if (this.worker) throw new Error("Worker already initialized");
 		if (signal?.aborted) throw abortError();
 
-		const blob = new Blob([this.workerScript], {type: 'application/javascript'});
-		const url = URL.createObjectURL(blob);
-		const worker = new Worker(url);
-		URL.revokeObjectURL(url);
+		const worker = startWorker(this.workerScript);
 		this.worker = worker;
 		worker.addEventListener('message', this.onMessageReceived);
 		worker.addEventListener('error', this.onWorkerFatalError);
@@ -277,7 +275,7 @@ export function makeLoadEmbeddingProvider({allowWebGpu}: { allowWebGpu: boolean 
 		onProgress?: (progress: ModelLoadProgress) => void,
 		signal?: AbortSignal,
 	): Promise<EmbeddingPort> => {
-		const messenger = new WorkerMessenger(__WORKER_CONTENTS_PLACEHOLDER__, config, onProgress, allowWebGpu);
+		const messenger = new WorkerMessenger(modelWorkerScript(), config, onProgress, allowWebGpu);
 		const device = await messenger.initialize(signal);
 		return new WorkerEmbeddingProvider(messenger, device);
 	};

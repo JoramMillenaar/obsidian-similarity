@@ -277,9 +277,23 @@ body {
 	margin-inline-end: -4px;
 }
 
-.similarity-suggestion-title {
+.similarity-suggestion-text {
 	flex: 1;
 	min-width: 0;
+}
+
+/* A reranked result's matched piece, under its title. */
+.similarity-suggestion-passage {
+	display: -webkit-box;
+	-webkit-box-orient: vertical;
+	-webkit-line-clamp: 2;
+	overflow: hidden;
+	margin-top: var(--size-2-2);
+	padding-inline-start: var(--size-2-3);
+	border-inline-start: 2px solid var(--background-modifier-border);
+	color: var(--text-muted);
+	font-size: var(--font-ui-smaller);
+	line-height: var(--line-height-tight);
 }
 
 /* Where a previewed result matched: in the open note (an editor mark, see ui/originHighlight.ts) and in
@@ -319,6 +333,63 @@ body {
 .similarity-suggestion-age {
 	opacity: 0.7;
 	white-space: nowrap;
+}
+
+/* The search modal's rerank switch (see ui/rerankToggle.ts): left of the input's own clear button,
+   which core positions absolutely at the end. The input's end padding makes room for both. */
+.prompt-input-container.has-similarity-rerank input.prompt-input {
+	padding-inline-end: calc(var(--size-4-12) + 64px);
+}
+
+.similarity-rerank-toggle {
+	position: absolute;
+	top: 0;
+	bottom: 0;
+	inset-inline-end: calc(var(--size-4-4) + 32px);
+	height: fit-content;
+	margin: auto;
+	display: flex;
+	align-items: center;
+	gap: var(--size-2-2);
+}
+
+.similarity-rerank-toggle.is-active {
+	--icon-color: var(--interactive-accent);
+	color: var(--interactive-accent);
+}
+
+.similarity-rerank-toggle.mod-warning {
+	--icon-color: var(--text-error);
+	color: var(--text-error);
+}
+
+.similarity-rerank-icon {
+	display: inline-flex;
+}
+
+.similarity-rerank-toggle.is-working .similarity-rerank-icon {
+	animation: similarity-rerank-pulse 1.2s ease-in-out infinite;
+}
+
+.similarity-rerank-progress {
+	font-size: var(--font-ui-smaller);
+	font-variant-numeric: tabular-nums;
+}
+
+.similarity-rerank-progress:empty {
+	display: none;
+}
+
+@keyframes similarity-rerank-pulse {
+	50% {
+		opacity: 0.35;
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.similarity-rerank-toggle.is-working .similarity-rerank-icon {
+		animation: none;
+	}
 }
 
 .related-title {

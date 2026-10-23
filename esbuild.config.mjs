@@ -25,15 +25,15 @@ const prod = (process.argv[2] === "production");
 const workerEnvironmentShim = `try { delete self.process; } catch (e) { try { self.process = undefined; } catch (e2) {} }\n`;
 
 /**
- * Inlines the bundled embedding worker where workerProvider.ts names
- * `__WORKER_CONTENTS_PLACEHOLDER__`. The worker is bundled again on every build, and its sources
- * are watched too: main.ts doesn't import them, so otherwise a dev watcher would keep inlining
- * the worker it bundled when it started, running it against a newer main bundle.
+ * Inlines the bundled model worker (the embedder's, which the reranker shares) where
+ * workerScript.ts names `__WORKER_CONTENTS_PLACEHOLDER__`. The worker is bundled again on every
+ * build, and its sources are watched too: main.ts doesn't import them, so otherwise a dev watcher
+ * would keep inlining the worker it bundled when it started, running it against a newer main bundle.
  */
 const embeddingWorker = {
 	name: "embedding-worker",
 	setup(build) {
-		build.onLoad({filter: /[\\/]src[\\/]embedding[\\/]host[\\/]workerProvider\.ts$/}, async (args) => {
+		build.onLoad({filter: /[\\/]src[\\/]workerScript\.ts$/}, async (args) => {
 			const worker = await esbuild.build({
 				entryPoints: ["src/embedding/host/worker/bootstrap.ts"],
 				bundle: true,
@@ -55,11 +55,15 @@ const embeddingWorker = {
 	},
 };
 
+// Local-only dev tooling (src/dev, gitignored): wraps the entry point and adds its defines in dev builds.
+const devHookPath = path.resolve("src/dev/build.mjs");
+const devHook = !prod && await readFile(devHookPath).then(() => import(devHookPath), () => null);
+
 const context = await esbuild.context({
 	banner: {
 		js: banner,
 	},
-	entryPoints: ["src/main.ts"],
+	entryPoints: [devHook?.entryPoint ?? "src/main.ts"],
 	bundle: true,
 	platform: 'node',
 	external: [
@@ -87,6 +91,7 @@ const context = await esbuild.context({
 	plugins: [embeddingWorker],
 	define: {
 		__DEV__: JSON.stringify(!prod), // Dev-only features; folds to `false` in production so they're tree-shaken out
+		...(devHook ? await devHook.defines(esbuild, workerEnvironmentShim) : {}),
 	},
 });
 

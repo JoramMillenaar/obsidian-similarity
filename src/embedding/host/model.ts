@@ -9,7 +9,7 @@ env.allowLocalModels = false;
 const TRANSFORMERS_CACHE = 'transformers-cache';
 const cacheKeyFor = (repoId: string, file: string) => `https://huggingface.co/${repoId}/resolve/main/${file}`;
 
-async function isModelCached(repoId: string): Promise<boolean> {
+export async function isModelCached(repoId: string): Promise<boolean> {
 	if (typeof caches === 'undefined') return true;
 	try {
 		const cache = await caches.open(TRANSFORMERS_CACHE);
@@ -28,7 +28,7 @@ type GpuLike = { requestAdapter(): Promise<GpuAdapterLike | null> };
  * the API but fail `requestAdapter()`. Actually requesting the adapter is the only way to know,
  * and doubles as the shader-f16 feature check, since that also needs an adapter.
  */
-async function detectWebGpu(): Promise<{available: boolean; f16: boolean}> {
+export async function detectWebGpu(): Promise<{available: boolean; f16: boolean}> {
 	const gpu = (navigator as Navigator & { gpu?: GpuLike }).gpu;
 	if (gpu == null) return {available: false, f16: false};
 	try {
@@ -89,7 +89,7 @@ function int64Tensor(values: number[]): Tensor {
 	return new Tensor('int64', BigInt64Array.from(values, (value) => BigInt(value)), [1, values.length]);
 }
 
-function describeLoadFailure(error: unknown, config: EmbeddingModelConfig): string {
+export function describeLoadFailure(error: unknown, config: {label: string}): string {
 	const detail = error instanceof Error ? error.message : String(error);
 	const looksLikeNetwork = !navigator.onLine || /failed to fetch|network|load model file/i.test(detail);
 	if (looksLikeNetwork) {

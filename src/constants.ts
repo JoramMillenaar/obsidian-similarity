@@ -1,5 +1,13 @@
 import { MULTILINGUAL_LATE_MIN_SCORE, MULTILINGUAL_LATE_NULL, MULTILINGUAL_LATE_TIERS } from "./core/vector/nullModels";
-import { DeprecatedModelId, DeviceSettings, EmbeddingModelConfig, EmbeddingModelId, MatchKind, SimilaritySettings } from "./types";
+import {
+	DeprecatedModelId,
+	DeviceSettings,
+	EmbeddingModelConfig,
+	EmbeddingModelId,
+	MatchKind,
+	RerankerModelConfig,
+	SimilaritySettings,
+} from "./types";
 
 export const VIEW_TYPE_SIMILARITY = "similarity";
 
@@ -25,6 +33,29 @@ export const EMBEDDING_MODELS: Record<EmbeddingModelId, EmbeddingModelConfig> = 
 	[EMBEDDING_MODEL.id]: EMBEDDING_MODEL,
 };
 
+
+/**
+ * Reorders text searches, on desktop only. A cross-encoder reads the search and a passage
+ * together, so it can tell a passage that answers a question from one that merely shares its
+ * topic, which comparing two vectors can't. Too heavy to keep loaded: see reranking/reranker.ts.
+ */
+export const RERANKER_MODEL: RerankerModelConfig = {
+	label: "reranking",
+	repoId: "jinaai/jina-reranker-v2-base-multilingual",
+	maxTokens: 512,
+	gpuBatchSize: 4,
+	candidates: 20,
+	cpuCandidates: 8,
+	passageChars: 700,
+	pieceChars: 250,
+	// Not yet calibrated on real vaults: in spot checks passages answering the search scored
+	// 0.5–0.7, and unrelated ones under 0.08.
+	tierThresholds: [0.1, 0.3, 0.6],
+	minRelevance: 0.05,
+};
+
+/** How long the reranker stays loaded after the last search using it let go of it. */
+export const RERANKER_IDLE_MS = 60_000;
 
 export const DEPRECATED_MODEL_IDS: readonly DeprecatedModelId[] = [
 	"xenova-all-MiniLM-L6-v2",

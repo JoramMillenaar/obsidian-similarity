@@ -34,6 +34,10 @@ import { makeRemoveDeprecatedData, RemoveDeprecatedDataUseCase } from "./app/rem
 import { makeSetModelDisabled, SetModelDisabledUseCase } from "./app/setModelDisabled";
 import { collectDeviceInfo } from "./obsidian/obsidianDeviceInfo";
 import { EnvironmentInfo } from "./core/feedback";
+import { Reranker } from "./reranking/reranker";
+import { makeRerankResults, RerankResultsUseCase } from "./search/rerankResults";
+import { modelWorkerScript, startWorker } from "./workerScript";
+import { RERANKER_IDLE_MS, RERANKER_MODEL } from "./constants";
 
 const INDEX_WRITE_THROTTLE_MS = 1000;
 
@@ -65,6 +69,8 @@ export class AppContainer {
 	readonly getMatchedPassage: GetMatchedPassageUseCase;
 	readonly keywordSearch: KeywordSearch;
 	readonly isIndexEmpty: () => Promise<boolean>;
+	/** Desktop only: the cross-encoder that reorders text searches, too heavy for phones. */
+	readonly reranking: { reranker: Reranker; rerankResults: RerankResultsUseCase } | null;
 
 	private readonly registry: IndexRegistry;
 	private readonly plugin: Plugin;
@@ -145,6 +151,30 @@ export class AppContainer {
 
 		this.getMatchedPassage = makeGetMatchedPassage({getNoteText: this.getNoteText});
 
+		if (Platform.isDesktopApp) {
+			const reranker = new Reranker({
+				config: RERANKER_MODEL,
+				startWorker: () => startWorker(modelWorkerScript()),
+				allowWebGpu: true,
+				idleMs: RERANKER_IDLE_MS,
+			});
+			this.reranking = {
+				reranker,
+				rerankResults: makeRerankResults({
+					getIndex: () => this.indexer.index(),
+					getNoteText: this.getNoteText,
+					score: (query, passages, signal) => reranker.score(query, passages, signal),
+					device: () => {
+						const status = reranker.status();
+						return status.kind === "ready" ? status.device : null;
+					},
+					config: RERANKER_MODEL,
+				}),
+			};
+		} else {
+			this.reranking = null;
+		}
+
 		this.isIndexEmpty = async () => this.indexer.index()?.isEmpty() ?? true;
 
 		this.similarNotesFeed = makeSimilarNotesFeed({
@@ -193,6 +223,7 @@ export class AppContainer {
 
 	async shutdown(): Promise<void> {
 		this.engine.dispose();
+		this.reranking?.reranker.dispose();
 		await this.indexer.dispose();
 		this.similarNotesFeed.dispose();
 		this.statusHub.dispose();

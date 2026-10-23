@@ -38,6 +38,7 @@ export default class SimilarNotes extends Plugin {
 				statusHub: this.appContainer.statusHub,
 				insertWikilinkAtCursor: this.appContainer.insertWikilinkAtCursor,
 				getMatchedPassage: this.appContainer.getMatchedPassage,
+				reranking: this.appContainer.reranking ?? undefined,
 			}).open();
 		};
 

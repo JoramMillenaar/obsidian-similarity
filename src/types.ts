@@ -32,6 +32,34 @@ export type EmbeddingModelConfig = {
 
 export type TierThresholds = readonly [number, number, number];
 
+/** The cross-encoder that reorders text searches on desktop (see reranking/reranker.ts). */
+export type RerankerModelConfig = {
+	label: string;
+	repoId: string;
+	/** Search and passage together are cut to this many tokens. */
+	maxTokens: number;
+	/**
+	 * Pairs scored per inference on WebGPU, which is also how soon a cancelled request stops. On the
+	 * CPU pairs go one at a time: batching gains nothing there, and a cancel lands sooner.
+	 */
+	gpuBatchSize: number;
+	/** How many of a text search's meaning-based results it reorders on WebGPU (and the search fetches for it). */
+	candidates: number;
+	/** How many it reorders on the CPU, where each takes about half a second. */
+	cpuCandidates: number;
+	/** Characters of each note it reads: the matched passage, grown by whole passages around it. */
+	passageChars: number;
+	/**
+	 * That stretch is judged in pieces of whole passages up to this long, so the note's best piece is
+	 * known: it ranks the note, and is shown as what matched.
+	 */
+	pieceChars: number;
+	/** Relevance (0–1) at which a reranked result reaches tiers 1, 2 and 3. */
+	tierThresholds: TierThresholds;
+	/** Reranked results judged less relevant than this are not shown. */
+	minRelevance: number;
+};
+
 export type SimilarityTier = 0 | 1 | 2 | 3;
 
 export type RawNote = {
@@ -70,7 +98,10 @@ export type RelatedNote = {
 	match: MatchKind;
 	tier: SimilarityTier;
 	scaledScore: number;
-	/** The note's passage the match rests on, in its prepared text: the best pair's for precise, the one nearest the query's centroid for average. */
+	/**
+	 * The note's passage the match rests on, in its prepared text: the best pair's for precise, the one
+	 * nearest the query's centroid for average, and for a reranked result the piece it judged most relevant.
+	 */
 	passage?: PassageSpan;
 	/** Note queries only: the query note's counterpart, its side of the best pair or its passage nearest this note's centroid. */
 	queryPassage?: PassageSpan;
@@ -79,6 +110,13 @@ export type RelatedNote = {
 	 * search. Its score and tier are still the meaning-based ones; `passage` is where the words are.
 	 */
 	keyword?: boolean;
+	/**
+	 * Text searches reranked by the cross-encoder only: how relevant it judged the note's passage
+	 * to the search, 0–1. Reranked results are ordered by it, and their bar shows it.
+	 */
+	relevance?: number;
+	/** Reranked results only: the text of `passage` as the reranker read it, less the note's title. */
+	passageText?: string;
 };
 
 export type PassageSpan = Pick<NoteChunk, "start" | "end" | "hash">;

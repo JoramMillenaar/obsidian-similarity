@@ -14,7 +14,8 @@ export type SimilarSearchResult = {
 
 export interface SimilarSearchFeed {
 	resolveForNote(noteId: string | null): Promise<SimilarSearchResult>;
-	resolveForQuery(text: string): Promise<SimilarSearchResult>;
+	/** `limit` widens the results, e.g. for reranking to choose from. */
+	resolveForQuery(text: string, options?: { limit?: number }): Promise<SimilarSearchResult>;
 	/** Starts readying what typed searches need (the keyword index), so the first one isn't slowed down. */
 	prepareForQueries(): void;
 	subscribeRefreshSignal(fn: () => void): Unsubscribe;
@@ -36,7 +37,7 @@ export function makeSimilarSearchFeed(deps: SimilarSearchFeedDeps): SimilarSearc
 		return {items: [], notice: engineNoticeFor(backend.getEngineState()) ?? undefined};
 	}
 
-	async function resolveEmbeddedQuery(text: string): Promise<SimilarSearchResult> {
+	async function resolveEmbeddedQuery(text: string, limit?: number): Promise<SimilarSearchResult> {
 		if (!backend.isReady()) {
 			return warmingUp();
 		}
@@ -46,7 +47,7 @@ export function makeSimilarSearchFeed(deps: SimilarSearchFeedDeps): SimilarSearc
 			return {items: [], notice: backendNoticeFor(true, backend.getIndexingState())};
 		}
 
-		const items = await deps.getSimilarNotesForText({text}).catch(() => []);
+		const items = await deps.getSimilarNotesForText({text, limit}).catch(() => []);
 		return {items, notice: backendNoticeFor(false, backend.getIndexingState())};
 	}
 
@@ -55,8 +56,8 @@ export function makeSimilarSearchFeed(deps: SimilarSearchFeedDeps): SimilarSearc
 			return resolveSimilarNotesForNote(deps, noteId);
 		},
 
-		async resolveForQuery(text) {
-			return resolveEmbeddedQuery(text);
+		async resolveForQuery(text, options) {
+			return resolveEmbeddedQuery(text, options?.limit);
 		},
 
 		prepareForQueries() {
