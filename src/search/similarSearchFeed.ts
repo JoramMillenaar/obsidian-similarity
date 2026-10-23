@@ -15,6 +15,8 @@ export type SimilarSearchResult = {
 export interface SimilarSearchFeed {
 	resolveForNote(noteId: string | null): Promise<SimilarSearchResult>;
 	resolveForQuery(text: string): Promise<SimilarSearchResult>;
+	/** Starts readying what typed searches need (the keyword index), so the first one isn't slowed down. */
+	prepareForQueries(): void;
 	subscribeRefreshSignal(fn: () => void): Unsubscribe;
 }
 
@@ -22,6 +24,7 @@ type SimilarSearchFeedDeps = {
 	statusHub: StatusHub;
 	getSimilarNotesForNote: GetSimilarNotesForNoteUseCase;
 	getSimilarNotesForText: GetSimilarNotesForTextUseCase;
+	prepareKeywordSearch?: () => void;
 	isIndexEmpty: () => Promise<boolean>;
 	isIgnoredPath: IsIgnoredPath;
 };
@@ -54,6 +57,10 @@ export function makeSimilarSearchFeed(deps: SimilarSearchFeedDeps): SimilarSearc
 
 		async resolveForQuery(text) {
 			return resolveEmbeddedQuery(text);
+		},
+
+		prepareForQueries() {
+			deps.prepareKeywordSearch?.();
 		},
 
 		subscribeRefreshSignal(fn) {

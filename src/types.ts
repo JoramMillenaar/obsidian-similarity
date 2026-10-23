@@ -74,6 +74,11 @@ export type RelatedNote = {
 	passage?: PassageSpan;
 	/** Note queries only: the query note's counterpart, its side of the best pair or its passage nearest this note's centroid. */
 	queryPassage?: PassageSpan;
+	/**
+	 * Text searches only: put first because the note contains (nearly) every distinctive word of the
+	 * search. Its score and tier are still the meaning-based ones; `passage` is where the words are.
+	 */
+	keyword?: boolean;
 };
 
 export type PassageSpan = Pick<NoteChunk, "start" | "end" | "hash">;

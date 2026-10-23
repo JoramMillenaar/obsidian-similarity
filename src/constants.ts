@@ -45,6 +45,13 @@ export const MATCH_KINDS: Record<MatchKind, {label: string; desc: string; icon: 
 	},
 };
 
+/** Text searches: a note lifted to the top because it contains the words searched for. */
+export const KEYWORD_MATCH = {
+	label: "Keyword match",
+	desc: "This note contains the words you searched for.",
+	icon: "text-search",
+};
+
 export const DEFAULT_SETTINGS: SimilaritySettings = {
 	ignoredPaths: [],
 	maxRawMarkdownChars: 20_000,

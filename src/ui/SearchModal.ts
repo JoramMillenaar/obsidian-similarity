@@ -6,7 +6,7 @@ import { computeBanner } from "./banner";
 import { mountBanner } from "./bannerView";
 import { textForNotice } from "./similarNoticeText";
 import { KeyedDebouncer } from "../core/util/debounce";
-import { RelatedNote, SimilarityTier } from "../types";
+import { RelatedNote } from "../types";
 import { renderMatchIcon, renderSimilarityBar } from "./similarityBar";
 import { noteAgeText } from "./noteAge";
 import { groupByTier } from "./tierSections";
@@ -28,7 +28,8 @@ export class SearchModal extends SuggestModal<RelatedNote> {
 	private isAutoRefreshing = false;
 	private unsubscribeBanner?: () => void;
 	private unsubscribeRefreshSignal?: () => void;
-	private tierHeadings = new Map<string, SimilarityTier>();
+	/** Section headings, keyed by the id of the first result under each. */
+	private sectionHeadings = new Map<string, string>();
 	/** The note the shown results were found for, whose matched passages get highlighted; null for a typed search. */
 	private queryNoteId: string | null = null;
 	private readonly originHighlighter: OriginHighlighter;
@@ -42,6 +43,7 @@ export class SearchModal extends SuggestModal<RelatedNote> {
 	private static readonly NO_RESULTS_EMPTY_STATE = "No similar notes found.";
 	private static readonly NO_RESULTS_DURING_INDEX_STATE = "No similar notes found yet. More may appear while processing continues.";
 	private static readonly NON_MARKDOWN_NOTE_STATE = this.DEFAULT_EMPTY_STATE;
+	private static readonly KEYWORD_SECTION = "Contains your search words";
 
 	constructor(app: App, deps: SearchModalDeps) {
 		super(app);
@@ -85,6 +87,7 @@ export class SearchModal extends SuggestModal<RelatedNote> {
 			this.inputEl.dispatchEvent(new Event("input"));
 		});
 		window.setTimeout(() => this.inputEl.dispatchEvent(new Event("input")), 0);
+		this.deps.similarSearchFeed.prepareForQueries();
 
 		// The modal has no selection-change hook, so the selected row is followed through its class.
 		this.selectionObserver = new MutationObserver(() => this.followSelection());
@@ -182,20 +185,23 @@ export class SearchModal extends SuggestModal<RelatedNote> {
 		new Notice("Could not insert link: no active editor.");
 	}
 
+	/** Keyword matches first, in their own section; the rest grouped by tier. */
 	private sortIntoTiers(items: RelatedNote[]): RelatedNote[] {
-		this.tierHeadings.clear();
-		const sorted: RelatedNote[] = [];
-		for (const section of groupByTier(items)) {
-			this.tierHeadings.set(section.items[0].id, section.tier);
+		this.sectionHeadings.clear();
+		const keyword = items.filter((item) => item.keyword);
+		const sorted: RelatedNote[] = [...keyword];
+		if (keyword.length) this.sectionHeadings.set(keyword[0].id, SearchModal.KEYWORD_SECTION);
+		for (const section of groupByTier(items.filter((item) => !item.keyword))) {
+			this.sectionHeadings.set(section.items[0].id, SIMILARITY_TIER_LABELS[section.tier]);
 			sorted.push(...section.items);
 		}
 		return sorted;
 	}
 
 	renderSuggestion(value: RelatedNote, el: HTMLElement): void {
-		const headingTier = this.tierHeadings.get(value.id);
-		if (headingTier !== undefined) {
-			const heading = createDiv({cls: "suggestion-item mod-group similarity-suggestion-group", text: SIMILARITY_TIER_LABELS[headingTier]});
+		const headingText = this.sectionHeadings.get(value.id);
+		if (headingText !== undefined) {
+			const heading = createDiv({cls: "suggestion-item mod-group similarity-suggestion-group", text: headingText});
 			el.before(heading);
 		}
 		let fileName = value.id;

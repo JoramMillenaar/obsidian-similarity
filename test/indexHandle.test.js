@@ -347,3 +347,21 @@ test("an average result carries each side's passage nearest the other side's cen
 	assert.strictEqual(result.passage.hash, `h-other.md-${centroidChunkIndex(self, other, EMBEDDING_MODEL.scoreNull)}`);
 	assert.strictEqual(result.queryPassage.hash, `h-self.md-${centroidChunkIndex(other, self, EMBEDDING_MODEL.scoreNull)}`);
 });
+
+test("pinned notes come first in the given order, flagged as keyword matches, within the limit", async () => {
+	const files = makeFiles();
+	const index = await openWith(files);
+	index.upsert(note("close.md", [vec(127, 0)]));
+	index.upsert(note("far.md", [vec(0, 127)]));
+	index.upsert(note("mid.md", [vec(90, 90)]));
+	index.upsert(note("other.md", [vec(120, 30)]));
+
+	const passage = {start: 1, end: 4, hash: "kw"};
+	const results = index.query([vec(127, 0)], {minScore: 0, limit: 3, pinned: [{id: "far.md", passage}, {id: "missing.md"}]});
+
+	assert.deepStrictEqual(results.map((r) => r.id), ["far.md", "close.md", "other.md"]);
+	assert.strictEqual(results[0].keyword, true);
+	assert.deepStrictEqual(results[0].passage, passage);
+	assert.ok(results[0].score < results[1].score, "a pinned note keeps its own (low) score and tier");
+	assert.ok(results.slice(1).every((r) => !r.keyword));
+});

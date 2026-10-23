@@ -26,7 +26,11 @@ export type QueryOptions = {
 	excludeId?: string;
 	limit?: number;
 	minScore?: number;
+	/** Notes to put first, in this order and regardless of score, flagged as keyword matches (text queries). */
+	pinned?: PinnedNote[];
 };
+
+export type PinnedNote = { id: string; passage?: PassageSpan };
 
 export interface IndexHandle {
 	readonly modelId: EmbeddingModelId;
@@ -69,7 +73,10 @@ export type IndexFiles = {
 
 const DEFAULT_WRITE_THROTTLE_MS = 1000;
 
-type MatchedPassages = Pick<RelatedNote, "passage" | "queryPassage">;
+type MatchedPassages = Pick<RelatedNote, "passage" | "queryPassage" | "keyword">;
+
+/** rankSimilarNotes' default. */
+const DEFAULT_QUERY_LIMIT = 10;
 
 type ScoreMemo = { chunks: NoteChunk[]; match: NoteMatch; passages?: MatchedPassages };
 
@@ -129,8 +136,25 @@ class ResidentIndex implements IndexHandle {
 
 	query(queryChunks: Embedding[], options: QueryOptions = {}): RelatedNote[] {
 		const {scoreNull, minScore} = EMBEDDING_MODELS[this.modelId];
-		const ranked = rankSimilarNotes(queryChunks, [...this.byId.values()], scoreNull, {...options, minScore: options.minScore ?? minScore});
-		return this.withTiers(ranked, (result) => this.passagesFor(result.id, result.match, queryChunks));
+		const {pinned = [], ...rest} = options;
+		const pins = pinned.filter((pin) => this.byId.has(pin.id));
+		const pinnedIds = new Set(pins.map((pin) => pin.id));
+		const limit = rest.limit ?? DEFAULT_QUERY_LIMIT;
+
+		const candidates = pinnedIds.size ? [...this.byId.values()].filter((note) => !pinnedIds.has(note.id)) : [...this.byId.values()];
+		const ranked = rankSimilarNotes(queryChunks, candidates, scoreNull, {...rest, limit: Math.max(0, limit - pins.length), minScore: rest.minScore ?? minScore});
+		const results = this.withTiers(ranked, (result) => this.passagesFor(result.id, result.match, queryChunks));
+		if (!pins.length) return results;
+
+		// Pinned notes keep their own score and tier, so the bar still says how close the meaning is.
+		const score = makeNoteScorer(queryChunks, scoreNull);
+		const scored = pins.map((pin) => ({id: pin.id, ...score(this.byId.get(pin.id)!.chunks.map((chunk) => chunk.embedding))}));
+		const passages = new Map(pins.map((pin) => [pin.id, pin.passage]));
+		const keywordResults = this.withTiers(scored, (result) => ({
+			passage: passages.get(result.id) ?? this.passagesFor(result.id, result.match, queryChunks).passage,
+			keyword: true,
+		}));
+		return [...keywordResults, ...results];
 	}
 
 	queryNote(noteId: string, options: Omit<QueryOptions, "excludeId"> = {}): RelatedNote[] | null {

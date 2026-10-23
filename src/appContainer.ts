@@ -25,6 +25,7 @@ import { GetSimilarNotesForTextUseCase, makeGetSimilarNotesForText } from "./sea
 import { makeSimilarNotesFeed, SimilarNotesFeed } from "./search/similarNotesFeed";
 import { makeSimilarSearchFeed, SimilarSearchFeed } from "./search/similarSearchFeed";
 import { GetMatchedPassageUseCase, makeGetMatchedPassage } from "./search/getMatchedPassage";
+import { KeywordSearch, makeKeywordSearch } from "./search/keywordSearch";
 import { InsertWikilinkAtCursorUseCase, makeInsertWikilinkAtCursor } from "./app/insertWikilinkAtCursor";
 import { IsIgnoredPath, makeIsIgnoredPath } from "./app/isIgnoredPath";
 import { GetNoteTextUseCase, makeGetNoteText } from "./app/getNoteText";
@@ -62,6 +63,7 @@ export class AppContainer {
 	readonly getSimilarNotesForNote: GetSimilarNotesForNoteUseCase;
 	readonly getSimilarNotesForText: GetSimilarNotesForTextUseCase;
 	readonly getMatchedPassage: GetMatchedPassageUseCase;
+	readonly keywordSearch: KeywordSearch;
 	readonly isIndexEmpty: () => Promise<boolean>;
 
 	private readonly registry: IndexRegistry;
@@ -121,12 +123,23 @@ export class AppContainer {
 			return makeGetSimilarNotesForNote({index})(args);
 		};
 
+		this.keywordSearch = makeKeywordSearch({
+			getIndex: () => this.indexer.index(),
+			readMarkdown: async (noteId) => {
+				const note = await this.vault.getNote(noteId);
+				if (!note) throw new Error(`Could not find note with noteId '${noteId}'`);
+				return `${note.title}\n${note.markdown.slice(0, this.settingsRepo.get().maxRawMarkdownChars)}`;
+			},
+			getNoteText: this.getNoteText,
+		});
+
 		this.getSimilarNotesForText = async (args) => {
 			const index = this.indexer.index();
 			if (!index) return [];
 			return makeGetSimilarNotesForText({
 				index,
 				embed: (text) => this.engine.embed(text, {lane: "interactive"}),
+				findKeywordHits: (text) => this.keywordSearch.find(text),
 			})(args);
 		};
 
@@ -147,6 +160,7 @@ export class AppContainer {
 			statusHub: this.statusHub,
 			getSimilarNotesForNote: this.getSimilarNotesForNote,
 			getSimilarNotesForText: this.getSimilarNotesForText,
+			prepareKeywordSearch: () => this.keywordSearch.prepare(),
 			isIndexEmpty: this.isIndexEmpty,
 			isIgnoredPath: this.isIgnoredPath,
 		});
