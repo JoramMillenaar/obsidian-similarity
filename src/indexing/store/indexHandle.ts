@@ -23,8 +23,6 @@ export type IndexStats = {
 };
 
 export type QueryOptions = {
-	/** Where each query chunk lies in the searched text, so results can say which part of it they matched. */
-	querySpans?: PassageSpan[];
 	excludeId?: string;
 	limit?: number;
 	minScore?: number;
@@ -132,7 +130,7 @@ class ResidentIndex implements IndexHandle {
 	query(queryChunks: Embedding[], options: QueryOptions = {}): RelatedNote[] {
 		const {scoreNull, minScore} = EMBEDDING_MODELS[this.modelId];
 		const ranked = rankSimilarNotes(queryChunks, [...this.byId.values()], scoreNull, {...options, minScore: options.minScore ?? minScore});
-		return this.withTiers(ranked, (result) => this.passagesFor(result.id, result.match, queryChunks, options.querySpans));
+		return this.withTiers(ranked, (result) => this.passagesFor(result.id, result.match, queryChunks));
 	}
 
 	queryNote(noteId: string, options: Omit<QueryOptions, "excludeId"> = {}): RelatedNote[] | null {

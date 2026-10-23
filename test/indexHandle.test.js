@@ -252,8 +252,11 @@ test("query labels each result with the index model's tier and scaled score", as
 
 function fullRanking(index, noteId) {
 	const {chunks} = index.get(noteId);
-	return index.query(chunks.map((c) => c.embedding), {querySpans: chunks, excludeId: noteId, minScore: 0});
+	return index.query(chunks.map((c) => c.embedding), {excludeId: noteId, minScore: 0});
 }
+
+// A full ranking has no query note to point into, so only the note's own side of each match is compared.
+const withoutQueryPassage = (results) => results.map(({queryPassage, ...result}) => result);
 
 test("queryNote stays equal to a full ranking as the index changes underneath it", async () => {
 	const files = makeFiles();
@@ -265,8 +268,8 @@ test("queryNote stays equal to a full ranking as the index changes underneath it
 	index.upsert(note("c.md", [vec(60, 100)]));
 
 	const check = (label) => assert.deepStrictEqual(
-		index.queryNote("self.md", {minScore: 0}),
-		fullRanking(index, "self.md"),
+		withoutQueryPassage(index.queryNote("self.md", {minScore: 0})),
+		withoutQueryPassage(fullRanking(index, "self.md")),
 		label,
 	);
 
@@ -313,14 +316,10 @@ test("a precise result carries the spans of both passages it matched on", async 
 	index.upsert(note("self.md", [vec(0, 127), vec(127, 0)]));
 	index.upsert(note("other.md", [vec(0, -127), vec(127, 5), vec(-60, -100)]));
 
-	const self = index.get("self.md").chunks;
-	const fromText = index.query(self.map((c) => c.embedding), {querySpans: self, excludeId: "self.md", minScore: -Infinity});
-	for (const results of [fromText, index.queryNote("self.md", {minScore: -Infinity})]) {
-		const other = results.find((r) => r.id === "other.md");
-		assert.strictEqual(other.match, "precise");
-		assert.deepStrictEqual(other.passage, {start: 10, end: 15, hash: "h-other.md-1"});
-		assert.deepStrictEqual(other.queryPassage, {start: 10, end: 15, hash: "h-self.md-1"});
-	}
+	const other = index.queryNote("self.md", {minScore: -Infinity}).find((r) => r.id === "other.md");
+	assert.strictEqual(other.match, "precise");
+	assert.deepStrictEqual(other.passage, {start: 10, end: 15, hash: "h-other.md-1"});
+	assert.deepStrictEqual(other.queryPassage, {start: 10, end: 15, hash: "h-self.md-1"});
 });
 
 test("an average result carries each side's passage nearest the other side's centroid", async () => {

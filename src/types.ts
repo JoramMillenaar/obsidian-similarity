@@ -72,7 +72,7 @@ export type RelatedNote = {
 	scaledScore: number;
 	/** The note's passage the match rests on, in its prepared text: the best pair's for precise, the one nearest the query's centroid for average. */
 	passage?: PassageSpan;
-	/** The query's counterpart, in the query note's prepared text or the searched text: its side of the best pair, or its passage nearest this note's centroid. */
+	/** Note queries only: the query note's counterpart, its side of the best pair or its passage nearest this note's centroid. */
 	queryPassage?: PassageSpan;
 };
 

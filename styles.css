@@ -312,11 +312,6 @@ body {
 	line-height: var(--line-height-tight);
 }
 
-.similarity-passage-label {
-	color: var(--text-faint);
-	font-size: 0.9em;
-}
-
 .similarity-passage-text {
 	display: -webkit-box;
 	-webkit-box-orient: vertical;

@@ -12,7 +12,7 @@ import { noteAgeText } from "./noteAge";
 import { groupByTier } from "./tierSections";
 import { SIMILARITY_TIER_LABELS } from "../core/vector/similarityTier";
 import { GetMatchedPassageUseCase } from "../search/getMatchedPassage";
-import { MatchQuery, renderMatchedPassage } from "./matchedPassage";
+import { renderMatchedPassage } from "./matchedPassage";
 import { OriginHighlighter } from "./originHighlight";
 
 export type SearchModalDeps = {
@@ -30,7 +30,8 @@ export class SearchModal extends SuggestModal<RelatedNote> {
 	private unsubscribeBanner?: () => void;
 	private unsubscribeRefreshSignal?: () => void;
 	private tierHeadings = new Map<string, SimilarityTier>();
-	private matchQuery: MatchQuery | null = null;
+	/** The note the shown results were found for, whose matched passages get highlighted; null for a typed search. */
+	private queryNoteId: string | null = null;
 	private readonly originHighlighter: OriginHighlighter;
 	private readonly suggestionNotes = new WeakMap<HTMLElement, RelatedNote>();
 	private selectionObserver?: MutationObserver;
@@ -102,12 +103,12 @@ export class SearchModal extends SuggestModal<RelatedNote> {
 		this.highlightTimer = null;
 		this.originHighlighter.clear();
 
-		const source = this.matchQuery?.source;
+		const queryNoteId = this.queryNoteId;
 		const queryPassage = note?.queryPassage;
-		if (!source || !("noteId" in source) || !queryPassage) return;
+		if (queryNoteId === null || !queryPassage) return;
 		this.highlightTimer = window.setTimeout(() => {
 			this.highlightTimer = null;
-			this.originHighlighter.show(source.noteId, this.deps.getMatchedPassage(source, queryPassage));
+			this.originHighlighter.show(queryNoteId, this.deps.getMatchedPassage(queryNoteId, queryPassage));
 		}, 150);
 	}
 
@@ -137,7 +138,7 @@ export class SearchModal extends SuggestModal<RelatedNote> {
 			this.debouncer.schedule("search", async () => {
 				try {
 					const result = await this.deps.similarSearchFeed.resolveForQuery(query);
-					this.matchQuery = {source: {text: query}, label: "Your search"};
+					this.queryNoteId = null;
 					this.emptyStateText = this.textFor(result);
 					resolve(this.sortIntoTiers(result.items));
 				} catch (e) {
@@ -206,7 +207,7 @@ export class SearchModal extends SuggestModal<RelatedNote> {
 		const textEl = el.createDiv({cls: "similarity-suggestion-text"});
 		const titleEl = textEl.createDiv({text: fileName, cls: "similarity-suggestion-title"});
 		titleEl.addClass("internal-link");
-		if (this.matchQuery) renderMatchedPassage(textEl, value, this.deps.getMatchedPassage, this.matchQuery);
+		renderMatchedPassage(textEl, value, this.deps.getMatchedPassage);
 
 		const age = noteAgeText(this.app, value.id);
 		if (age) el.createEl("small", {text: age, cls: "similarity-suggestion-age"});
@@ -223,7 +224,7 @@ export class SearchModal extends SuggestModal<RelatedNote> {
 		try {
 			const active = this.app.workspace.getActiveFile();
 			const result = await this.deps.similarSearchFeed.resolveForNote(active?.path ?? null);
-			this.matchQuery = active ? {source: {noteId: active.path}, label: "This note"} : null;
+			this.queryNoteId = active?.path ?? null;
 			this.emptyStateText = this.textFor(result);
 			return this.sortIntoTiers(result.items);
 		} catch (e) {

@@ -363,9 +363,7 @@ export class SimilarNotesListView extends ItemView {
 			if (age) meta.createSpan({cls: "related-age", text: parentPath ? ` · ${age}` : age});
 		}
 
-		if (queryNoteId !== null) {
-			renderMatchedPassage(textWrapper, note, this.deps.getMatchedPassage, {source: {noteId: queryNoteId}, label: "This note"});
-		}
+		renderMatchedPassage(textWrapper, note, this.deps.getMatchedPassage);
 
 		const flairOuter = itemSelf.createDiv({cls: "tree-item-flair-outer"});
 		renderSimilarityBar(flairOuter, note);
@@ -398,7 +396,7 @@ export class SimilarNotesListView extends ItemView {
 		itemSelf.addEventListener("mouseenter", () => {
 			timer = window.setTimeout(() => {
 				timer = null;
-				this.originHighlighter.show(queryNoteId, this.deps.getMatchedPassage({noteId: queryNoteId}, queryPassage));
+				this.originHighlighter.show(queryNoteId, this.deps.getMatchedPassage(queryNoteId, queryPassage));
 			}, HIGHLIGHT_DELAY_MS);
 		});
 		itemSelf.addEventListener("mouseleave", () => {
