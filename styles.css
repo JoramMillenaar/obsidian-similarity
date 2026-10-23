@@ -325,6 +325,13 @@ body {
 	color: var(--text-muted);
 }
 
+/* The passage of the open note a hovered result matched on (see ui/originHighlight.ts). */
+.similarity-origin-highlight {
+	/* What core's own search highlight (.is-flashing) uses; older themes only define --text-highlight-bg. */
+	background-color: var(--highlight-background, var(--text-highlight-bg));
+	border-radius: var(--radius-s);
+}
+
 @media (prefers-reduced-motion: reduce) {
 	.similarity-passage {
 		transition: none;

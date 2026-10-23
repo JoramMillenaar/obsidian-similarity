@@ -13,6 +13,7 @@ import { groupByTier } from "./tierSections";
 import { SIMILARITY_TIER_LABELS } from "../core/vector/similarityTier";
 import { GetMatchedPassageUseCase } from "../search/getMatchedPassage";
 import { MatchQuery, renderMatchedPassage } from "./matchedPassage";
+import { OriginHighlighter } from "./originHighlight";
 
 export type SearchModalDeps = {
 	similarSearchFeed: SimilarSearchFeed;
@@ -30,6 +31,11 @@ export class SearchModal extends SuggestModal<RelatedNote> {
 	private unsubscribeRefreshSignal?: () => void;
 	private tierHeadings = new Map<string, SimilarityTier>();
 	private matchQuery: MatchQuery | null = null;
+	private readonly originHighlighter: OriginHighlighter;
+	private readonly suggestionNotes = new WeakMap<HTMLElement, RelatedNote>();
+	private selectionObserver?: MutationObserver;
+	private selectedNote: RelatedNote | null = null;
+	private highlightTimer: number | null = null;
 
 	private static readonly DEFAULT_EMPTY_STATE = "Type to search related notes.";
 	private static readonly LOADING_EMPTY_STATE = "Searching similar notes...";
@@ -40,6 +46,7 @@ export class SearchModal extends SuggestModal<RelatedNote> {
 	constructor(app: App, deps: SearchModalDeps) {
 		super(app);
 		this.deps = deps;
+		this.originHighlighter = new OriginHighlighter(app);
 		this.debouncer = new KeyedDebouncer(300);
 		this.emptyStateText = SearchModal.DEFAULT_EMPTY_STATE;
 		this.setInstructions([
@@ -78,9 +85,36 @@ export class SearchModal extends SuggestModal<RelatedNote> {
 			this.inputEl.dispatchEvent(new Event("input"));
 		});
 		window.setTimeout(() => this.inputEl.dispatchEvent(new Event("input")), 0);
+
+		// The modal has no selection-change hook, so the selected row is followed through its class.
+		this.selectionObserver = new MutationObserver(() => this.followSelection());
+		this.selectionObserver.observe(this.resultContainerEl, {subtree: true, childList: true, attributes: true, attributeFilter: ["class"]});
+	}
+
+	/** Highlights, in the open note, the passage the selected result matched on (only for results found for that note). */
+	private followSelection(): void {
+		const selected = this.resultContainerEl.querySelector<HTMLElement>(".suggestion-item.is-selected");
+		const note = (selected && this.suggestionNotes.get(selected)) ?? null;
+		if (note === this.selectedNote) return;
+		this.selectedNote = note;
+
+		if (this.highlightTimer !== null) window.clearTimeout(this.highlightTimer);
+		this.highlightTimer = null;
+		this.originHighlighter.clear();
+
+		const source = this.matchQuery?.source;
+		const queryPassage = note?.queryPassage;
+		if (!source || !("noteId" in source) || !queryPassage) return;
+		this.highlightTimer = window.setTimeout(() => {
+			this.highlightTimer = null;
+			this.originHighlighter.show(source.noteId, this.deps.getMatchedPassage(source, queryPassage));
+		}, 150);
 	}
 
 	onClose(): void {
+		this.selectionObserver?.disconnect();
+		if (this.highlightTimer !== null) window.clearTimeout(this.highlightTimer);
+		this.originHighlighter.clear();
 		this.unsubscribeBanner?.();
 		this.unsubscribeRefreshSignal?.();
 		super.onClose();
@@ -167,6 +201,7 @@ export class SearchModal extends SuggestModal<RelatedNote> {
 		let fileName = value.id;
 		if (fileName.endsWith(".md")) fileName = fileName.slice(0, -3);
 		el.addClass("similarity-suggestion");
+		this.suggestionNotes.set(el, value);
 		renderMatchIcon(el, value, "similarity-suggestion-icon");
 		const textEl = el.createDiv({cls: "similarity-suggestion-text"});
 		const titleEl = textEl.createDiv({text: fileName, cls: "similarity-suggestion-title"});
