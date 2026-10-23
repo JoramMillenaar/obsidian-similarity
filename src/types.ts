@@ -70,8 +70,10 @@ export type RelatedNote = {
 	match: MatchKind;
 	tier: SimilarityTier;
 	scaledScore: number;
-	/** Where in the note's prepared text the match lies (see core/vector/similarity.ts matchedChunkIndex). */
+	/** The note's passage the match rests on, in its prepared text: the best pair's for precise, the one nearest the query's centroid for average. */
 	passage?: PassageSpan;
+	/** Precise only: the query's side of the best pair, in the query note's prepared text or the searched text. */
+	queryPassage?: PassageSpan;
 };
 
 export type PassageSpan = Pick<NoteChunk, "start" | "end" | "hash">;

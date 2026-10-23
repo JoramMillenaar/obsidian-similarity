@@ -12,7 +12,7 @@ import { noteAgeText } from "./noteAge";
 import { groupByTier } from "./tierSections";
 import { SIMILARITY_TIER_LABELS } from "../core/vector/similarityTier";
 import { GetMatchedPassageUseCase } from "../search/getMatchedPassage";
-import { renderMatchedPassage } from "./matchedPassage";
+import { MatchQuery, renderMatchedPassage } from "./matchedPassage";
 
 export type SearchModalDeps = {
 	similarSearchFeed: SimilarSearchFeed;
@@ -29,6 +29,7 @@ export class SearchModal extends SuggestModal<RelatedNote> {
 	private unsubscribeBanner?: () => void;
 	private unsubscribeRefreshSignal?: () => void;
 	private tierHeadings = new Map<string, SimilarityTier>();
+	private matchQuery: MatchQuery | null = null;
 
 	private static readonly DEFAULT_EMPTY_STATE = "Type to search related notes.";
 	private static readonly LOADING_EMPTY_STATE = "Searching similar notes...";
@@ -102,6 +103,7 @@ export class SearchModal extends SuggestModal<RelatedNote> {
 			this.debouncer.schedule("search", async () => {
 				try {
 					const result = await this.deps.similarSearchFeed.resolveForQuery(query);
+					this.matchQuery = {source: {text: query}, label: "Your search"};
 					this.emptyStateText = this.textFor(result);
 					resolve(this.sortIntoTiers(result.items));
 				} catch (e) {
@@ -169,7 +171,7 @@ export class SearchModal extends SuggestModal<RelatedNote> {
 		const textEl = el.createDiv({cls: "similarity-suggestion-text"});
 		const titleEl = textEl.createDiv({text: fileName, cls: "similarity-suggestion-title"});
 		titleEl.addClass("internal-link");
-		renderMatchedPassage(textEl, value, this.deps.getMatchedPassage, "similarity-suggestion-passage");
+		if (this.matchQuery) renderMatchedPassage(textEl, value, this.deps.getMatchedPassage, this.matchQuery);
 
 		const age = noteAgeText(this.app, value.id);
 		if (age) el.createEl("small", {text: age, cls: "similarity-suggestion-age"});
@@ -186,6 +188,7 @@ export class SearchModal extends SuggestModal<RelatedNote> {
 		try {
 			const active = this.app.workspace.getActiveFile();
 			const result = await this.deps.similarSearchFeed.resolveForNote(active?.path ?? null);
+			this.matchQuery = active ? {source: {noteId: active.path}, label: "This note"} : null;
 			this.emptyStateText = this.textFor(result);
 			return this.sortIntoTiers(result.items);
 		} catch (e) {

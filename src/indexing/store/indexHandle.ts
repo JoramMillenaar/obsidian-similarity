@@ -3,7 +3,7 @@ import { EmbeddingFileStore, ModelIndexMetaStore } from "../../ports";
 import { DecodedEmbeddings, decodeEmbeddings, encodeEmbeddings } from "../../core/vector/codec";
 import { packForStorage, unpackFromStorage } from "../../core/vector/packing";
 import { checkIndexHealth, MetaState, SidecarState } from "../../core/rules/health";
-import { makeNoteScorer, matchedChunkIndex, NoteMatch, rankSimilarNotes, ScoredNote, selectTopScores } from "../../core/vector/similarity";
+import { bestPairIndices, centroidChunkIndex, makeNoteScorer, NoteMatch, rankSimilarNotes, ScoredNote, selectTopScores } from "../../core/vector/similarity";
 import { scaleScore, similarityTier } from "../../core/vector/similarityTier";
 import { EMBEDDING_MODELS } from "../../constants";
 
@@ -23,6 +23,8 @@ export type IndexStats = {
 };
 
 export type QueryOptions = {
+	/** Where each query chunk lies in the searched text, so results can say which part of it they matched. */
+	querySpans?: PassageSpan[];
 	excludeId?: string;
 	limit?: number;
 	minScore?: number;
@@ -69,7 +71,9 @@ export type IndexFiles = {
 
 const DEFAULT_WRITE_THROTTLE_MS = 1000;
 
-type ScoreMemo = { chunks: NoteChunk[]; match: NoteMatch; passage?: PassageSpan };
+type MatchedPassages = Pick<RelatedNote, "passage" | "queryPassage">;
+
+type ScoreMemo = { chunks: NoteChunk[]; match: NoteMatch; passages?: MatchedPassages };
 
 type NoteQueryMemo = {
 	noteId: string;
@@ -128,7 +132,7 @@ class ResidentIndex implements IndexHandle {
 	query(queryChunks: Embedding[], options: QueryOptions = {}): RelatedNote[] {
 		const {scoreNull, minScore} = EMBEDDING_MODELS[this.modelId];
 		const ranked = rankSimilarNotes(queryChunks, [...this.byId.values()], scoreNull, {...options, minScore: options.minScore ?? minScore});
-		return this.withTiers(ranked, (result) => this.passageFor(result.id, result.match, queryChunks));
+		return this.withTiers(ranked, (result) => this.passagesFor(result.id, result.match, queryChunks, options.querySpans));
 	}
 
 	queryNote(noteId: string, options: Omit<QueryOptions, "excludeId"> = {}): RelatedNote[] | null {
@@ -163,29 +167,33 @@ class ResidentIndex implements IndexHandle {
 		let queryEmbeddings: Embedding[] | undefined;
 		return this.withTiers(top, (result) => {
 			const memo = scores.get(result.id);
-			if (memo && !memo.passage) {
-				queryEmbeddings ??= queryNote.chunks.map((chunk) => chunk.embedding);
-				memo.passage = this.passageFor(result.id, result.match, queryEmbeddings);
-			}
-			return memo?.passage;
+			if (!memo) return {};
+			queryEmbeddings ??= queryNote.chunks.map((chunk) => chunk.embedding);
+			memo.passages ??= this.passagesFor(result.id, result.match, queryEmbeddings, queryNote.chunks);
+			return memo.passages;
 		});
 	}
 
-	private passageFor(noteId: string, kind: MatchKind, queryChunks: Embedding[]): PassageSpan | undefined {
+	private passagesFor(noteId: string, kind: MatchKind, queryChunks: Embedding[], querySpans?: PassageSpan[]): MatchedPassages {
 		const chunks = this.byId.get(noteId)?.chunks;
-		if (!chunks) return undefined;
-		const index = matchedChunkIndex(kind, queryChunks, chunks.map((chunk) => chunk.embedding), EMBEDDING_MODELS[this.modelId].scoreNull);
-		const chunk = chunks[index];
-		return chunk && {start: chunk.start, end: chunk.end, hash: chunk.hash};
+		if (!chunks) return {};
+		const candidates = chunks.map((chunk) => chunk.embedding);
+		const {scoreNull} = EMBEDDING_MODELS[this.modelId];
+
+		if (kind === "average") return {passage: spanOf(chunks[centroidChunkIndex(queryChunks, candidates, scoreNull)])};
+
+		const pair = bestPairIndices(queryChunks, candidates, scoreNull);
+		if (!pair) return {};
+		return {passage: spanOf(chunks[pair.candidate]), queryPassage: spanOf(querySpans?.[pair.query])};
 	}
 
-	private withTiers(results: ScoredNote[], passageOf: (result: ScoredNote) => PassageSpan | undefined): RelatedNote[] {
+	private withTiers(results: ScoredNote[], passagesOf: (result: ScoredNote) => MatchedPassages): RelatedNote[] {
 		const {tierThresholds} = EMBEDDING_MODELS[this.modelId];
 		return results.map((result) => ({
 			...result,
 			tier: similarityTier(result.score, tierThresholds),
 			scaledScore: scaleScore(result.score, tierThresholds),
-			passage: passageOf(result),
+			...passagesOf(result),
 		}));
 	}
 
@@ -287,6 +295,10 @@ class ResidentIndex implements IndexHandle {
 			index: metadata,
 		});
 	}
+}
+
+function spanOf(span: PassageSpan | undefined): PassageSpan | undefined {
+	return span && {start: span.start, end: span.end, hash: span.hash};
 }
 
 type SidecarRead = {

@@ -1,6 +1,7 @@
 import { RelatedNote } from "../types";
 import { EmbeddingResult } from "../ports";
 import { IndexHandle } from "../indexing/store/indexHandle";
+import { hashText } from "../core/text/hash";
 
 export type GetSimilarNotesForTextUseCase = (args: {
 	text: string;
@@ -17,6 +18,7 @@ export function makeGetSimilarNotesForText(deps: {
 		if (!embedded?.chunks.length) throw new Error("getSimilarNotesForText: could not embed text");
 
 		const queryChunks = embedded.chunks.map((chunk) => chunk.embedding);
-		return deps.index.query(queryChunks, {limit, minScore});
+		const querySpans = embedded.chunks.map(({start, end}) => ({start, end, hash: hashText(text.slice(start, end))}));
+		return deps.index.query(queryChunks, {querySpans, limit, minScore});
 	};
 }

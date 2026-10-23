@@ -251,7 +251,8 @@ test("query labels each result with the index model's tier and scaled score", as
 });
 
 function fullRanking(index, noteId) {
-	return index.query(index.get(noteId).chunks.map((c) => c.embedding), {excludeId: noteId, minScore: 0});
+	const {chunks} = index.get(noteId);
+	return index.query(chunks.map((c) => c.embedding), {querySpans: chunks, excludeId: noteId, minScore: 0});
 }
 
 test("queryNote stays equal to a full ranking as the index changes underneath it", async () => {
@@ -305,15 +306,19 @@ test("queryNote re-scores only notes whose vectors changed since the last query"
 	assert.ok(rescored.find((r) => r.id === "stale.md").score < 0.5, "a re-indexed note must be re-scored");
 });
 
-test("results carry the span of the passage they matched on", async () => {
+test("a precise result carries the spans of both passages it matched on", async () => {
 	const files = makeFiles();
 	const index = await openIndex(files, MODEL_ID, {throttleMs: THROTTLE_MS});
 
-	index.upsert(note("self.md", [vec(127, 0)]));
-	index.upsert(note("other.md", [vec(0, 127), vec(127, 5), vec(60, 100)]));
+	index.upsert(note("self.md", [vec(0, 127), vec(127, 0)]));
+	index.upsert(note("other.md", [vec(0, -127), vec(127, 5), vec(-60, -100)]));
 
-	for (const results of [index.query([vec(127, 0)], {excludeId: "self.md", minScore: -Infinity}), index.queryNote("self.md", {minScore: -Infinity})]) {
+	const self = index.get("self.md").chunks;
+	const fromText = index.query(self.map((c) => c.embedding), {querySpans: self, excludeId: "self.md", minScore: -Infinity});
+	for (const results of [fromText, index.queryNote("self.md", {minScore: -Infinity})]) {
 		const other = results.find((r) => r.id === "other.md");
+		assert.strictEqual(other.match, "precise");
 		assert.deepStrictEqual(other.passage, {start: 10, end: 15, hash: "h-other.md-1"});
+		assert.deepStrictEqual(other.queryPassage, {start: 10, end: 15, hash: "h-self.md-1"});
 	}
 });

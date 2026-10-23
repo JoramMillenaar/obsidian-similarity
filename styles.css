@@ -282,22 +282,53 @@ body {
 	min-width: 0;
 }
 
+/* What a result matched on: collapsed, and animated open (0fr → 1fr) while the result is hovered
+   or selected. The short delay keeps rows from jumping open as the pointer sweeps past them. */
 .similarity-passage {
-	display: -webkit-box;
-	-webkit-box-orient: vertical;
-	-webkit-line-clamp: 2;
+	display: grid;
+	grid-template-rows: 0fr;
+	opacity: 0;
+	transition: grid-template-rows 160ms ease-out, opacity 160ms ease-out;
+}
+
+.tree-item-self:hover .similarity-passage,
+.similarity-suggestion:hover .similarity-passage,
+.similarity-suggestion.is-selected .similarity-passage {
+	grid-template-rows: 1fr;
+	opacity: 1;
+	transition-delay: 150ms;
+}
+
+.similarity-passage-body {
+	min-height: 0;
 	overflow: hidden;
-	color: var(--text-muted);
+}
+
+.similarity-passage-quote {
+	margin-top: 4px;
+	padding-inline-start: 6px;
+	border-inline-start: 2px solid var(--background-modifier-border);
 	font-size: var(--font-ui-smaller);
 	line-height: var(--line-height-tight);
 }
 
-.related-passage {
-	margin-top: 2px;
+.similarity-passage-label {
+	color: var(--text-faint);
+	font-size: 0.9em;
 }
 
-.similarity-suggestion-passage {
-	margin-top: 2px;
+.similarity-passage-text {
+	display: -webkit-box;
+	-webkit-box-orient: vertical;
+	-webkit-line-clamp: 3;
+	overflow: hidden;
+	color: var(--text-muted);
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.similarity-passage {
+		transition: none;
+	}
 }
 
 .similarity-path-suggestion {

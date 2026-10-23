@@ -47,7 +47,7 @@ export type SimilarNotesListViewDeps = {
 const TRUNCATION_NOTICE_TEXT = "Only part of this large note was used for the search.";
 
 function signatureForItems(items: SimilarNotesSnapshot["items"]): string {
-	return items.map((item) => `${item.id} ${item.match} ${item.score.toFixed(4)} ${item.passage?.hash ?? ""}`).join("|");
+	return items.map((item) => `${item.id} ${item.match} ${item.score.toFixed(4)} ${item.passage?.hash ?? ""} ${item.queryPassage?.hash ?? ""}`).join("|");
 }
 
 function signatureForMessage(message: MessageState): string {
@@ -205,7 +205,7 @@ export class SimilarNotesListView extends ItemView {
 			return;
 		}
 
-		this.renderRelatedList(this.snapshot.items);
+		this.renderRelatedList(this.snapshot.items, this.snapshot.noteId);
 
 		if (this.snapshot.items.length > 0) {
 			this.renderMessage({});
@@ -282,11 +282,11 @@ export class SimilarNotesListView extends ItemView {
 		});
 	}
 
-	private renderRelatedList(related: SimilarNotesSnapshot["items"]) {
+	private renderRelatedList(related: SimilarNotesSnapshot["items"], queryNoteId: string | null = null) {
 		const list = this.listEl;
 		if (!list) return;
 
-		const signature = signatureForItems(related);
+		const signature = `${queryNoteId ?? ""}|${signatureForItems(related)}`;
 		if (signature === this.renderedItems) return;
 		this.renderedItems = signature;
 
@@ -295,7 +295,7 @@ export class SimilarNotesListView extends ItemView {
 		for (const section of groupByTier(related)) {
 			const sectionEl = list.createDiv({cls: "tree-item similarity-tier-section"});
 			const children = this.renderSectionHeader(sectionEl, section.tier, section.items.length);
-			section.items.forEach((note) => this.renderRelatedItem(children, note));
+			section.items.forEach((note) => this.renderRelatedItem(children, note, queryNoteId));
 		}
 	}
 
@@ -324,7 +324,7 @@ export class SimilarNotesListView extends ItemView {
 		return children;
 	}
 
-	private renderRelatedItem(list: HTMLElement, note: RelatedNote) {
+	private renderRelatedItem(list: HTMLElement, note: RelatedNote, queryNoteId: string | null) {
 		const path = note.id;
 
 		const listItem = list.createDiv({cls: "tree-item"});
@@ -354,7 +354,9 @@ export class SimilarNotesListView extends ItemView {
 			if (age) meta.createSpan({cls: "related-age", text: parentPath ? ` · ${age}` : age});
 		}
 
-		renderMatchedPassage(textWrapper, note, this.deps.getMatchedPassage, "related-passage");
+		if (queryNoteId !== null) {
+			renderMatchedPassage(textWrapper, note, this.deps.getMatchedPassage, {source: {noteId: queryNoteId}, label: "This note"});
+		}
 
 		const flairOuter = itemSelf.createDiv({cls: "tree-item-flair-outer"});
 		renderSimilarityBar(flairOuter, note);
