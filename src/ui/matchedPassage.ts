@@ -8,9 +8,9 @@ export type MatchQuery = {
 };
 
 /**
- * What a result matched on, collapsed until the result is hovered (see styles.css). Precise: both
- * passages of the best pair. Average: the result's passage nearest the query's centroid. Passages
- * that can't be recovered (their note changed since it was indexed) are left out.
+ * What a result matched on, collapsed until the result is hovered (see styles.css), from both sides.
+ * Precise: the two passages of the best pair. Average: each side's passage nearest the other's
+ * centroid. Passages that can't be recovered (their note changed since it was indexed) are left out.
  */
 export function renderMatchedPassage(
 	parent: HTMLElement,
@@ -25,14 +25,14 @@ export function renderMatchedPassage(
 	const body = panel.createDiv({cls: "similarity-passage-body"});
 
 	// Both sides are read ahead of the hover, so the panel opens with its text already in place.
-	if (note.match === "precise" && note.queryPassage) {
+	if (note.queryPassage) {
 		const queryQuote = createQuote(body, query.label);
 		void getMatchedPassage(query.source, note.queryPassage)
 			.then((text) => fill(queryQuote, text))
 			.catch(() => queryQuote.remove());
 	}
 
-	const quote = createQuote(body, note.match === "precise" ? "Matched passage" : "Nearest the average");
+	const quote = createQuote(body, "Similar note");
 	getMatchedPassage({noteId: note.id}, passage)
 		.then((text) => {
 			if (!fill(quote, text)) panel.remove();

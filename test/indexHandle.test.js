@@ -322,3 +322,29 @@ test("a precise result carries the spans of both passages it matched on", async 
 		assert.deepStrictEqual(other.queryPassage, {start: 10, end: 15, hash: "h-self.md-1"});
 	}
 });
+
+test("an average result carries each side's passage nearest the other side's centroid", async () => {
+	const {centroidChunkIndex} = require("../dist/core/vector/similarity.js");
+	const files = makeFiles();
+	const index = await openIndex(files, MODEL_ID, {throttleMs: THROTTLE_MS});
+
+	// Noisy passages that share one direction: the notes agree as a whole, no single pair stands out.
+	let state = 8040;
+	const random = () => (state = (state * 1664525 + 1013904223) >>> 0) / 2 ** 32;
+	const noisy = () => {
+		const v = new Int8Array(DIM);
+		for (let i = 0; i < DIM; i++) v[i] = Math.round((random() - 0.5) * 174);
+		v[0] = 40;
+		v[1] = 40;
+		return v;
+	};
+	const self = Array.from({length: 8}, noisy);
+	const other = Array.from({length: 8}, noisy);
+	index.upsert(note("self.md", self));
+	index.upsert(note("other.md", other));
+
+	const result = index.queryNote("self.md", {minScore: -Infinity}).find((r) => r.id === "other.md");
+	assert.strictEqual(result.match, "average");
+	assert.strictEqual(result.passage.hash, `h-other.md-${centroidChunkIndex(self, other, EMBEDDING_MODEL.scoreNull)}`);
+	assert.strictEqual(result.queryPassage.hash, `h-self.md-${centroidChunkIndex(other, self, EMBEDDING_MODEL.scoreNull)}`);
+});

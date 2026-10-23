@@ -180,7 +180,13 @@ class ResidentIndex implements IndexHandle {
 		const candidates = chunks.map((chunk) => chunk.embedding);
 		const {scoreNull} = EMBEDDING_MODELS[this.modelId];
 
-		if (kind === "average") return {passage: spanOf(chunks[centroidChunkIndex(queryChunks, candidates, scoreNull)])};
+		// Average: each side's passage nearest the other side's centroid, the score's largest term from either side.
+		if (kind === "average") {
+			return {
+				passage: spanOf(chunks[centroidChunkIndex(queryChunks, candidates, scoreNull)]),
+				queryPassage: spanOf(querySpans?.[centroidChunkIndex(candidates, queryChunks, scoreNull)]),
+			};
+		}
 
 		const pair = bestPairIndices(queryChunks, candidates, scoreNull);
 		if (!pair) return {};
