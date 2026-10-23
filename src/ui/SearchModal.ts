@@ -12,7 +12,6 @@ import { noteAgeText } from "./noteAge";
 import { groupByTier } from "./tierSections";
 import { SIMILARITY_TIER_LABELS } from "../core/vector/similarityTier";
 import { GetMatchedPassageUseCase } from "../search/getMatchedPassage";
-import { renderMatchedPassage } from "./matchedPassage";
 import { OriginHighlighter } from "./originHighlight";
 
 export type SearchModalDeps = {
@@ -204,10 +203,8 @@ export class SearchModal extends SuggestModal<RelatedNote> {
 		el.addClass("similarity-suggestion");
 		this.suggestionNotes.set(el, value);
 		renderMatchIcon(el, value, "similarity-suggestion-icon");
-		const textEl = el.createDiv({cls: "similarity-suggestion-text"});
-		const titleEl = textEl.createDiv({text: fileName, cls: "similarity-suggestion-title"});
+		const titleEl = el.createDiv({text: fileName, cls: "similarity-suggestion-title"});
 		titleEl.addClass("internal-link");
-		renderMatchedPassage(textEl, value, this.deps.getMatchedPassage);
 
 		const age = noteAgeText(this.app, value.id);
 		if (age) el.createEl("small", {text: age, cls: "similarity-suggestion-age"});

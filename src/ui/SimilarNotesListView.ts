@@ -11,8 +11,8 @@ import { noteAgeText } from "./noteAge";
 import { groupByTier } from "./tierSections";
 import { SIMILARITY_TIER_LABELS } from "../core/vector/similarityTier";
 import { GetMatchedPassageUseCase } from "../search/getMatchedPassage";
-import { renderMatchedPassage } from "./matchedPassage";
 import { OriginHighlighter } from "./originHighlight";
+import { MatchPreview } from "./matchPreview";
 
 export { VIEW_TYPE_SIMILARITY };
 
@@ -24,8 +24,6 @@ function logError(message: unknown, ...optionalParams: unknown[]) {
 
 const LOADING_TEXT = "Loading similar notes...";
 
-/** How long a result must be hovered before its origin is highlighted; matches the passage panel's delay in styles.css. */
-const HIGHLIGHT_DELAY_MS = 150;
 
 type RetryAction = {
 	label: string;
@@ -70,10 +68,16 @@ export class SimilarNotesListView extends ItemView {
 	private unsubscribeBanner?: () => void;
 	private collapsedTiers = new Set<SimilarityTier>();
 	private readonly originHighlighter: OriginHighlighter;
+	private readonly matchPreview: MatchPreview;
 
 	constructor(leaf: WorkspaceLeaf, private deps: SimilarNotesListViewDeps) {
 		super(leaf);
 		this.originHighlighter = new OriginHighlighter(this.app);
+		this.matchPreview = new MatchPreview(this.app, {
+			getMatchedPassage: deps.getMatchedPassage,
+			originHighlighter: this.originHighlighter,
+			hoverSource: VIEW_TYPE_SIMILARITY,
+		});
 	}
 
 	getViewType() {
@@ -103,19 +107,6 @@ export class SimilarNotesListView extends ItemView {
 				new Notice("Failed to open note.");
 			});
 	};
-
-	private triggerHoverPreview(event: MouseEvent, targetEl: HTMLElement, path: string) {
-		const activeFile = this.app.workspace.getActiveFile();
-
-		this.app.workspace.trigger("hover-link", {
-			event,
-			source: VIEW_TYPE_SIMILARITY,
-			hoverParent: this.containerEl,
-			targetEl,
-			linktext: path,
-			sourcePath: activeFile?.path ?? path,
-		});
-	}
 
 	private createNavActionButton(container: HTMLElement, icon: string, label: string, onClick: (event: MouseEvent) => void) {
 		const button = container.createEl("button", {
@@ -296,8 +287,6 @@ export class SimilarNotesListView extends ItemView {
 		if (signature === this.renderedItems) return;
 		this.renderedItems = signature;
 
-		// Rows about to be replaced never get their mouseleave.
-		this.originHighlighter.clear();
 		list.empty();
 
 		for (const section of groupByTier(related)) {
@@ -340,10 +329,7 @@ export class SimilarNotesListView extends ItemView {
 			cls: "tree-item-self tag-pane-tag is-clickable",
 		});
 		this.bindOpenOnClick(itemSelf, path);
-		this.bindOriginHighlight(itemSelf, note, queryNoteId);
-		itemSelf.addEventListener("mouseover", (event: MouseEvent) => {
-			this.triggerHoverPreview(event, itemSelf, path);
-		});
+		this.matchPreview.bind(itemSelf, note, queryNoteId);
 
 		renderMatchIcon(itemSelf, note, "tree-item-icon");
 		const itemInner = itemSelf.createDiv({cls: "tree-item-inner"});
@@ -362,8 +348,6 @@ export class SimilarNotesListView extends ItemView {
 			if (parentPath) meta.appendText(parentPath);
 			if (age) meta.createSpan({cls: "related-age", text: parentPath ? ` · ${age}` : age});
 		}
-
-		renderMatchedPassage(textWrapper, note, this.deps.getMatchedPassage);
 
 		const flairOuter = itemSelf.createDiv({cls: "tree-item-flair-outer"});
 		renderSimilarityBar(flairOuter, note);
@@ -384,25 +368,6 @@ export class SimilarNotesListView extends ItemView {
 				return;
 			}
 			this.openNote(path);
-		});
-	}
-
-	/** While a result is hovered, highlights the passage of the open note it matched on. */
-	private bindOriginHighlight(itemSelf: HTMLElement, note: RelatedNote, queryNoteId: string | null) {
-		const queryPassage = note.queryPassage;
-		if (queryNoteId === null || !queryPassage) return;
-
-		let timer: number | null = null;
-		itemSelf.addEventListener("mouseenter", () => {
-			timer = window.setTimeout(() => {
-				timer = null;
-				this.originHighlighter.show(queryNoteId, this.deps.getMatchedPassage(queryNoteId, queryPassage));
-			}, HIGHLIGHT_DELAY_MS);
-		});
-		itemSelf.addEventListener("mouseleave", () => {
-			if (timer !== null) window.clearTimeout(timer);
-			timer = null;
-			this.originHighlighter.clear();
 		});
 	}
 

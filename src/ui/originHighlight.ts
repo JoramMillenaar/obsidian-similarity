@@ -16,8 +16,8 @@ type Shown = {
 };
 
 /**
- * Highlights the passage of an open note that a result matched on, while that result is pointed at,
- * and puts the note back where it was scrolled when it no longer is.
+ * Highlights the passage of an open note that a result matched on, while that result is pointed at
+ * or previewed, and puts the note back where it was scrolled when it no longer is.
  */
 export class OriginHighlighter {
 	private shown: Shown | null = null;
@@ -26,16 +26,22 @@ export class OriginHighlighter {
 	constructor(private readonly app: App) {
 	}
 
-	/** Shows the passage once `passage` resolves, unless another show or clear came first. */
-	show(noteId: string, passage: Promise<string | null>): void {
+	/**
+	 * Shows the passage once `passage` resolves, unless another show or clear came first.
+	 * Returns a token that clears this highlight only, not one shown after it.
+	 */
+	show(noteId: string, passage: Promise<string | null>): number {
 		const request = ++this.request;
 		void passage.then((text) => {
 			if (request !== this.request || !text) return;
 			this.highlight(noteId, text);
 		}).catch(() => undefined);
+		return request;
 	}
 
-	clear(): void {
+	/** Clears the highlight; given a token from {@link show}, only while that show is still the latest. */
+	clear(token?: number): void {
+		if (token !== undefined && token !== this.request) return;
 		this.request++;
 		const shown = this.shown;
 		this.shown = null;
