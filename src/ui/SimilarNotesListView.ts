@@ -10,6 +10,8 @@ import { renderMatchIcon, renderSimilarityBar } from "./similarityBar";
 import { noteAgeText } from "./noteAge";
 import { groupByTier } from "./tierSections";
 import { SIMILARITY_TIER_LABELS } from "../core/vector/similarityTier";
+import { GetMatchedPassageUseCase } from "../search/getMatchedPassage";
+import { renderMatchedPassage } from "./matchedPassage";
 
 export { VIEW_TYPE_SIMILARITY };
 
@@ -36,6 +38,7 @@ type MessageState = {
 export type SimilarNotesListViewDeps = {
 	similarNotesFeed: SimilarNotesFeed;
 	statusHub: StatusHub;
+	getMatchedPassage: GetMatchedPassageUseCase;
 	openSearchModal: () => void;
 	openSettings: () => void;
 	openFeedback: OpenFeedback;
@@ -44,7 +47,7 @@ export type SimilarNotesListViewDeps = {
 const TRUNCATION_NOTICE_TEXT = "Only part of this large note was used for the search.";
 
 function signatureForItems(items: SimilarNotesSnapshot["items"]): string {
-	return items.map((item) => `${item.id} ${item.match} ${item.score.toFixed(4)}`).join("|");
+	return items.map((item) => `${item.id} ${item.match} ${item.score.toFixed(4)} ${item.passage?.hash ?? ""}`).join("|");
 }
 
 function signatureForMessage(message: MessageState): string {
@@ -350,6 +353,8 @@ export class SimilarNotesListView extends ItemView {
 			if (parentPath) meta.appendText(parentPath);
 			if (age) meta.createSpan({cls: "related-age", text: parentPath ? ` · ${age}` : age});
 		}
+
+		renderMatchedPassage(textWrapper, note, this.deps.getMatchedPassage, "related-passage");
 
 		const flairOuter = itemSelf.createDiv({cls: "tree-item-flair-outer"});
 		renderSimilarityBar(flairOuter, note);

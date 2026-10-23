@@ -70,7 +70,11 @@ export type RelatedNote = {
 	match: MatchKind;
 	tier: SimilarityTier;
 	scaledScore: number;
+	/** Where in the note's prepared text the match lies (see core/vector/similarity.ts matchedChunkIndex). */
+	passage?: PassageSpan;
 };
+
+export type PassageSpan = Pick<NoteChunk, "start" | "end" | "hash">;
 
 /** Precise: the best passage-pair match. Average: the mean over all passage pairs. */
 export type MatchKind = "precise" | "average";

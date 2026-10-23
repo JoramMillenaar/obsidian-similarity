@@ -24,6 +24,7 @@ import { GetSimilarNotesForNoteUseCase, makeGetSimilarNotesForNote } from "./sea
 import { GetSimilarNotesForTextUseCase, makeGetSimilarNotesForText } from "./search/getSimilarNotesForText";
 import { makeSimilarNotesFeed, SimilarNotesFeed } from "./search/similarNotesFeed";
 import { makeSimilarSearchFeed, SimilarSearchFeed } from "./search/similarSearchFeed";
+import { GetMatchedPassageUseCase, makeGetMatchedPassage } from "./search/getMatchedPassage";
 import { InsertWikilinkAtCursorUseCase, makeInsertWikilinkAtCursor } from "./app/insertWikilinkAtCursor";
 import { IsIgnoredPath, makeIsIgnoredPath } from "./app/isIgnoredPath";
 import { GetNoteTextUseCase, makeGetNoteText } from "./app/getNoteText";
@@ -60,6 +61,7 @@ export class AppContainer {
 	readonly isIgnoredPath: IsIgnoredPath;
 	readonly getSimilarNotesForNote: GetSimilarNotesForNoteUseCase;
 	readonly getSimilarNotesForText: GetSimilarNotesForTextUseCase;
+	readonly getMatchedPassage: GetMatchedPassageUseCase;
 	readonly isIndexEmpty: () => Promise<boolean>;
 
 	private readonly registry: IndexRegistry;
@@ -127,6 +129,8 @@ export class AppContainer {
 				embed: (text) => this.engine.embed(text, {lane: "interactive"}),
 			})(args);
 		};
+
+		this.getMatchedPassage = makeGetMatchedPassage({getNoteText: this.getNoteText});
 
 		this.isIndexEmpty = async () => this.indexer.index()?.isEmpty() ?? true;
 

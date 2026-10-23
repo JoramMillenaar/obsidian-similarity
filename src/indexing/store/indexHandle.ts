@@ -1,9 +1,9 @@
-import { Embedding, EmbeddingModelId, IndexedNote, NoteChunk, RelatedNote, SCHEMA_VERSION } from "../../types";
+import { Embedding, EmbeddingModelId, IndexedNote, MatchKind, NoteChunk, PassageSpan, RelatedNote, SCHEMA_VERSION } from "../../types";
 import { EmbeddingFileStore, ModelIndexMetaStore } from "../../ports";
 import { DecodedEmbeddings, decodeEmbeddings, encodeEmbeddings } from "../../core/vector/codec";
 import { packForStorage, unpackFromStorage } from "../../core/vector/packing";
 import { checkIndexHealth, MetaState, SidecarState } from "../../core/rules/health";
-import { makeNoteScorer, NoteMatch, rankSimilarNotes, ScoredNote, selectTopScores } from "../../core/vector/similarity";
+import { makeNoteScorer, matchedChunkIndex, NoteMatch, rankSimilarNotes, ScoredNote, selectTopScores } from "../../core/vector/similarity";
 import { scaleScore, similarityTier } from "../../core/vector/similarityTier";
 import { EMBEDDING_MODELS } from "../../constants";
 
@@ -69,10 +69,12 @@ export type IndexFiles = {
 
 const DEFAULT_WRITE_THROTTLE_MS = 1000;
 
+type ScoreMemo = { chunks: NoteChunk[]; match: NoteMatch; passage?: PassageSpan };
+
 type NoteQueryMemo = {
 	noteId: string;
 	query: NoteChunk[];
-	scores: Map<string, { chunks: NoteChunk[]; match: NoteMatch }>;
+	scores: Map<string, ScoreMemo>;
 };
 
 class ResidentIndex implements IndexHandle {
@@ -125,7 +127,8 @@ class ResidentIndex implements IndexHandle {
 
 	query(queryChunks: Embedding[], options: QueryOptions = {}): RelatedNote[] {
 		const {scoreNull, minScore} = EMBEDDING_MODELS[this.modelId];
-		return this.withTiers(rankSimilarNotes(queryChunks, [...this.byId.values()], scoreNull, {...options, minScore: options.minScore ?? minScore}));
+		const ranked = rankSimilarNotes(queryChunks, [...this.byId.values()], scoreNull, {...options, minScore: options.minScore ?? minScore});
+		return this.withTiers(ranked, (result) => this.passageFor(result.id, result.match, queryChunks));
 	}
 
 	queryNote(noteId: string, options: Omit<QueryOptions, "excludeId"> = {}): RelatedNote[] | null {
@@ -134,36 +137,55 @@ class ResidentIndex implements IndexHandle {
 
 		const previous = this.memo;
 		const reusable = previous !== null && previous.noteId === noteId && previous.query === queryNote.chunks;
-		const known = reusable ? previous.scores : new Map<string, { chunks: NoteChunk[]; match: NoteMatch }>();
+		const known = reusable ? previous.scores : new Map<string, ScoreMemo>();
 
 		let score: ((candidateChunks: Embedding[]) => NoteMatch) | null = null;
-		const scores = new Map<string, { chunks: NoteChunk[]; match: NoteMatch }>();
+		const scores = new Map<string, ScoreMemo>();
 		const ranked: ScoredNote[] = [];
 		for (const note of this.byId.values()) {
 			if (note.id === noteId) continue;
 
 			const hit = known.get(note.id);
-			let match: NoteMatch;
 			if (hit && hit.chunks === note.chunks) {
-				match = hit.match;
-			} else {
-				score ??= makeNoteScorer(queryNote.chunks.map((chunk) => chunk.embedding), EMBEDDING_MODELS[this.modelId].scoreNull);
-				match = score(note.chunks.map((chunk) => chunk.embedding));
+				scores.set(note.id, hit);
+				ranked.push({id: note.id, ...hit.match});
+				continue;
 			}
+			score ??= makeNoteScorer(queryNote.chunks.map((chunk) => chunk.embedding), EMBEDDING_MODELS[this.modelId].scoreNull);
+			const match = score(note.chunks.map((chunk) => chunk.embedding));
 			scores.set(note.id, {chunks: note.chunks, match});
 			ranked.push({id: note.id, ...match});
 		}
 
 		this.memo = {noteId, query: queryNote.chunks, scores};
-		return this.withTiers(selectTopScores(ranked, {...options, minScore: options.minScore ?? EMBEDDING_MODELS[this.modelId].minScore}));
+		const top = selectTopScores(ranked, {...options, minScore: options.minScore ?? EMBEDDING_MODELS[this.modelId].minScore});
+		// Passages are only located for the shown results, and kept with the score they explain.
+		let queryEmbeddings: Embedding[] | undefined;
+		return this.withTiers(top, (result) => {
+			const memo = scores.get(result.id);
+			if (memo && !memo.passage) {
+				queryEmbeddings ??= queryNote.chunks.map((chunk) => chunk.embedding);
+				memo.passage = this.passageFor(result.id, result.match, queryEmbeddings);
+			}
+			return memo?.passage;
+		});
 	}
 
-	private withTiers(results: ScoredNote[]): RelatedNote[] {
+	private passageFor(noteId: string, kind: MatchKind, queryChunks: Embedding[]): PassageSpan | undefined {
+		const chunks = this.byId.get(noteId)?.chunks;
+		if (!chunks) return undefined;
+		const index = matchedChunkIndex(kind, queryChunks, chunks.map((chunk) => chunk.embedding), EMBEDDING_MODELS[this.modelId].scoreNull);
+		const chunk = chunks[index];
+		return chunk && {start: chunk.start, end: chunk.end, hash: chunk.hash};
+	}
+
+	private withTiers(results: ScoredNote[], passageOf: (result: ScoredNote) => PassageSpan | undefined): RelatedNote[] {
 		const {tierThresholds} = EMBEDDING_MODELS[this.modelId];
 		return results.map((result) => ({
 			...result,
 			tier: similarityTier(result.score, tierThresholds),
 			scaledScore: scaleScore(result.score, tierThresholds),
+			passage: passageOf(result),
 		}));
 	}
 

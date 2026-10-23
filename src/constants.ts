@@ -15,7 +15,7 @@ export const EMBEDDING_MODEL: EmbeddingModelConfig = {
 	dim: 384,
 	maxTokens: 128,
 	maxOverlapPercent: 15,
-	minSentenceWords: 5,
+	minSentenceWords: 6,
 	tierThresholds: MULTILINGUAL_LATE_TIERS,
 	minScore: MULTILINGUAL_LATE_MIN_SCORE,
 	scoreNull: MULTILINGUAL_LATE_NULL,

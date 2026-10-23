@@ -277,9 +277,27 @@ body {
 	margin-inline-end: -4px;
 }
 
-.similarity-suggestion-title {
+.similarity-suggestion-text {
 	flex: 1;
 	min-width: 0;
+}
+
+.similarity-passage {
+	display: -webkit-box;
+	-webkit-box-orient: vertical;
+	-webkit-line-clamp: 2;
+	overflow: hidden;
+	color: var(--text-muted);
+	font-size: var(--font-ui-smaller);
+	line-height: var(--line-height-tight);
+}
+
+.related-passage {
+	margin-top: 2px;
+}
+
+.similarity-suggestion-passage {
+	margin-top: 2px;
 }
 
 .similarity-path-suggestion {

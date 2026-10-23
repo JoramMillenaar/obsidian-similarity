@@ -78,3 +78,26 @@ test("dimensions beyond the packing bound fall back to the reference and stay ex
 	const candidate = randomVectors(random, 3, 1024);
 	assert.strictEqual(makeMatchScorer("precise", query, MODEL)(candidate), reference(query, candidate));
 });
+
+test("matchedChunkIndex points at the candidate passage behind the score", () => {
+	const {matchedChunkIndex} = require("../dist/core/vector/similarity.js");
+	const random = seeded(7);
+	for (const model of [MODEL, centeredModel(random)]) {
+		const query = randomVectors(random, 4);
+		const candidate = randomVectors(random, 6);
+		// Precise: one passage copies a query passage, so it holds the best pair.
+		candidate[3] = query[2].slice();
+		assert.strictEqual(matchedChunkIndex("precise", query, candidate, model), 3);
+		assert.strictEqual(
+			bestPairCosine(query, [candidate[3]], model),
+			bestPairCosine(query, candidate, model),
+		);
+		// Average: a passage along the query's overall direction is closest to its centroid.
+		const centroid = new Int8Array(DIM);
+		for (let i = 0; i < DIM; i++) centroid[i] = Math.max(-127, Math.min(127, Math.round(query.reduce((sum, v) => sum + v[i], 0) / 2)));
+		candidate[5] = centroid;
+		assert.strictEqual(matchedChunkIndex("average", query, candidate, model), 5);
+	}
+	assert.strictEqual(matchedChunkIndex("precise", [], [filled(1)], MODEL), -1);
+	assert.strictEqual(matchedChunkIndex("average", [filled(1)], [], MODEL), -1);
+});

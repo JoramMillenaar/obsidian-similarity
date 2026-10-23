@@ -219,6 +219,48 @@ export function makeMatchScorer(
 		: -Infinity;
 }
 
+/**
+ * The candidate passage a match rests on. Precise: the candidate side of the best passage pair.
+ * Average: the passage closest to the query's centroid, i.e. the largest term of the mean score
+ * (which is the mean over candidate passages of queryMean · passage). -1 without candidate chunks.
+ */
+export function matchedChunkIndex(
+	kind: MatchKind,
+	queryChunks: Embedding[],
+	candidateChunks: Embedding[],
+	model: ScoreNullModel,
+): number {
+	if (!queryChunks.length || !candidateChunks.length) return -1;
+
+	const meanSq = meanSquare(model);
+	const right = candidateChunks.map((v) => passageOf(v, model));
+	let best = -Infinity;
+	let bestIndex = 0;
+
+	if (kind === "average") {
+		const {mean, pc} = model;
+		const queryMean = centeredMean(queryChunks, model);
+		const offset = mean ? dotFloat(queryMean, mean) * QUANT_SCALE : 0;
+		const pcDot = pc ? dotFloat(queryMean, pc) : 0;
+		for (let j = 0; j < candidateChunks.length; j++) {
+			const q = right[j];
+			const cos = (dotFloat(queryMean, candidateChunks[j]) - offset - q.proj * pcDot) * q.invNorm;
+			if (cos > best) [best, bestIndex] = [cos, j];
+		}
+		return bestIndex;
+	}
+
+	for (const left of queryChunks) {
+		const p = passageOf(left, model);
+		for (let j = 0; j < candidateChunks.length; j++) {
+			const q = right[j];
+			const cos = (dotInt8(left, candidateChunks[j]) - p.shift - q.shift + meanSq - p.proj * q.proj) * p.invNorm * q.invNorm;
+			if (cos > best) [best, bestIndex] = [cos, j];
+		}
+	}
+	return bestIndex;
+}
+
 export type NoteMatch = Pick<RelatedNote, "score" | "match">;
 
 /** Scores a candidate both ways and keeps the better; they share one scale, so either can win (precise on a tie). */

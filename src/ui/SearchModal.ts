@@ -11,11 +11,14 @@ import { renderMatchIcon, renderSimilarityBar } from "./similarityBar";
 import { noteAgeText } from "./noteAge";
 import { groupByTier } from "./tierSections";
 import { SIMILARITY_TIER_LABELS } from "../core/vector/similarityTier";
+import { GetMatchedPassageUseCase } from "../search/getMatchedPassage";
+import { renderMatchedPassage } from "./matchedPassage";
 
 export type SearchModalDeps = {
 	similarSearchFeed: SimilarSearchFeed;
 	statusHub: StatusHub;
 	insertWikilinkAtCursor: InsertWikilinkAtCursorUseCase;
+	getMatchedPassage: GetMatchedPassageUseCase;
 }
 
 export class SearchModal extends SuggestModal<RelatedNote> {
@@ -163,8 +166,10 @@ export class SearchModal extends SuggestModal<RelatedNote> {
 		if (fileName.endsWith(".md")) fileName = fileName.slice(0, -3);
 		el.addClass("similarity-suggestion");
 		renderMatchIcon(el, value, "similarity-suggestion-icon");
-		const titleEl = el.createDiv({text: fileName, cls: "similarity-suggestion-title"});
+		const textEl = el.createDiv({cls: "similarity-suggestion-text"});
+		const titleEl = textEl.createDiv({text: fileName, cls: "similarity-suggestion-title"});
 		titleEl.addClass("internal-link");
+		renderMatchedPassage(textEl, value, this.deps.getMatchedPassage, "similarity-suggestion-passage");
 
 		const age = noteAgeText(this.app, value.id);
 		if (age) el.createEl("small", {text: age, cls: "similarity-suggestion-age"});

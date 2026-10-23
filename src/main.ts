@@ -37,6 +37,7 @@ export default class SimilarNotes extends Plugin {
 				similarSearchFeed: this.appContainer.similarSearchFeed,
 				statusHub: this.appContainer.statusHub,
 				insertWikilinkAtCursor: this.appContainer.insertWikilinkAtCursor,
+				getMatchedPassage: this.appContainer.getMatchedPassage,
 			}).open();
 		};
 
@@ -51,6 +52,7 @@ export default class SimilarNotes extends Plugin {
 				new SimilarNotesListView(leaf, {
 					similarNotesFeed: this.appContainer.similarNotesFeed,
 					statusHub: this.appContainer.statusHub,
+					getMatchedPassage: this.appContainer.getMatchedPassage,
 					openSearchModal,
 					openSettings,
 					openFeedback,

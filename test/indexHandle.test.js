@@ -304,3 +304,16 @@ test("queryNote re-scores only notes whose vectors changed since the last query"
 	const rescored = index.queryNote("self.md", {minScore: 0});
 	assert.ok(rescored.find((r) => r.id === "stale.md").score < 0.5, "a re-indexed note must be re-scored");
 });
+
+test("results carry the span of the passage they matched on", async () => {
+	const files = makeFiles();
+	const index = await openIndex(files, MODEL_ID, {throttleMs: THROTTLE_MS});
+
+	index.upsert(note("self.md", [vec(127, 0)]));
+	index.upsert(note("other.md", [vec(0, 127), vec(127, 5), vec(60, 100)]));
+
+	for (const results of [index.query([vec(127, 0)], {excludeId: "self.md", minScore: -Infinity}), index.queryNote("self.md", {minScore: -Infinity})]) {
+		const other = results.find((r) => r.id === "other.md");
+		assert.deepStrictEqual(other.passage, {start: 10, end: 15, hash: "h-other.md-1"});
+	}
+});
