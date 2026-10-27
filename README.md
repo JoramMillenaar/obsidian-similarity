@@ -9,10 +9,10 @@
 Add semantic search to Obsidian to explore your notes by concepts, without data _ever_ leaving your device.
 Obsidian lets you search by titles or contents, Similarity searches by the _meaning_ of your notes.
 
-<img width="1335" height="817" alt="thumbnail" src="https://github.com/user-attachments/assets/ebba293a-a6ef-4945-a7c7-c90a06dd7445" />
+![Similarity plugin showing notes related to the current note](docs/thumbnail.png)
 
 ## Features
-<img width="1400" height="440" alt="Main@2x (2)" src="https://github.com/user-attachments/assets/6518c42a-39a6-4ac3-8717-3886e7281075" />
+![Similarity main view](docs/main.png)
 
 ## How it helps me
 - Notes are never truly orphaned. If they don't have deep links, they still surface when I write something similar.
