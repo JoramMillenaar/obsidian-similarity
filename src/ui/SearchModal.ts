@@ -17,12 +17,15 @@ import { Reranker, RerankerLease } from "../reranking/reranker";
 import { RerankResultsUseCase } from "../search/rerankResults";
 import { mountRerankToggle, RerankToggle } from "./rerankToggle";
 import { RERANKER_MODEL } from "../constants";
+import { PassageNavigator } from "./passageNavigator";
 
 export type SearchModalDeps = {
 	similarSearchFeed: SimilarSearchFeed;
 	statusHub: StatusHub;
 	insertWikilinkAtCursor: InsertWikilinkAtCursorUseCase;
 	getMatchedPassage: GetMatchedPassageUseCase;
+	/** Opens a chosen result at the passage it matched. */
+	passageNavigator: PassageNavigator;
 	/** Desktop only: the cross-encoder the switch beside the input turns on. */
 	reranking?: {
 		reranker: Reranker;
@@ -316,15 +319,12 @@ export class SearchModal extends SuggestModal<RelatedNote> {
 
 		const file = this.app.vault.getAbstractFileByPath(item.id);
 		if (file instanceof TFile) {
-			if (chooseMode === "open-new-tab") {
-				void this.app.workspace.getLeaf(true).openFile(file);
-				return;
-			}
-			if (chooseMode === "open-right") {
-				void this.app.workspace.getLeaf("split", "vertical").openFile(file);
-				return;
-			}
-			void this.app.workspace.getLeaf(false).openFile(file);
+			const leaf = chooseMode === "open-new-tab"
+				? this.app.workspace.getLeaf(true)
+				: chooseMode === "open-right"
+					? this.app.workspace.getLeaf("split", "vertical")
+					: this.app.workspace.getLeaf(false);
+			void this.deps.passageNavigator.open(leaf, file, item);
 		}
 	}
 

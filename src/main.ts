@@ -6,6 +6,7 @@ import { SimilarNotesListView, VIEW_TYPE_SIMILARITY } from "./ui/SimilarNotesLis
 import { SettingView } from "./ui/SettingsView";
 import { registerVaultEvents } from "./indexing/vaultEvents";
 import { FeedbackModal, FeedbackRequest } from "./ui/FeedbackModal";
+import { PassageNavigator } from "./ui/passageNavigator";
 
 export default class SimilarNotes extends Plugin {
 	private appContainer!: AppContainer;
@@ -32,12 +33,16 @@ export default class SimilarNotes extends Plugin {
 			openFeedback,
 		}));
 
+		const passageNavigator = new PassageNavigator(this.app, this.appContainer.getMatchedPassage);
+		this.register(() => passageNavigator.clear());
+
 		const openSearchModal = () => {
 			new SearchModal(this.app, {
 				similarSearchFeed: this.appContainer.similarSearchFeed,
 				statusHub: this.appContainer.statusHub,
 				insertWikilinkAtCursor: this.appContainer.insertWikilinkAtCursor,
 				getMatchedPassage: this.appContainer.getMatchedPassage,
+				passageNavigator,
 				reranking: this.appContainer.reranking ?? undefined,
 			}).open();
 		};
