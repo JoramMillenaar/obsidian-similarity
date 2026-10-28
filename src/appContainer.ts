@@ -1,5 +1,4 @@
 import { Platform, Plugin } from "obsidian";
-import { SearchMode } from "./types";
 import { ObsidianStatusBar } from "./obsidian/obsidianStatusBar";
 import { ObsidianVault } from "./obsidian/obsidianVault";
 import { BinaryEmbeddingFileStore } from "./obsidian/binaryEmbeddingFileStore";
@@ -29,7 +28,7 @@ import { InsertWikilinkAtCursorUseCase, makeInsertWikilinkAtCursor } from "./app
 import { IsIgnoredPath, makeIsIgnoredPath } from "./app/isIgnoredPath";
 import { GetNoteTextUseCase, makeGetNoteText } from "./app/getNoteText";
 import { makeUpdateSettings, UpdateSettingsUseCase } from "./app/updateSettings";
-import { makeRunLegacyMigrations, RunLegacyMigrationsUseCase } from "./app/legacyMigrations";
+import { makeRemoveDeprecatedData, RemoveDeprecatedDataUseCase } from "./app/removeDeprecatedData";
 import { makeSetModelDisabled, SetModelDisabledUseCase } from "./app/setModelDisabled";
 import { collectDeviceInfo } from "./obsidian/obsidianDeviceInfo";
 import { EnvironmentInfo } from "./core/feedback";
@@ -54,9 +53,8 @@ export class AppContainer {
 	readonly similarSearchFeed: SimilarSearchFeed;
 	readonly insertWikilinkAtCursor: InsertWikilinkAtCursorUseCase;
 	readonly updateSettings: UpdateSettingsUseCase;
-	readonly setSearchMode: (mode: SearchMode) => Promise<void>;
 	readonly setModelDisabled: SetModelDisabledUseCase;
-	readonly runLegacyMigrations: RunLegacyMigrationsUseCase;
+	readonly removeDeprecatedData: RemoveDeprecatedDataUseCase;
 
 	readonly getNoteText: GetNoteTextUseCase;
 	readonly isIgnoredPath: IsIgnoredPath;
@@ -83,7 +81,7 @@ export class AppContainer {
 			{throttleMs: INDEX_WRITE_THROTTLE_MS},
 		);
 
-		this.runLegacyMigrations = makeRunLegacyMigrations({
+		this.removeDeprecatedData = makeRemoveDeprecatedData({
 			pluginDataStore: this.pluginDataStore,
 			modelIndexStore: this.modelIndexMetaStore,
 			embeddingFileStore: this.embeddingFileStore,
@@ -99,7 +97,6 @@ export class AppContainer {
 
 		this.engine = new EmbeddingEngine({
 			loadEmbedder: makeLoadEmbeddingProvider({allowWebGpu: !Platform.isMobile}),
-			settingsRepo: this.settingsRepo,
 			status: this.status,
 		});
 
@@ -119,7 +116,7 @@ export class AppContainer {
 		this.getSimilarNotesForNote = async (args) => {
 			const index = this.indexer.index();
 			if (!index) return {items: [], truncated: false};
-			return makeGetSimilarNotesForNote({index})({mode: this.settingsRepo.get().searchMode, ...args});
+			return makeGetSimilarNotesForNote({index})(args);
 		};
 
 		this.getSimilarNotesForText = async (args) => {
@@ -128,7 +125,7 @@ export class AppContainer {
 			return makeGetSimilarNotesForText({
 				index,
 				embed: (text) => this.engine.embed(text, {lane: "interactive"}),
-			})({mode: this.settingsRepo.get().searchMode, ...args});
+			})(args);
 		};
 
 		this.isIndexEmpty = async () => this.indexer.index()?.isEmpty() ?? true;
@@ -152,38 +149,27 @@ export class AppContainer {
 
 		this.updateSettings = makeUpdateSettings({
 			settingsRepo: this.settingsRepo,
-			engine: this.engine,
 			resync: () => this.indexer.syncAll(),
-			switchIndex: (modelId) => this.indexer.useModel(modelId),
 		});
 
 		this.insertWikilinkAtCursor = makeInsertWikilinkAtCursor({vault: this.vault});
 
-		this.setSearchMode = async (mode) => {
-			await this.settingsRepo.updatePartial({searchMode: mode});
-			this.similarNotesFeed.refresh();
-		};
-
 		this.setModelDisabled = makeSetModelDisabled({
 			deviceSettingsRepo: this.deviceSettingsRepo,
-			settingsRepo: this.settingsRepo,
 			engine: this.engine,
 		});
 	}
 
 	collectEnvironment(): EnvironmentInfo {
 		const engine = this.engine.status();
-		const {searchMode, maxRawMarkdownChars, maxExtractedChars, maxOverlapPercent} = this.settingsRepo.get();
+		const {maxRawMarkdownChars} = this.settingsRepo.get();
 		return {
 			...collectDeviceInfo(this.plugin),
 			engineState: engine.kind,
 			modelId: "modelId" in engine ? engine.modelId : undefined,
 			device: engine.kind === "ready" ? engine.device : undefined,
 			indexedNotes: this.indexer.index()?.stats().notes ?? 0,
-			searchMode,
 			maxRawMarkdownChars,
-			maxExtractedChars,
-			maxOverlapPercent,
 		};
 	}
 

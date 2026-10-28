@@ -1,11 +1,11 @@
-import { DeviceSettingsRepository, SettingsRepository } from "../ports";
+import { DeviceSettingsRepository } from "../ports";
 import { EmbeddingEngine } from "../embedding/engine";
+import { EMBEDDING_MODEL } from "../constants";
 
 export type SetModelDisabledUseCase = (disabled: boolean) => Promise<void>;
 
 export function makeSetModelDisabled(deps: {
 	deviceSettingsRepo: DeviceSettingsRepository;
-	settingsRepo: SettingsRepository;
 	engine: EmbeddingEngine;
 }): SetModelDisabledUseCase {
 	return async function setModelDisabled(disabled) {
@@ -13,7 +13,7 @@ export function makeSetModelDisabled(deps: {
 		if (disabled) {
 			await deps.engine.disable();
 		} else {
-			await deps.engine.enable(deps.settingsRepo.get().embeddingModelId);
+			await deps.engine.enable(EMBEDDING_MODEL);
 		}
 	};
 }

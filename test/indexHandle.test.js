@@ -8,7 +8,9 @@ global.window = {
 
 const {openIndex} = require("../dist/indexing/store/indexHandle.js");
 
-const MODEL_ID = "xenova-all-MiniLM-L6-v2";
+const {EMBEDDING_MODEL} = require("../dist/constants.js");
+
+const MODEL_ID = EMBEDDING_MODEL.id;
 const DIM = 384;
 const THROTTLE_MS = 10;
 

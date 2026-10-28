@@ -1,4 +1,4 @@
-import { EmbeddingModelId } from "../types";
+import { EmbeddingModelConfig, EmbeddingModelId } from "../types";
 import { Device, EmbeddingPort, ModelLoadProgress } from "../ports";
 import { Unsubscribe } from "../core/util/unsubscribe";
 
@@ -26,9 +26,9 @@ export type EngineStateReader = {
 export type EngineState =
 	| { status: "idle" }
 	| { status: "disabled" }
-	| { status: "loading"; modelId: EmbeddingModelId; epoch: number; progress: ModelLoadProgress | null; phase: LoadPhase }
-	| { status: "error"; modelId: EmbeddingModelId; message: string; offline: boolean; epoch: number }
-	| { status: "ready"; modelId: EmbeddingModelId; embedder: EmbeddingPort; epoch: number };
+	| { status: "loading"; model: EmbeddingModelConfig; epoch: number; progress: ModelLoadProgress | null; phase: LoadPhase }
+	| { status: "error"; model: EmbeddingModelConfig; message: string; offline: boolean; epoch: number }
+	| { status: "ready"; model: EmbeddingModelConfig; embedder: EmbeddingPort; epoch: number };
 
 /** Tracks an in-flight `requestModel` call so duplicate requests for the same model can share it. */
 export type PendingModelRequest = { modelId: EmbeddingModelId; promise: Promise<void> };

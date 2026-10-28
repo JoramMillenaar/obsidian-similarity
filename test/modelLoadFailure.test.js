@@ -10,8 +10,9 @@ const {EmbeddingEngine} = require("../dist/embedding/engine.js");
 const {makeStatusHub} = require("../dist/status/statusHub.js");
 const {makeSimilarNotesFeed} = require("../dist/search/similarNotesFeed.js");
 
-const MODEL_ID = "xenova-all-MiniLM-L6-v2";
-const OTHER_MODEL_ID = "xenova-paraphrase-multilingual-MiniLM-L12-v2";
+const model = (id) => ({id, label: id});
+const MODEL_ID = "model-a";
+const OTHER_MODEL_ID = "model-b";
 
 const IDLE_INDEXING = {isRunning: false, pending: 0, processed: 0, total: 0, failed: 0, failedIds: []};
 
@@ -22,7 +23,6 @@ function embedder() {
 function makeEngine(loadEmbedder) {
 	return new EmbeddingEngine({
 		loadEmbedder: (config, onProgress, signal) => loadEmbedder(config.id, onProgress, signal),
-		settingsRepo: {get: () => ({maxOverlapPercent: 0}), updatePartial: async () => {}},
 		status: {update: () => {}, clear: () => {}},
 	});
 }
@@ -32,7 +32,7 @@ test("a failed model load parks the engine in an error state instead of 'idle'",
 		throw new Error("Could not download the English model. Check your internet connection and try again.");
 	});
 
-	await assert.rejects(() => engine.requestModel(MODEL_ID));
+	await assert.rejects(() => engine.requestModel(model(MODEL_ID)));
 
 	const status = engine.status();
 	assert.strictEqual(status.kind, "error");
@@ -48,7 +48,7 @@ test("retry re-runs the failed load and recovers", async () => {
 		return embedder();
 	});
 
-	await assert.rejects(() => engine.requestModel(MODEL_ID));
+	await assert.rejects(() => engine.requestModel(model(MODEL_ID)));
 	await engine.retry();
 
 	assert.strictEqual(attempts, 2);
@@ -62,7 +62,7 @@ test("retry is a no-op unless the engine actually failed", async () => {
 		return embedder();
 	});
 
-	await engine.requestModel(MODEL_ID);
+	await engine.requestModel(model(MODEL_ID));
 	await engine.retry();
 
 	assert.strictEqual(attempts, 1);
@@ -72,12 +72,12 @@ test("a failed switch falls back to the model that was already loaded", async ()
 	const loaded = [];
 	const engine = makeEngine(async (modelId) => {
 		loaded.push(modelId);
-		if (modelId === OTHER_MODEL_ID) throw new Error("Could not download the Multilingual (slower) model.");
+		if (modelId === OTHER_MODEL_ID) throw new Error("Could not download the B model.");
 		return embedder();
 	});
 
-	await engine.requestModel(MODEL_ID);
-	await assert.rejects(() => engine.requestModel(OTHER_MODEL_ID));
+	await engine.requestModel(model(MODEL_ID));
+	await assert.rejects(() => engine.requestModel(model(OTHER_MODEL_ID)));
 
 	assert.deepStrictEqual(loaded, [MODEL_ID, OTHER_MODEL_ID, MODEL_ID], "the previous model is reloaded");
 	assert.deepStrictEqual(engine.status(), {kind: "ready", modelId: MODEL_ID});
@@ -87,7 +87,7 @@ test("the failure is reported before the fallback has finished loading", async (
 	let releaseFallback;
 	let loadedOnce = false;
 	const engine = makeEngine(async (modelId) => {
-		if (modelId === OTHER_MODEL_ID) throw new Error("Could not download the Multilingual (slower) model.");
+		if (modelId === OTHER_MODEL_ID) throw new Error("Could not download the B model.");
 		if (!loadedOnce) {
 			loadedOnce = true;
 			return embedder();
@@ -97,9 +97,9 @@ test("the failure is reported before the fallback has finished loading", async (
 		});
 	});
 
-	await engine.requestModel(MODEL_ID);
+	await engine.requestModel(model(MODEL_ID));
 
-	const error = await engine.requestModel(OTHER_MODEL_ID).then(() => null, (e) => e);
+	const error = await engine.requestModel(model(OTHER_MODEL_ID)).then(() => null, (e) => e);
 	assert.ok(error, "the caller is told about the failure");
 
 	// The fallback is still in flight at this point — the notice must not wait for it.
@@ -116,18 +116,18 @@ test("a failed switch whose fallback also fails ends in the error state for the 
 	let firstLoadDone = false;
 	const engine = makeEngine(async (modelId) => {
 		if (modelId === MODEL_ID && firstLoadDone) throw new Error("cache miss while offline");
-		if (modelId === OTHER_MODEL_ID) throw new Error("Could not download the Multilingual (slower) model.");
+		if (modelId === OTHER_MODEL_ID) throw new Error("Could not download the B model.");
 		firstLoadDone = true;
 		return embedder();
 	});
 
-	await engine.requestModel(MODEL_ID);
-	await assert.rejects(() => engine.requestModel(OTHER_MODEL_ID));
+	await engine.requestModel(model(MODEL_ID));
+	await assert.rejects(() => engine.requestModel(model(OTHER_MODEL_ID)));
 
 	const status = engine.status();
 	assert.strictEqual(status.kind, "error");
 	assert.strictEqual(status.modelId, OTHER_MODEL_ID);
-	assert.match(status.message, /Multilingual/);
+	assert.match(status.message, /B model/);
 });
 
 test("a first-ever load has nothing to fall back to and reports the failure", async () => {
@@ -137,7 +137,7 @@ test("a first-ever load has nothing to fall back to and reports the failure", as
 		throw new Error("Could not download the English model. Check your internet connection and try again.");
 	});
 
-	await assert.rejects(() => engine.requestModel(MODEL_ID));
+	await assert.rejects(() => engine.requestModel(model(MODEL_ID)));
 
 	assert.deepStrictEqual(loaded, [MODEL_ID], "no fallback attempt without a previously loaded model");
 	assert.strictEqual(engine.status().kind, "error");
@@ -148,7 +148,7 @@ test("embedding is refused rather than queued forever while no model is loaded",
 		throw new Error("offline");
 	});
 
-	await assert.rejects(() => engine.requestModel(MODEL_ID));
+	await assert.rejects(() => engine.requestModel(model(MODEL_ID)));
 	await assert.rejects(() => engine.embed("some text"), /failed to load/i);
 });
 
@@ -183,7 +183,7 @@ test("the similar-notes feed surfaces the load failure instead of 'warming up' f
 	});
 
 	feed.setActiveNote("note.md");
-	await assert.rejects(() => engine.requestModel(MODEL_ID));
+	await assert.rejects(() => engine.requestModel(model(MODEL_ID)));
 	await new Promise((resolve) => setTimeout(resolve, 0));
 
 	const notice = feed.getSnapshot().notice;

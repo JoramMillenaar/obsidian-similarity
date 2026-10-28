@@ -1,7 +1,7 @@
 const test = require("node:test");
 const assert = require("node:assert");
 const {similarityTier, scaleScore, SIMILARITY_TIER_LABELS} = require("../dist/core/vector/similarityTier.js");
-const {EMBEDDING_MODELS} = require("../dist/constants.js");
+const {EMBEDDING_MODEL} = require("../dist/constants.js");
 
 const THRESHOLDS = [0.4, 0.6, 0.8];
 
@@ -30,11 +30,9 @@ test("scaleScore is monotonic, so ranking by score and by scaled score agree", (
 	}
 });
 
-test("every model has ascending thresholds strictly inside (0, 1)", () => {
-	for (const model of Object.values(EMBEDDING_MODELS)) {
-		const [a, b, c] = model.tierThresholds;
-		assert.ok(0 < a && a < b && b < c && c < 1, `${model.id} thresholds must ascend within (0, 1)`);
-	}
+test("the model has ascending thresholds strictly inside (0, 1)", () => {
+	const [a, b, c] = EMBEDDING_MODEL.tierThresholds;
+	assert.ok(0 < a && a < b && b < c && c < 1, "thresholds must ascend within (0, 1)");
 });
 
 test("every tier has a label", () => {

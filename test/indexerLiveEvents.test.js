@@ -62,7 +62,7 @@ async function makeHarness(indexed = []) {
 		},
 		embed: async () => ({
 			chunks: [{embedding: new Int8Array(384), start: 0, end: 5}],
-			metadata: {embeddingModelId: MODEL_ID, maxOverlapPercent: 0},
+			metadata: {embeddingModelId: MODEL_ID},
 		}),
 	};
 
@@ -81,7 +81,7 @@ async function makeHarness(indexed = []) {
 			return {text: `text for ${noteId}`, truncated: false};
 		},
 		isIgnoredPath: () => false,
-		settingsRepo: {get: () => ({ignoredPaths: [], maxOverlapPercent: 0})},
+		settingsRepo: {get: () => ({ignoredPaths: []})},
 		status: {update: () => {}, clear: () => {}},
 		onChanged: () => changes.count++,
 		editDebounceMs: DEBOUNCE_MS,

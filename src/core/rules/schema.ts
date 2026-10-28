@@ -1,25 +1,22 @@
 import { DeviceSettings, IndexMetadata, ModelIndexFile, SCHEMA_VERSION, SimilarityPluginData, SimilaritySettings } from "../../types";
-import { DEFAULT_DEVICE_SETTINGS, DEFAULT_SETTINGS, EMBEDDING_MODELS, MAX_OVERLAP_PERCENT, SEARCH_MODES } from "../../constants";
+import { DEFAULT_DEVICE_SETTINGS, DEFAULT_SETTINGS } from "../../constants";
+
+type StoredSettings = Partial<SimilaritySettings> & {
+	lastAppliedMaxExtractedChars?: unknown;
+};
 
 export function normalizeSettings(
-	value: Partial<SimilaritySettings> | undefined,
+	value: StoredSettings | undefined,
 ): SimilaritySettings {
 	const ignored = value?.ignoredPaths;
 	const advancedOpen = value?.advancedOpen;
-	const maxRawMarkdownChars = value?.maxRawMarkdownChars;
-	const maxExtractedChars = value?.maxExtractedChars;
-	const maxOverlapPercent = value?.maxOverlapPercent;
-	const embeddingModelId = value?.embeddingModelId;
-	const searchMode = value?.searchMode;
-	const lastAppliedMaxRawMarkdownChars = value?.lastAppliedMaxRawMarkdownChars;
-	const lastAppliedMaxExtractedChars = value?.lastAppliedMaxExtractedChars;
+	const maxRawMarkdownChars = positiveNumber(value?.maxRawMarkdownChars) ?? DEFAULT_SETTINGS.maxRawMarkdownChars;
 
-	const normalizedMaxRawMarkdownChars = typeof maxRawMarkdownChars === "number" && maxRawMarkdownChars > 0
-		? maxRawMarkdownChars
-		: DEFAULT_SETTINGS.maxRawMarkdownChars;
-	const normalizedMaxExtractedChars = typeof maxExtractedChars === "number" && maxExtractedChars > 0
-		? maxExtractedChars
-		: DEFAULT_SETTINGS.maxExtractedChars;
+	let lastAppliedMaxRawMarkdownChars = positiveNumber(value?.lastAppliedMaxRawMarkdownChars) ?? maxRawMarkdownChars;
+	const lastAppliedMaxExtractedChars = positiveNumber(value?.lastAppliedMaxExtractedChars);
+	if (lastAppliedMaxExtractedChars !== undefined) {
+		lastAppliedMaxRawMarkdownChars = Math.min(lastAppliedMaxRawMarkdownChars, lastAppliedMaxExtractedChars);
+	}
 
 	return {
 		ignoredPaths: Array.isArray(ignored)
@@ -28,27 +25,13 @@ export function normalizeSettings(
 		advancedOpen: typeof advancedOpen === "boolean"
 			? advancedOpen
 			: DEFAULT_SETTINGS.advancedOpen,
-		showDates: typeof value?.showDates === "boolean"
-			? value.showDates
-			: DEFAULT_SETTINGS.showDates,
-		maxRawMarkdownChars: normalizedMaxRawMarkdownChars,
-		maxExtractedChars: normalizedMaxExtractedChars,
-		maxOverlapPercent: typeof maxOverlapPercent === "number" && maxOverlapPercent >= 0
-			? Math.min(maxOverlapPercent, MAX_OVERLAP_PERCENT)
-			: DEFAULT_SETTINGS.maxOverlapPercent,
-		embeddingModelId: typeof embeddingModelId === "string" && embeddingModelId in EMBEDDING_MODELS
-			? embeddingModelId
-			: DEFAULT_SETTINGS.embeddingModelId,
-		searchMode: typeof searchMode === "string" && SEARCH_MODES.some((mode) => mode.id === searchMode)
-			? searchMode
-			: DEFAULT_SETTINGS.searchMode,
-		lastAppliedMaxRawMarkdownChars: typeof lastAppliedMaxRawMarkdownChars === "number" && lastAppliedMaxRawMarkdownChars > 0
-			? lastAppliedMaxRawMarkdownChars
-			: normalizedMaxRawMarkdownChars,
-		lastAppliedMaxExtractedChars: typeof lastAppliedMaxExtractedChars === "number" && lastAppliedMaxExtractedChars > 0
-			? lastAppliedMaxExtractedChars
-			: normalizedMaxExtractedChars,
+		maxRawMarkdownChars,
+		lastAppliedMaxRawMarkdownChars,
 	};
+}
+
+function positiveNumber(value: unknown): number | undefined {
+	return typeof value === "number" && value > 0 ? value : undefined;
 }
 
 export function normalizePluginData(

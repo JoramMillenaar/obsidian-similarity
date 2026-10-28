@@ -6,9 +6,7 @@ const {makeBuildIndexSyncPlan} = require("../dist/indexing/syncPlan.js");
 const BASE_SETTINGS = {
 	ignoredPaths: [],
 	maxRawMarkdownChars: 20000,
-	maxExtractedChars: 4800,
 	lastAppliedMaxRawMarkdownChars: 20000,
-	lastAppliedMaxExtractedChars: 4800,
 };
 
 function makePlan({settings, candidates, entries}) {
@@ -49,8 +47,8 @@ test("a note edited after indexing is still caught by the mtime check", () => {
 	assert.deepStrictEqual(plan.idsToSeed, ["a.md"]);
 });
 
-test("raising maxExtractedChars re-seeds a note that was truncated at the old cap", () => {
-	const settings = {...BASE_SETTINGS, maxExtractedChars: 8000};
+test("raising maxRawMarkdownChars re-seeds a note that was truncated at the old cap", () => {
+	const settings = {...BASE_SETTINGS, maxRawMarkdownChars: 30000};
 	const plan = makePlan({
 		settings,
 		candidates: [{id: "long.md", modifiedAt: 100}],
@@ -59,8 +57,8 @@ test("raising maxExtractedChars re-seeds a note that was truncated at the old ca
 	assert.deepStrictEqual(plan.idsToSeed, ["long.md"]);
 });
 
-test("raising maxExtractedChars does not re-seed a note that was not truncated", () => {
-	const settings = {...BASE_SETTINGS, maxExtractedChars: 8000};
+test("raising maxRawMarkdownChars does not re-seed a note that was not truncated", () => {
+	const settings = {...BASE_SETTINGS, maxRawMarkdownChars: 30000};
 	const plan = makePlan({
 		settings,
 		candidates: [{id: "short.md", modifiedAt: 100}],
@@ -70,7 +68,7 @@ test("raising maxExtractedChars does not re-seed a note that was not truncated",
 });
 
 test("lowering a cap never re-seeds unmodified notes", () => {
-	const settings = {...BASE_SETTINGS, maxExtractedChars: 1000};
+	const settings = {...BASE_SETTINGS, maxRawMarkdownChars: 1000};
 	const plan = makePlan({
 		settings,
 		candidates: [{id: "long.md", modifiedAt: 100}],

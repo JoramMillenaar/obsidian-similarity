@@ -15,10 +15,7 @@ const ENVIRONMENT = {
 	modelId: "xenova-all-MiniLM-L6-v2",
 	device: "webgpu",
 	indexedNotes: 1240,
-	searchMode: "granular",
 	maxRawMarkdownChars: 20000,
-	maxExtractedChars: 4800,
-	maxOverlapPercent: 15,
 };
 
 test("bug and feedback reports are titled after the first line of the description", () => {
@@ -34,7 +31,7 @@ test("environment is only included when present and never lists vault paths", ()
 
 	assert.match(body, /Similarity 2\.6\.1 · Obsidian 1\.13\.1 · desktop macOS/);
 	assert.match(body, /Model: xenova-all-MiniLM-L6-v2 \(ready, webgpu\) · 1240 notes indexed/);
-	assert.match(body, /Search mode: granular · limits 20000\/4800\/15%/);
+	assert.match(body, /Character limit: 20000$/m);
 	assert.match(body, /8 cores, 16 GB, WebGPU available/);
 	assert.doesNotMatch(body, /ignoredPaths|\.md/);
 });

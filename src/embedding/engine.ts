@@ -1,6 +1,6 @@
-import { EmbeddingModelConfig, EmbeddingModelId } from "../types";
-import { EmbedLane, EmbeddingPort, EmbeddingResult, LoadEmbeddingPort, SettingsRepository, StatusReporter } from "../ports";
-import { EMBEDDING_MODELS, MIN_DOWNLOAD_PROGRESS_BYTES } from "../constants";
+import { EmbeddingModelConfig } from "../types";
+import { EmbedLane, EmbeddingPort, EmbeddingResult, LoadEmbeddingPort, StatusReporter } from "../ports";
+import { MIN_DOWNLOAD_PROGRESS_BYTES } from "../constants";
 import { ModelNotReadyError, ModelRequestSupersededError } from "./errors";
 import { EngineState, EngineStatus, LoadPhase, PendingModelRequest, Unsubscribe } from "./types";
 
@@ -9,7 +9,6 @@ export { ModelNotReadyError, ModelRequestSupersededError } from "./errors";
 
 export type EmbeddingEngineDeps = {
 	loadEmbedder: LoadEmbeddingPort;
-	settingsRepo: SettingsRepository;
 	status: StatusReporter;
 };
 
@@ -44,19 +43,19 @@ export class EmbeddingEngine {
 		const state = this.state;
 		if (state.status === "ready") {
 			return state.embedder.device !== undefined
-				? {kind: "ready", modelId: state.modelId, device: state.embedder.device}
-				: {kind: "ready", modelId: state.modelId};
+				? {kind: "ready", modelId: state.model.id, device: state.embedder.device}
+				: {kind: "ready", modelId: state.model.id};
 		}
 		if (state.status === "loading") {
 			return {
 				kind: "loading",
-				modelId: state.modelId,
+				modelId: state.model.id,
 				progress: state.progress?.progress ?? null,
 				phase: state.phase,
 			};
 		}
 		if (state.status === "error") {
-			return {kind: "error", modelId: state.modelId, message: state.message, offline: state.offline};
+			return {kind: "error", modelId: state.model.id, message: state.message, offline: state.offline};
 		}
 		if (state.status === "disabled") return {kind: "disabled"};
 		return {kind: "idle"};
@@ -76,18 +75,17 @@ export class EmbeddingEngine {
 		if (this.disposed) throw new Error("The embedding engine has been disposed.");
 		if (this.state.status !== "ready") throw new ModelNotReadyError(this.state.status);
 
-		const {maxOverlapPercent} = this.deps.settingsRepo.get();
-		const result = await this.state.embedder.embed(text, {maxOverlapPercent, lane: options.lane});
+		const result = await this.state.embedder.embed(text, {lane: options.lane});
 		return result && result.chunks.length > 0 ? result : null;
 	}
 
-	requestModel(modelId: EmbeddingModelId): Promise<void> {
+	requestModel(model: EmbeddingModelConfig): Promise<void> {
 		if (this.state.status === "disabled") return Promise.resolve();
-		if (this.state.status === "ready" && this.state.modelId === modelId) return Promise.resolve();
-		if (this.pending?.modelId === modelId) return this.pending.promise;
+		if (this.state.status === "ready" && this.state.model.id === model.id) return Promise.resolve();
+		if (this.pending?.modelId === model.id) return this.pending.promise;
 
-		const pending: PendingModelRequest = {modelId, promise: Promise.resolve()};
-		pending.promise = this.runRequest(modelId).finally(() => {
+		const pending: PendingModelRequest = {modelId: model.id, promise: Promise.resolve()};
+		pending.promise = this.runRequest(model).finally(() => {
 			if (this.pending === pending) this.pending = null;
 		});
 		this.pending = pending;
@@ -96,7 +94,7 @@ export class EmbeddingEngine {
 
 	retry(): Promise<void> {
 		if (this.state.status !== "error") return Promise.resolve();
-		return this.requestModel(this.state.modelId);
+		return this.requestModel(this.state.model);
 	}
 
 	async disable(): Promise<void> {
@@ -115,12 +113,12 @@ export class EmbeddingEngine {
 		await outgoing?.unload();
 	}
 
-	enable(modelId: EmbeddingModelId): Promise<void> {
+	enable(model: EmbeddingModelConfig): Promise<void> {
 		if (this.disposed || this.state.status !== "disabled") return Promise.resolve();
 
 		this.state = {status: "idle"};
 		this.notify();
-		return this.requestModel(modelId);
+		return this.requestModel(model);
 	}
 
 	dispose(): void {
@@ -145,16 +143,17 @@ export class EmbeddingEngine {
 		}
 	}
 
-	private async runRequest(modelId: EmbeddingModelId): Promise<void> {
+	private async runRequest(config: EmbeddingModelConfig): Promise<void> {
+		const modelId = config.id;
 		this.abortController?.abort();
 		const controller = new AbortController();
 		this.abortController = controller;
 		const epoch = ++this.epoch;
 
 		const outgoing = this.state.status === "ready" ? this.state.embedder : null;
-		const previousModelId = this.state.status === "ready" ? this.state.modelId : null;
+		const previousModel = this.state.status === "ready" ? this.state.model : null;
 
-		this.state = {status: "loading", modelId, epoch, progress: null, phase: "downloading"};
+		this.state = {status: "loading", model: config, epoch, progress: null, phase: "downloading"};
 		this.notify();
 
 		await outgoing?.unload();
@@ -171,7 +170,6 @@ export class EmbeddingEngine {
 
 			if (epoch !== this.epoch) throw new ModelRequestSupersededError(modelId);
 
-			const config = EMBEDDING_MODELS[modelId];
 			this.deps.status.update(`Loading ${config.label} model…`);
 
 			let embedder: EmbeddingPort;
@@ -181,7 +179,7 @@ export class EmbeddingEngine {
 				if (epoch !== this.epoch) throw new ModelRequestSupersededError(modelId);
 
 				gateOwnedByRecovery = true;
-				void this.recoverFromFailedLoad(modelId, previousModelId, error, epoch, controller.signal)
+				void this.recoverFromFailedLoad(config, previousModel, error, epoch, controller.signal)
 					.catch((recoveryError) => {
 						if (recoveryError instanceof ModelRequestSupersededError) return;
 						console.error("[Similarity] Recovering from a failed model load failed:", recoveryError);
@@ -196,9 +194,8 @@ export class EmbeddingEngine {
 			}
 
 			const label = outgoing ? "Switched to" : "Loaded";
-			this.state = {status: "ready", modelId, embedder, epoch};
+			this.state = {status: "ready", model: config, embedder, epoch};
 			this.notify();
-			await this.deps.settingsRepo.updatePartial({embeddingModelId: modelId});
 
 			this.deps.status.update(`${label} ${config.label}.`, 4000);
 		} finally {
@@ -231,18 +228,17 @@ export class EmbeddingEngine {
 	}
 
 	private async recoverFromFailedLoad(
-		modelId: EmbeddingModelId,
-		previousModelId: EmbeddingModelId | null,
+		config: EmbeddingModelConfig,
+		previousConfig: EmbeddingModelConfig | null,
 		error: unknown,
 		epoch: number,
 		signal: AbortSignal,
 	): Promise<void> {
-		const config = EMBEDDING_MODELS[modelId];
+		const modelId = config.id;
 		const message = error instanceof Error ? error.message : String(error);
 
-		if (previousModelId !== null && previousModelId !== modelId) {
-			const previousConfig = EMBEDDING_MODELS[previousModelId];
-			this.state = {status: "loading", modelId: previousModelId, epoch, progress: null, phase: "downloading"};
+		if (previousConfig !== null && previousConfig.id !== modelId) {
+			this.state = {status: "loading", model: previousConfig, epoch, progress: null, phase: "downloading"};
 			this.notify();
 			this.deps.status.update(`Restoring ${previousConfig.label} model…`);
 
@@ -253,7 +249,7 @@ export class EmbeddingEngine {
 					throw new ModelRequestSupersededError(modelId);
 				}
 
-				this.state = {status: "ready", modelId: previousModelId, embedder: restored, epoch};
+				this.state = {status: "ready", model: previousConfig, embedder: restored, epoch};
 				this.notify();
 				this.deps.status.update(`Could not load ${config.label} — kept ${previousConfig.label}.`, 6000);
 				return;
@@ -264,18 +260,18 @@ export class EmbeddingEngine {
 			}
 		}
 
-		this.failWith(modelId, message, epoch);
+		this.failWith(config, message, epoch);
 	}
 
-	private failWith(modelId: EmbeddingModelId, message: string, epoch: number): void {
+	private failWith(config: EmbeddingModelConfig, message: string, epoch: number): void {
 		this.state = {
 			status: "error",
-			modelId,
+			model: config,
 			message,
 			offline: typeof navigator !== "undefined" && !navigator.onLine,
 			epoch,
 		};
 		this.notify();
-		this.deps.status.update(`Failed to load ${EMBEDDING_MODELS[modelId].label}.`, 4000);
+		this.deps.status.update(`Failed to load ${config.label}.`, 4000);
 	}
 }

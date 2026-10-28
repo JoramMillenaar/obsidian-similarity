@@ -1,22 +1,21 @@
 import { AppContainer } from "../appContainer";
 import { ModelRequestSupersededError } from "../embedding/engine";
+import { EMBEDDING_MODEL } from "../constants";
 
 export async function initializePlugin(app: AppContainer): Promise<void> {
 	app.status.update("Starting…");
 
 	try {
-		await app.runLegacyMigrations();
+		await app.removeDeprecatedData();
 
-		const {embeddingModelId} = app.settingsRepo.get();
-
-		await app.indexer.useModel(embeddingModelId).catch((error) => {
+		await app.indexer.useModel(EMBEDDING_MODEL.id).catch((error) => {
 			console.error("[Similarity] Failed to open the index:", error);
 		});
 
 		if (app.deviceSettingsRepo.get().modelDisabled) {
 			await app.engine.disable();
 		} else {
-			await app.engine.requestModel(embeddingModelId);
+			await app.engine.requestModel(EMBEDDING_MODEL);
 		}
 
 		app.status.update("Done", 1500);

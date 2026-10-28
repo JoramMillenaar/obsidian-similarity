@@ -1,11 +1,11 @@
-import { Embedding, EmbeddingModelId, IndexedNote, RelatedNote, SCHEMA_VERSION, SearchMode } from "../../types";
+import { Embedding, EmbeddingModelId, IndexedNote, RelatedNote, SCHEMA_VERSION } from "../../types";
 import { EmbeddingFileStore, ModelIndexMetaStore } from "../../ports";
 import { DecodedEmbeddings, decodeEmbeddings, encodeEmbeddings } from "../../core/vector/codec";
 import { packForStorage, unpackFromStorage } from "../../core/vector/packing";
 import { checkIndexHealth, MetaState, SidecarState } from "../../core/rules/health";
 import { rankSimilarNotes } from "../../core/vector/similarity";
 import { scaleScore, similarityTier } from "../../core/vector/similarityTier";
-import { EMBEDDING_MODELS } from "../../constants";
+import { EMBEDDING_MODEL } from "../../constants";
 
 export type IndexRename = { oldId: string; newId: string };
 
@@ -26,7 +26,6 @@ export type QueryOptions = {
 	excludeId?: string;
 	limit?: number;
 	minScore?: number;
-	mode?: SearchMode;
 };
 
 export interface IndexHandle {
@@ -116,7 +115,7 @@ class ResidentIndex implements IndexHandle {
 	}
 
 	query(queryChunks: Embedding[], options: QueryOptions = {}): RelatedNote[] {
-		const {tierThresholds} = EMBEDDING_MODELS[this.modelId];
+		const {tierThresholds} = EMBEDDING_MODEL;
 		return rankSimilarNotes(queryChunks, [...this.byId.values()], options)
 			.map((result) => ({
 				...result,
@@ -258,7 +257,7 @@ export async function openIndex(
 	modelId: EmbeddingModelId,
 	options: { throttleMs?: number } = {},
 ): Promise<IndexHandle> {
-	const dim = EMBEDDING_MODELS[modelId].dim;
+	const {dim} = EMBEDDING_MODEL;
 	const throttleMs = options.throttleMs ?? DEFAULT_WRITE_THROTTLE_MS;
 
 	const meta = await readMeta(files, modelId);
