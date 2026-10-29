@@ -10,7 +10,6 @@ export type Device = 'wasm' | 'webgpu';
 export type EmbedLane = 'interactive' | 'background';
 
 export interface EmbedOptions {
-	maxOverlapPercent: number;
 	lane: EmbedLane;
 }
 

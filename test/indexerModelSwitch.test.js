@@ -71,7 +71,7 @@ test("switching models opens the index belonging to the new model", async () => 
 		vault: {listIndexCandidates: () => [], listNoteIds: () => [], getNote: async () => null},
 		getNoteText: async () => ({text: "", truncated: false}),
 		isIgnoredPath: () => false,
-		settingsRepo: {get: () => ({ignoredPaths: [], maxOverlapPercent: 0})},
+		settingsRepo: {get: () => ({ignoredPaths: []})},
 		status: {update: () => {}, clear: () => {}},
 		onChanged: () => {},
 	});
@@ -100,7 +100,7 @@ test("a model that fails to load keeps the index that is already open", async ()
 		vault: {listIndexCandidates: () => [], listNoteIds: () => [], getNote: async () => null},
 		getNoteText: async () => ({text: "", truncated: false}),
 		isIgnoredPath: () => false,
-		settingsRepo: {get: () => ({ignoredPaths: [], maxOverlapPercent: 0})},
+		settingsRepo: {get: () => ({ignoredPaths: []})},
 		status: {update: () => {}, clear: () => {}},
 		onChanged: () => {},
 	});

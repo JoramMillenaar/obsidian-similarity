@@ -1,6 +1,6 @@
 import { normalizePath, Plugin } from "obsidian";
 import { EmbeddingFileStore } from "../ports";
-import { EmbeddingModelId } from "../types";
+import { DeprecatedModelId, EmbeddingModelId } from "../types";
 
 export class BinaryEmbeddingFileStore implements EmbeddingFileStore {
 	private readonly dir: string;
@@ -27,7 +27,15 @@ export class BinaryEmbeddingFileStore implements EmbeddingFileStore {
 		await adapter.writeBinary(this.pathFor(modelId), buffer);
 	}
 
-	private pathFor(modelId: EmbeddingModelId): string {
+	async remove(modelId: DeprecatedModelId): Promise<boolean> {
+		const adapter = this.plugin.app.vault.adapter;
+		const path = this.pathFor(modelId);
+		if (!(await adapter.exists(path))) return false;
+		await adapter.remove(path);
+		return true;
+	}
+
+	private pathFor(modelId: EmbeddingModelId | DeprecatedModelId): string {
 		return normalizePath(`${this.dir}/embeddings-${modelId}.bin`);
 	}
 }

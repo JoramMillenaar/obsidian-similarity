@@ -3,9 +3,8 @@ import { SimilarNotesFeed, SimilarNotesSnapshot } from "../search/similarNotesFe
 import { StatusHub } from "../status/statusHub";
 import { mountBanner } from "./bannerView";
 import { textForNotice } from "./similarNoticeText";
-import { SEARCH_MODES, VIEW_TYPE_SIMILARITY } from "../constants";
-import { SettingsRepository } from "../ports";
-import { RelatedNote, SearchMode, SimilarityTier } from "../types";
+import { VIEW_TYPE_SIMILARITY } from "../constants";
+import { RelatedNote, SimilarityTier } from "../types";
 import { FEEDBACK_ACTIONS, OpenFeedback } from "./FeedbackModal";
 import { renderSimilarityBar } from "./similarityBar";
 import { noteAgeText } from "./noteAge";
@@ -37,8 +36,6 @@ type MessageState = {
 export type SimilarNotesListViewDeps = {
 	similarNotesFeed: SimilarNotesFeed;
 	statusHub: StatusHub;
-	settingsRepo: SettingsRepository;
-	setSearchMode: (mode: SearchMode) => Promise<void>;
 	openSearchModal: () => void;
 	openSettings: () => void;
 	openFeedback: OpenFeedback;
@@ -64,7 +61,6 @@ export class SimilarNotesListView extends ItemView {
 	private renderedMessage: string | null = null;
 	private unsubscribeSnapshot?: () => void;
 	private unsubscribeBanner?: () => void;
-	private searchModeButtonEl?: HTMLElement;
 	private collapsedTiers = new Set<SimilarityTier>();
 
 	constructor(leaf: WorkspaceLeaf, private deps: SimilarNotesListViewDeps) {
@@ -122,19 +118,6 @@ export class SimilarNotesListView extends ItemView {
 		return button;
 	}
 
-	private currentMode() {
-		const mode = this.deps.settingsRepo.get().searchMode;
-		return SEARCH_MODES.find((m) => m.id === mode) ?? SEARCH_MODES[0];
-	}
-
-	private updateSearchModeButton() {
-		const button = this.searchModeButtonEl;
-		if (!button) return;
-		const mode = this.currentMode();
-		setIcon(button, mode.icon);
-		button.setAttribute("aria-label", `Searching by ${mode.label}`);
-	}
-
 	private openFeedbackMenu = (event: MouseEvent) => {
 		const menu = new Menu();
 		for (const action of FEEDBACK_ACTIONS) {
@@ -145,18 +128,10 @@ export class SimilarNotesListView extends ItemView {
 		menu.showAtMouseEvent(event);
 	};
 
-	private cycleSearchMode = () => {
-		const currentIndex = SEARCH_MODES.findIndex((mode) => mode.id === this.currentMode().id);
-		const next = SEARCH_MODES[(currentIndex + 1) % SEARCH_MODES.length];
-		void this.deps.setSearchMode(next.id).then(() => this.updateSearchModeButton());
-	};
-
 	async onOpen() {
 		this.containerEl.querySelector(":scope > .nav-header")?.remove();
 		const navHeader = this.containerEl.createDiv({cls: "nav-header"});
 		const navButtons = navHeader.createDiv({cls: "nav-buttons-container"});
-		this.searchModeButtonEl = this.createNavActionButton(navButtons, this.currentMode().icon, "Search mode", this.cycleSearchMode);
-		this.updateSearchModeButton();
 		this.createNavActionButton(navButtons, "search", "Open semantic search", () => this.deps.openSearchModal());
 		this.createNavActionButton(navButtons, "settings", "Open plugin settings", () => this.deps.openSettings());
 		this.createNavActionButton(navButtons, "message-square", "Send feedback", this.openFeedbackMenu);
@@ -183,7 +158,6 @@ export class SimilarNotesListView extends ItemView {
 		this.unsubscribeSnapshot = this.deps.similarNotesFeed.subscribe((snapshot) => {
 			this.snapshot = snapshot;
 			this.renderBody();
-			this.updateSearchModeButton();
 		});
 
 		this.syncActiveNote();
@@ -305,11 +279,6 @@ export class SimilarNotesListView extends ItemView {
 		});
 	}
 
-	refresh() {
-		this.renderedItems = null;
-		this.renderBody();
-	}
-
 	private renderRelatedList(related: SimilarNotesSnapshot["items"]) {
 		const list = this.listEl;
 		if (!list) return;
@@ -374,7 +343,7 @@ export class SimilarNotesListView extends ItemView {
 
 		textWrapper.createSpan({cls: "related-title", text: title});
 
-		const age = this.deps.settingsRepo.get().showDates ? noteAgeText(this.app, path) : null;
+		const age = noteAgeText(this.app, path);
 		if (parentPath || age) {
 			const meta = textWrapper.createEl("small", {cls: "related-parent"});
 			if (parentPath) meta.appendText(parentPath);

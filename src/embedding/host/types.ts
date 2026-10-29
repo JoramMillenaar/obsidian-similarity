@@ -5,8 +5,8 @@ export type { Device };
 /** Called with download/init progress while a model loads. */
 export type ModelLoadProgressCallback = (progress: ModelLoadProgress) => void;
 
-/** Chunks and embeds a whole document's text in `lane`, honoring the optional sentence overlap. */
-export type GenerateDocumentEmbeddings = (text: string, maxOverlapPercent: number | undefined, lane: EmbedLane) => Promise<EmbeddingResult>;
+/** Chunks and embeds a whole document's text in `lane`. */
+export type GenerateDocumentEmbeddings = (text: string, lane: EmbedLane) => Promise<EmbeddingResult>;
 
 /** Bookkeeping for one outstanding embed request sent to the embedding worker, awaiting its response. */
 export type PendingWorkerRequest = {

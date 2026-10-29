@@ -1,6 +1,6 @@
 import { normalizePath, Plugin } from "obsidian";
 import { ModelIndexMetaStore } from "../ports";
-import { EmbeddingModelId, ModelIndexFile } from "../types";
+import { DeprecatedModelId, EmbeddingModelId, ModelIndexFile } from "../types";
 import { normalizeModelIndexFile } from "../core/rules/schema";
 
 export class ObsidianModelIndexMetaStore implements ModelIndexMetaStore {
@@ -29,7 +29,15 @@ export class ObsidianModelIndexMetaStore implements ModelIndexMetaStore {
 		await adapter.write(this.pathFor(modelId), JSON.stringify(data));
 	}
 
-	private pathFor(modelId: EmbeddingModelId): string {
+	async remove(modelId: DeprecatedModelId): Promise<boolean> {
+		const adapter = this.plugin.app.vault.adapter;
+		const path = this.pathFor(modelId);
+		if (!(await adapter.exists(path))) return false;
+		await adapter.remove(path);
+		return true;
+	}
+
+	private pathFor(modelId: EmbeddingModelId | DeprecatedModelId): string {
 		return normalizePath(`${this.dir}/index-${modelId}.json`);
 	}
 }

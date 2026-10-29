@@ -1,4 +1,5 @@
 import { chunkText } from '../../core/text/chunking';
+import { CHUNK_OVERLAP_PERCENT } from '../../constants';
 import { normalizeEmbedding, quantizeEmbedding } from '../../core/vector/similarity';
 import { EmbeddedChunk } from '../../ports';
 import { EmbeddingModel } from './model';
@@ -14,7 +15,7 @@ const SPECIAL_TOKEN_RESERVE = 2;
 export function makeGenerateDocumentEmbeddings(model: EmbeddingModel): GenerateDocumentEmbeddings {
 	const chunkTokenBudget = model.config.maxTokens - SPECIAL_TOKEN_RESERVE;
 
-	return async function generateDocumentEmbeddings(text, maxOverlapPercent, lane) {
+	return async function generateDocumentEmbeddings(text, lane) {
 		await model.ready;
 
 		const metadata = {
@@ -24,7 +25,7 @@ export function makeGenerateDocumentEmbeddings(model: EmbeddingModel): GenerateD
 
 		if (!text.trim()) return { chunks: [], metadata };
 
-		const chunks = chunkText(text, model.countTokens, chunkTokenBudget, maxOverlapPercent);
+		const chunks = chunkText(text, model.countTokens, chunkTokenBudget, CHUNK_OVERLAP_PERCENT);
 
 		const embedded: EmbeddedChunk[] = [];
 		for (const chunk of chunks) {

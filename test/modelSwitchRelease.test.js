@@ -8,14 +8,14 @@ global.window = {
 
 const {EmbeddingEngine} = require("../dist/embedding/engine.js");
 
-const MODEL_ID = "xenova-all-MiniLM-L6-v2";
-const OTHER_MODEL_ID = "xenova-paraphrase-multilingual-MiniLM-L12-v2";
-const THIRD_MODEL_ID = "xenova-bge-small-zh-v1.5";
+const model = (id) => ({id, label: id});
+const MODEL_ID = "model-a";
+const OTHER_MODEL_ID = "model-b";
+const THIRD_MODEL_ID = "model-c";
 
 function makeEngine(loadEmbedder) {
 	return new EmbeddingEngine({
 		loadEmbedder: (config, onProgress, signal) => loadEmbedder(config.id, onProgress, signal),
-		settingsRepo: {get: () => ({maxOverlapPercent: 0}), updatePartial: async () => {}},
 		status: {update: () => {}, clear: () => {}},
 	});
 }
@@ -40,9 +40,9 @@ test("the outgoing model is released before the incoming one starts loading", as
 		};
 	});
 
-	await engine.requestModel(MODEL_ID);
+	await engine.requestModel(model(MODEL_ID));
 
-	const switched = engine.requestModel(OTHER_MODEL_ID);
+	const switched = engine.requestModel(model(OTHER_MODEL_ID));
 	await new Promise((resolve) => setTimeout(resolve, 0));
 
 	assert.deepStrictEqual(events, [`load:${MODEL_ID}`, `unload:${MODEL_ID}`],
@@ -72,9 +72,9 @@ test("embeds go to the model that is ready when they are made, and a switch unlo
 		},
 	}));
 
-	await engine.requestModel(MODEL_ID);
+	await engine.requestModel(model(MODEL_ID));
 	await engine.embed("some text", {lane: "interactive"});
-	await engine.requestModel(OTHER_MODEL_ID);
+	await engine.requestModel(model(OTHER_MODEL_ID));
 	await engine.embed("more text", {lane: "background"});
 
 	// Waiting out the running inference before teardown is the embedder's job (see InferenceQueue).
@@ -98,8 +98,8 @@ test("a synchronous unload still gates the load, and the switch completes", asyn
 		};
 	});
 
-	await engine.requestModel(MODEL_ID);
-	await engine.requestModel(OTHER_MODEL_ID);
+	await engine.requestModel(model(MODEL_ID));
+	await engine.requestModel(model(OTHER_MODEL_ID));
 
 	assert.deepStrictEqual(events, [`load:${MODEL_ID}`, `unload:${MODEL_ID}`, `load:${OTHER_MODEL_ID}`]);
 	assert.deepStrictEqual(engine.status(), {kind: "ready", modelId: OTHER_MODEL_ID});
@@ -125,13 +125,13 @@ test("superseding a still-loading switch waits for its teardown before the next 
 		resolve({embed: async () => null, unload: async () => { events.push(`unload:${modelId}`); }});
 	}));
 
-	await engine.requestModel(MODEL_ID);
+	await engine.requestModel(model(MODEL_ID));
 
-	const switchToOther = engine.requestModel(OTHER_MODEL_ID);
+	const switchToOther = engine.requestModel(model(OTHER_MODEL_ID));
 	switchToOther.catch(() => {});
 	await new Promise((resolve) => setTimeout(resolve, 0));
 
-	const switchToThird = engine.requestModel(THIRD_MODEL_ID);
+	const switchToThird = engine.requestModel(model(THIRD_MODEL_ID));
 	await new Promise((resolve) => setTimeout(resolve, 0));
 	await new Promise((resolve) => setTimeout(resolve, 0));
 
@@ -173,9 +173,9 @@ test("superseding a switch that just finished loading waits for its self-unload 
 		resolve(port);
 	}));
 
-	await engine.requestModel(MODEL_ID);
+	await engine.requestModel(model(MODEL_ID));
 
-	const switchToOther = engine.requestModel(OTHER_MODEL_ID);
+	const switchToOther = engine.requestModel(model(OTHER_MODEL_ID));
 	switchToOther.catch(() => {});
 	// Waiting on MODEL_ID's own (also timer-based) self-unload takes two event-loop
 	// turns: one for the outgoing unload's timer to fire, one for the continuation that
@@ -184,7 +184,7 @@ test("superseding a switch that just finished loading waits for its self-unload 
 
 	// The switch to OTHER_MODEL_ID resolves successfully right as THIRD_MODEL_ID
 	// supersedes it, so it must unload itself before THIRD_MODEL_ID starts loading.
-	const switchToThird = engine.requestModel(THIRD_MODEL_ID);
+	const switchToThird = engine.requestModel(model(THIRD_MODEL_ID));
 	resolveOtherLoad();
 	await switchToOther.catch(() => {});
 	await switchToThird;

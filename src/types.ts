@@ -1,9 +1,11 @@
 /** Quantized unit-vector embedding: see core/vector/similarity.ts and codec.ts. */
 export type Embedding = Int8Array;
 
-export type EmbeddingModelId =
+export type EmbeddingModelId = "xenova-paraphrase-multilingual-MiniLM-L12-v2";
+
+/** Models earlier versions offered; their indexes are deleted on startup. */
+export type DeprecatedModelId =
 	| "xenova-all-MiniLM-L6-v2"
-	| "xenova-paraphrase-multilingual-MiniLM-L12-v2"
 	| "xenova-bge-small-zh-v1.5";
 
 export type PoolingStrategy = "mean" | "cls";
@@ -63,8 +65,6 @@ export type RelatedNote = {
 	scaledScore: number;
 };
 
-export type SearchMode = "granular" | "average";
-
 export type IndexingQueueSnapshot = {
 	isRunning: boolean;
 	currentNoteId?: string;
@@ -79,14 +79,8 @@ export type IndexingQueueSnapshot = {
 export interface SimilaritySettings {
 	ignoredPaths: string[];
 	advancedOpen: boolean;
-	showDates: boolean;
 	maxRawMarkdownChars: number;
-	maxExtractedChars: number;
-	maxOverlapPercent: number;
-	embeddingModelId: EmbeddingModelId;
-	searchMode: SearchMode;
 	lastAppliedMaxRawMarkdownChars: number;
-	lastAppliedMaxExtractedChars: number;
 }
 
 /**

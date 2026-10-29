@@ -8,11 +8,12 @@ global.window = {
 
 const {EmbeddingEngine, ModelNotReadyError, ModelRequestSupersededError} = require("../dist/embedding/engine.js");
 const {makeSetModelDisabled} = require("../dist/app/setModelDisabled.js");
-const {makeUpdateSettings} = require("../dist/app/updateSettings.js");
 const {makeStatusHub} = require("../dist/status/statusHub.js");
 const {makeSimilarNotesFeed} = require("../dist/search/similarNotesFeed.js");
+const {EMBEDDING_MODEL} = require("../dist/constants.js");
 
-const MODEL_ID = "xenova-all-MiniLM-L6-v2";
+const MODEL = EMBEDDING_MODEL;
+const MODEL_ID = MODEL.id;
 
 const IDLE_INDEXING = {isRunning: false, pending: 0, processed: 0, total: 0, failed: 0, failedIds: []};
 
@@ -40,12 +41,9 @@ function deviceSettings(initial = {modelDisabled: false}) {
 	};
 }
 
-const settingsRepo = {get: () => ({maxOverlapPercent: 0, embeddingModelId: MODEL_ID}), updatePartial: async () => {}};
-
 function makeEngine(loadEmbedder) {
 	return new EmbeddingEngine({
 		loadEmbedder: (config, onProgress, signal) => loadEmbedder(config.id, onProgress, signal),
-		settingsRepo,
 		status: {update: () => {}, clear: () => {}},
 	});
 }
@@ -60,7 +58,7 @@ test("a disabled engine ignores model requests until it is enabled", async () =>
 	await engine.disable();
 	assert.deepStrictEqual(engine.status(), {kind: "disabled"});
 
-	await engine.requestModel(MODEL_ID);
+	await engine.requestModel(MODEL);
 	await engine.retry();
 	assert.strictEqual(loads, 0, "requestModel and retry are no-ops while disabled");
 	assert.deepStrictEqual(engine.status(), {kind: "disabled"});
@@ -70,7 +68,7 @@ test("disabling a ready engine flips at once and hands the model to unload", asy
 	const loaded = embedder();
 	loaded.embed = () => new Promise(() => {});
 	const engine = makeEngine(async () => loaded);
-	await engine.requestModel(MODEL_ID);
+	await engine.requestModel(MODEL);
 
 	void engine.embed("in progress", {lane: "background"});
 	await engine.disable();
@@ -102,7 +100,7 @@ test("disabling mid-load abandons the load instead of letting it finish", async 
 		release = () => resolve(embedder());
 	}));
 
-	const loading = engine.requestModel(MODEL_ID);
+	const loading = engine.requestModel(MODEL);
 	await tick();
 	assert.strictEqual(engine.status().kind, "loading");
 
@@ -124,11 +122,11 @@ test("enabling loads the requested model; a no-op once enabled", async () => {
 	});
 	await engine.disable();
 
-	await engine.enable(MODEL_ID);
+	await engine.enable(MODEL);
 	assert.deepStrictEqual(loaded, [MODEL_ID]);
 	assert.deepStrictEqual(engine.status(), {kind: "ready", modelId: MODEL_ID});
 
-	await engine.enable(MODEL_ID);
+	await engine.enable(MODEL);
 	assert.deepStrictEqual(loaded, [MODEL_ID]);
 });
 
@@ -139,8 +137,8 @@ test("the use case remembers the choice per device and applies it to the engine"
 		return embedder();
 	});
 	const device = deviceSettings();
-	const setModelDisabled = makeSetModelDisabled({deviceSettingsRepo: device, settingsRepo, engine});
-	await engine.requestModel(MODEL_ID);
+	const setModelDisabled = makeSetModelDisabled({deviceSettingsRepo: device, engine});
+	await engine.requestModel(MODEL);
 
 	await setModelDisabled(true);
 	assert.deepStrictEqual(engine.status(), {kind: "disabled"});
@@ -149,36 +147,7 @@ test("the use case remembers the choice per device and applies it to the engine"
 	await setModelDisabled(false);
 	assert.deepStrictEqual(engine.status(), {kind: "ready", modelId: MODEL_ID});
 	assert.deepStrictEqual(device.get(), {modelDisabled: false});
-	assert.deepStrictEqual(loaded, [MODEL_ID, MODEL_ID], "re-enabling loads the model named in settings");
-});
-
-test("switching language while disabled keeps the choice and switches the index without a model", async () => {
-	const OTHER_MODEL_ID = "xenova-paraphrase-multilingual-MiniLM-L12-v2";
-	const loaded = [];
-	const engine = makeEngine(async (modelId) => {
-		loaded.push(modelId);
-		return embedder();
-	});
-	let settings = {maxOverlapPercent: 0, embeddingModelId: MODEL_ID};
-	const repo = {get: () => settings, updatePartial: async (patch) => Object.assign(settings, patch)};
-	const indexesOpened = [];
-	const updateSettings = makeUpdateSettings({
-		settingsRepo: repo,
-		engine,
-		resync: async () => {},
-		switchIndex: async (modelId) => indexesOpened.push(modelId),
-	});
-	await engine.disable();
-
-	await updateSettings({embeddingModelId: OTHER_MODEL_ID});
-
-	assert.strictEqual(settings.embeddingModelId, OTHER_MODEL_ID, "the choice is persisted without a load");
-	assert.deepStrictEqual(indexesOpened, [OTHER_MODEL_ID], "results now come from that model's index");
-	assert.deepStrictEqual(loaded, [], "no model was spun up");
-	assert.deepStrictEqual(engine.status(), {kind: "disabled"});
-
-	await engine.enable(settings.embeddingModelId);
-	assert.deepStrictEqual(loaded, [OTHER_MODEL_ID], "enabling picks up the language chosen while disabled");
+	assert.deepStrictEqual(loaded, [MODEL_ID, MODEL_ID], "re-enabling loads the model again");
 });
 
 test("disable and enable are immediate for observers: no restart, notice flips both ways", async () => {
@@ -203,7 +172,7 @@ test("disable and enable are immediate for observers: no restart, notice flips b
 		retryModelLoad: async () => {},
 	});
 
-	await engine.requestModel(MODEL_ID);
+	await engine.requestModel(MODEL);
 	feed.setActiveNote("note.md");
 	await tick();
 	assert.strictEqual(feed.getSnapshot().notice, undefined);
@@ -214,7 +183,7 @@ test("disable and enable are immediate for observers: no restart, notice flips b
 	assert.deepStrictEqual(snapshot.notice, {kind: "model-disabled"});
 	assert.strictEqual(snapshot.items.length, 1, "stored vectors still serve results while disabled");
 
-	await engine.enable(MODEL_ID);
+	await engine.enable(MODEL);
 	await tick();
 	snapshot = feed.getSnapshot();
 	assert.strictEqual(snapshot.notice, undefined);

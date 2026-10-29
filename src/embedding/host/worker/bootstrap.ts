@@ -43,11 +43,11 @@ async function handleInit(config: WorkerRequest & { type: 'init' }): Promise<voi
  * several can be in progress at once, and the model's inference queue interleaves their chunks.
  */
 async function handleEmbed(message: WorkerRequest & { type: 'embed' }): Promise<void> {
-	const {requestId, payload, maxOverlapPercent, lane} = message;
+	const {requestId, payload, lane} = message;
 
 	try {
 		if (!generateDocumentEmbeddings) throw new Error("Embedding model has not been initialized");
-		const data = await generateDocumentEmbeddings(payload, maxOverlapPercent, lane);
+		const data = await generateDocumentEmbeddings(payload, lane);
 		post({type: 'embed-result', requestId, data});
 	} catch (error) {
 		post({requestId, type: 'embed-error', message: error instanceof Error ? error.message : String(error)});

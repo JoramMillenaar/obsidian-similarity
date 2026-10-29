@@ -91,14 +91,7 @@ function mountFakeWorker(respond) {
 	return {clock};
 }
 
-const MODEL_CONFIG = {
-	id: "xenova-paraphrase-multilingual-MiniLM-L12-v2",
-	label: "Multilingual (slower)",
-	repoId: "Xenova/paraphrase-multilingual-MiniLM-L12-v2",
-	dim: 384,
-	maxTokens: 128,
-	pooling: "mean",
-};
+const {EMBEDDING_MODEL: MODEL_CONFIG} = require("../dist/constants.js");
 
 function loadMessenger() {
 	const path = require.resolve("../dist/embedding/host/workerProvider.js");
@@ -118,7 +111,7 @@ test("a request is sent once and gives up after its deadline", async () => {
 	const messenger = new WorkerMessenger("<script></script>", MODEL_CONFIG);
 	await messenger.initialize();
 
-	const settled = messenger.sendMessage("a long note", 15, "background").then(() => "resolved", (error) => error);
+	const settled = messenger.sendMessage("a long note", "background").then(() => "resolved", (error) => error);
 
 	await clock.advance(60_000);
 	assert.strictEqual(sent.filter((m) => m.type === "embed").length, 1, "slow work is never re-sent behind itself");
@@ -143,7 +136,7 @@ test("a request resolves with its result and carries its lane to the worker", as
 	const messenger = new WorkerMessenger("<script></script>", MODEL_CONFIG);
 	await messenger.initialize();
 
-	assert.deepStrictEqual(await messenger.sendMessage("a note", 15, "interactive"), result);
+	assert.deepStrictEqual(await messenger.sendMessage("a note", "interactive"), result);
 	assert.strictEqual(sent[0].lane, "interactive");
 });
 
@@ -158,8 +151,8 @@ test("requests in progress at the same time each get their own result", async ()
 	const messenger = new WorkerMessenger("<script></script>", MODEL_CONFIG);
 	await messenger.initialize();
 
-	const background = messenger.sendMessage("a long note", 15, "background");
-	const query = messenger.sendMessage("a query", 15, "interactive");
+	const background = messenger.sendMessage("a long note", "background");
+	const query = messenger.sendMessage("a query", "interactive");
 
 	// The query overtakes the note inside the worker, so its answer arrives first.
 	held[1]();
