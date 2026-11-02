@@ -1,4 +1,4 @@
-import { ItemView, Menu, Notice, setIcon, TFile, WorkspaceLeaf } from "obsidian";
+import { ItemView, Menu, Notice, setIcon, setTooltip, TFile, WorkspaceLeaf } from "obsidian";
 import { SimilarNotesFeed, SimilarNotesSnapshot } from "../search/similarNotesFeed";
 import { StatusHub } from "../status/statusHub";
 import { mountBanner } from "./bannerView";
@@ -10,6 +10,7 @@ import { renderSimilarityBar } from "./similarityBar";
 import { noteAgeText } from "./noteAge";
 import { groupByTier } from "./tierSections";
 import { SIMILARITY_TIER_LABELS } from "../core/vector/similarityTier";
+import { LinkDirection, linkDirection } from "./linkDirection";
 
 export { VIEW_TYPE_SIMILARITY };
 
@@ -43,8 +44,14 @@ export type SimilarNotesListViewDeps = {
 
 const TRUNCATION_NOTICE_TEXT = "Only part of this large note was used for the search.";
 
-function signatureForItems(items: SimilarNotesSnapshot["items"]): string {
-	return items.map((item) => `${item.id} ${item.score.toFixed(4)}`).join("|");
+const LINK_ICONS: Record<Exclude<LinkDirection, "none">, {icon: string; tooltip: string}> = {
+	outgoing: {icon: "links-going-out", tooltip: "Linked from this note"},
+	both: {icon: "link", tooltip: "Linked both ways"},
+	backlink: {icon: "links-coming-in", tooltip: "Links to this note"},
+};
+
+function signatureForItems(items: SimilarNotesSnapshot["items"], directions: LinkDirection[]): string {
+	return items.map((item, i) => `${item.id} ${item.score.toFixed(4)} ${directions[i]}`).join("|");
 }
 
 function signatureForMessage(message: MessageState): string {
@@ -153,6 +160,9 @@ export class SimilarNotesListView extends ItemView {
 		);
 		this.registerEvent(
 			this.app.vault.on("rename", () => this.syncActiveNote()),
+		);
+		this.registerEvent(
+			this.app.metadataCache.on("resolved", () => this.renderBody()),
 		);
 
 		this.unsubscribeSnapshot = this.deps.similarNotesFeed.subscribe((snapshot) => {
@@ -283,16 +293,20 @@ export class SimilarNotesListView extends ItemView {
 		const list = this.listEl;
 		if (!list) return;
 
-		const signature = signatureForItems(related);
+		const resolvedLinks = this.app.metadataCache.resolvedLinks;
+		const activePath = this.activePath;
+		const directions = related.map((note) => activePath ? linkDirection(resolvedLinks, activePath, note.id) : "none");
+		const signature = signatureForItems(related, directions);
 		if (signature === this.renderedItems) return;
 		this.renderedItems = signature;
 
 		list.empty();
 
+		const directionById = new Map(related.map((note, i) => [note.id, directions[i]]));
 		for (const section of groupByTier(related)) {
 			const sectionEl = list.createDiv({cls: "tree-item similarity-tier-section"});
 			const children = this.renderSectionHeader(sectionEl, section.tier, section.items.length);
-			section.items.forEach((note) => this.renderRelatedItem(children, note));
+			section.items.forEach((note) => this.renderRelatedItem(children, note, directionById.get(note.id) ?? "none"));
 		}
 	}
 
@@ -321,7 +335,7 @@ export class SimilarNotesListView extends ItemView {
 		return children;
 	}
 
-	private renderRelatedItem(list: HTMLElement, note: RelatedNote) {
+	private renderRelatedItem(list: HTMLElement, note: RelatedNote, direction: LinkDirection) {
 		const path = note.id;
 
 		const listItem = list.createDiv({cls: "tree-item"});
@@ -332,6 +346,13 @@ export class SimilarNotesListView extends ItemView {
 		itemSelf.addEventListener("mouseover", (event: MouseEvent) => {
 			this.triggerHoverPreview(event, itemSelf, path);
 		});
+
+		if (direction !== "none") {
+			const {icon, tooltip} = LINK_ICONS[direction];
+			const iconEl = itemSelf.createSpan({cls: "tree-item-icon"});
+			setIcon(iconEl, icon);
+			setTooltip(iconEl, tooltip);
+		}
 
 		const itemInner = itemSelf.createDiv({cls: "tree-item-inner"});
 
