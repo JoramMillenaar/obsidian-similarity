@@ -1,15 +1,37 @@
-# Similarity
+<p align="center">
+  <img src="docs/banner.svg" alt="Similarity: AI-powered related notes that never leave your device" width="880">
+</p>
 
-[![CI](https://github.com/JoramMillenaar/obsidian-similarity/actions/workflows/ci.yml/badge.svg)](https://github.com/JoramMillenaar/obsidian-similarity/actions/workflows/ci.yml)
-[![Obsidian downloads](https://img.shields.io/badge/dynamic/json?logo=obsidian&color=%23483699&label=downloads&query=%24%5B%22similarity%22%5D.downloads&url=https%3A%2F%2Fraw.githubusercontent.com%2Fobsidianmd%2Fobsidian-releases%2Fmaster%2Fcommunity-plugin-stats.json)](https://obsidian.md/plugins?id=similarity)
-[![Latest release](https://img.shields.io/github/v/release/JoramMillenaar/obsidian-similarity?sort=semver)](https://github.com/JoramMillenaar/obsidian-similarity/releases/latest)
-[![GitHub stars](https://img.shields.io/github/stars/JoramMillenaar/obsidian-similarity?style=flat)](https://github.com/JoramMillenaar/obsidian-similarity/stargazers)
-[![License: MIT](https://img.shields.io/github/license/JoramMillenaar/obsidian-similarity)](LICENCE)
+<p align="center"><strong>Semantic search and related notes for Obsidian. A tiny AI model that runs on your device.</strong></p>
 
-Add semantic search to Obsidian to explore your notes by concepts, without data _ever_ leaving your device.
-Obsidian lets you search by titles or contents, Similarity searches by the _meaning_ of your notes.
+<p align="center">
+  <a href="https://obsidian.md/plugins?id=similarity"><img src="https://img.shields.io/badge/Install_in_Obsidian-7C3AED?style=for-the-badge&logo=obsidian&logoColor=white" alt="Install in Obsidian"></a>
+</p>
 
-![Similarity plugin showing notes related to the current note](docs/thumbnail.png)
+<p align="center">
+  <a href="https://obsidian.md/plugins?id=similarity"><img src="https://img.shields.io/badge/dynamic/json?logo=obsidian&color=%23483699&label=downloads&query=%24%5B%22similarity%22%5D.downloads&url=https%3A%2F%2Fraw.githubusercontent.com%2Fobsidianmd%2Fobsidian-releases%2Fmaster%2Fcommunity-plugin-stats.json&style=for-the-badge" alt="Obsidian downloads"></a>
+  <a href="https://github.com/JoramMillenaar/obsidian-similarity/releases/latest"><img src="https://img.shields.io/github/v/release/JoramMillenaar/obsidian-similarity?sort=semver&style=for-the-badge" alt="Latest release"></a>
+  <a href="https://github.com/JoramMillenaar/obsidian-similarity/stargazers"><img src="https://img.shields.io/github/stars/JoramMillenaar/obsidian-similarity?style=for-the-badge" alt="GitHub stars"></a>
+  <a href="LICENCE"><img src="https://img.shields.io/github/license/JoramMillenaar/obsidian-similarity?style=for-the-badge" alt="MIT licence"></a>
+</p>
+
+<p align="center">
+  <a href="#how-it-helps-me">Why use it</a> ·
+  <a href="#privacy">Privacy</a> ·
+  <a href="#support">Support</a>
+</p>
+
+<p align="center">
+  <img src="docs/demo-main.gif" alt="A journal entry about procrastinating, with the sidebar listing related notes: a quick note from the same morning, a thesis journal entry from two years ago, a Dutch note on the same idea, and linked notes. Hovering the old entry previews it; clicking opens it." width="880">
+</p>
+
+<p align="center"><em>Open a note and the sidebar shows what it's related to, linked or not.</em></p>
+
+<p align="center">
+  <img src="docs/demo-search.gif" alt="Semantic search: clicking the search button at the top of the sidebar lists notes related to the current one; typing 'tricks to start a task I dread' finds notes about procrastination, the two-minute rule and a Dutch note, then ⌘⇧↵ inserts the top result as a link." width="880">
+</p>
+
+<p align="center"><em>Click 🔍 at the top of the sidebar to search in your own words, in any language. <kbd>⌘</kbd><kbd>⇧</kbd><kbd>↵</kbd> inserts the result as a link.</em></p>
 
 ## Features
 ![Similarity main view](docs/main.png)
